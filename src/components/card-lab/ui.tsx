@@ -53,6 +53,14 @@ export function GlowPanel({
   const radius =
     theme?.cornerStyle === "sharp" ? 8 : theme?.cornerStyle === "pillowy" ? 28 : undefined;
 
+  const outerGlowBlur = theme?.globalGlowBlur ?? 0;
+  const outerGlowPart = outerGlowBlur > 0 && glowOpacity > 0
+    ? `, 0 0 ${outerGlowBlur}px rgba(34,211,238,${(Math.min(1, glowOpacity * 0.55)).toFixed(3)})`
+    : "";
+  const computedBoxShadow = theme
+    ? `0 25px 50px -12px rgba(8,47,73,0.4)${outerGlowPart}`
+    : undefined;
+
   return (
     <div
       className={cn(
@@ -66,6 +74,7 @@ export function GlowPanel({
         borderColor: theme ? `rgba(255,255,255,${Math.max(0.06, borderOpacity)})` : undefined,
         borderRadius: radius,
         transitionDuration: `${motionDuration}ms`,
+        boxShadow: computedBoxShadow,
         ...style,
       } as GlowPanelStyle}
     >
