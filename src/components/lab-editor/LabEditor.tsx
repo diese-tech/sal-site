@@ -32,6 +32,15 @@ export function LabEditor() {
   const [canvasSize, setCanvasSize] = useState<CanvasSize>("preview");
   const [canvasScale, setCanvasScale] = useState(1);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const stored = window.localStorage.getItem("sal-lab-editor-collapsed");
+      if (stored) return new Set<string>(JSON.parse(stored) as string[]);
+    } catch {}
+    return new Set<string>();
+  });
+  const [debugMode, setDebugMode] = useState(false);
 
   useEffect(() => {
     window.localStorage.setItem(storageKey, JSON.stringify(config));
@@ -78,6 +87,15 @@ export function LabEditor() {
       rosterSlot: { ...current.rosterSlot, slotRadius: presets.slotRadius },
       button: { ...current.button, buttonRadius: presets.buttonRadius },
     }));
+  }
+
+  function toggleSectionCollapse(id: string) {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      window.localStorage.setItem("sal-lab-editor-collapsed", JSON.stringify([...next]));
+      return next;
+    });
   }
 
   async function copyJson() {
@@ -127,18 +145,31 @@ export function LabEditor() {
                 Controls now live next to the thing they change, so card sliders sit with cards, org sliders sit with org cards, and board sliders sit with the board.
               </p>
             </div>
-            <button
-              data-testid="reset-config"
-              onClick={resetConfig}
-              className={cn(utilityButtonClass, "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08] active:bg-white/[0.16]")}
-            >
-              Reset
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setDebugMode((v) => !v)}
+                className={cn(
+                  utilityButtonClass,
+                  debugMode
+                    ? "border-fuchsia-300/35 bg-fuchsia-300/15 text-fuchsia-100"
+                    : "border-white/10 bg-white/[0.04] text-slate-400 hover:bg-white/[0.08]",
+                )}
+              >
+                {debugMode ? "Debug On" : "Debug"}
+              </button>
+              <button
+                data-testid="reset-config"
+                onClick={resetConfig}
+                className={cn(utilityButtonClass, "border-white/10 bg-white/[0.04] text-slate-200 hover:bg-white/[0.08] active:bg-white/[0.16]")}
+              >
+                Reset
+              </button>
+            </div>
           </div>
         </header>
         <section className="min-w-0">
           <div className={cn("grid", previewPanelGapClass)}>
-            <PreviewPanel eyebrow="Theme" title="Page theme, card chrome, and motion" tunedBy={["Theme"]}>
+            <PreviewPanel eyebrow="Theme" title="Page theme, card chrome, and motion" tunedBy={["Theme"]} collapsed={collapsedSections.has("Theme")} onToggle={() => toggleSectionCollapse("Theme")}>
               <div className="grid gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
                 <InlineControls title="Theme controls">
                   <ThemeControls config={config} updateSection={updateSection} onCornerStyleChange={handleCornerStyleChange} />
@@ -196,7 +227,7 @@ export function LabEditor() {
               </div>
             </PreviewPanel>
 
-            <PreviewPanel eyebrow="Button Preview" title="Reusable SAL action buttons" tunedBy={["Buttons", "Theme"]}>
+            <PreviewPanel eyebrow="Button Preview" title="Reusable SAL action buttons" tunedBy={["Buttons", "Theme"]} collapsed={collapsedSections.has("Button Preview")} onToggle={() => toggleSectionCollapse("Button Preview")}>
               <div className="grid gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
                 <InlineControls title="Button controls">
                   <ButtonControls config={config} updateSection={updateSection} />
@@ -219,7 +250,7 @@ export function LabEditor() {
               </div>
             </PreviewPanel>
 
-            <PreviewPanel eyebrow="Cards" title="Profile and draft pool tuning" tunedBy={["Player Cards", "Theme"]}>
+            <PreviewPanel eyebrow="Cards" title="Profile and draft pool tuning" tunedBy={["Player Cards", "Theme"]} collapsed={collapsedSections.has("Cards")} onToggle={() => toggleSectionCollapse("Cards")}>
               <div className="grid gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
                 <InlineControls title="Player card controls">
                   <PlayerCardControls config={config} updateSection={updateSection} />
@@ -239,7 +270,7 @@ export function LabEditor() {
               </div>
             </PreviewPanel>
 
-            <PreviewPanel eyebrow="Roster Slots" title="Drafted, active, ghost, and empty states" tunedBy={["Roster Slots", "Theme"]}>
+            <PreviewPanel eyebrow="Roster Slots" title="Drafted, active, ghost, and empty states" tunedBy={["Roster Slots", "Theme"]} collapsed={collapsedSections.has("Roster Slots")} onToggle={() => toggleSectionCollapse("Roster Slots")}>
               <div className="grid gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
                 <InlineControls title="Roster slot controls">
                   <RosterSlotControls config={config} updateSection={updateSection} />
@@ -257,7 +288,7 @@ export function LabEditor() {
               </div>
             </PreviewPanel>
 
-            <PreviewPanel eyebrow="Org Roster" title="Captain card and roster construction" tunedBy={["Org Cards", "Roster Slots", "Theme"]}>
+            <PreviewPanel eyebrow="Org Roster" title="Captain card and roster construction" tunedBy={["Org Cards", "Roster Slots", "Theme"]} collapsed={collapsedSections.has("Org Roster")} onToggle={() => toggleSectionCollapse("Org Roster")}>
               <div className="grid gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
                 <InlineControls title="Org card controls">
                   <OrgCardControls config={config} updateSection={updateSection} />
@@ -270,7 +301,7 @@ export function LabEditor() {
               </div>
             </PreviewPanel>
 
-            <PreviewPanel eyebrow="Mini Board" title="Mock draft board composition" tunedBy={["Board", "Org Cards", "Roster Slots", "Theme"]}>
+            <PreviewPanel eyebrow="Mini Board" title="Mock draft board composition" tunedBy={["Board", "Org Cards", "Roster Slots", "Theme"]} collapsed={collapsedSections.has("Mini Board")} onToggle={() => toggleSectionCollapse("Mini Board")}>
               <div className="grid gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
                 <InlineControls title="Board controls">
                   <BoardControls config={config} updateSection={updateSection} />
@@ -368,7 +399,7 @@ export function LabEditor() {
               </div>
             </PreviewPanel>
 
-            <PreviewPanel eyebrow="JSON" title="Copy or import the current design config">
+            <PreviewPanel eyebrow="JSON" title="Copy or import the current design config" collapsed={collapsedSections.has("JSON")} onToggle={() => toggleSectionCollapse("JSON")}>
               <div className="grid gap-3 lg:grid-cols-2">
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-3">
@@ -389,6 +420,19 @@ export function LabEditor() {
                   <textarea data-testid="json-import" value={jsonDraft} onChange={(event) => setJsonDraft(event.target.value)} className="h-80 w-full resize-none rounded-2xl border border-white/10 bg-black/45 p-3 font-mono text-xs leading-5 text-slate-100 outline-none" placeholder="Paste SAL editor JSON..." />
                 </div>
               </div>
+              {debugMode && (
+                <div className="mt-4 rounded-2xl border border-fuchsia-300/25 bg-fuchsia-300/[0.04] p-3">
+                  <p className="mb-2 text-xs font-black uppercase text-fuchsia-300">Debug — live config snapshot</p>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {(Object.keys(config) as (keyof LabEditorConfig)[]).map((section) => (
+                      <div key={section} className="rounded-xl border border-white/10 bg-black/25 p-2">
+                        <p className="mb-1 text-[0.6rem] font-black uppercase text-fuchsia-200/70">{section}</p>
+                        <pre className="overflow-x-auto text-[0.6rem] leading-4 text-slate-300">{JSON.stringify(config[section], null, 1)}</pre>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </PreviewPanel>
           </div>
         </section>
@@ -501,32 +545,58 @@ function BoardCanvas({
   );
 }
 
-function PreviewPanel({ eyebrow, title, tunedBy, children }: { eyebrow: string; title: string; tunedBy?: string[]; children: React.ReactNode }) {
+function PreviewPanel({ eyebrow, title, tunedBy, collapsed, onToggle, children }: { eyebrow: string; title: string; tunedBy?: string[]; collapsed?: boolean; onToggle?: () => void; children: React.ReactNode }) {
   return (
-    <section className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/70 p-4 shadow-2xl shadow-black/30 backdrop-blur">
-      <p className="text-xs font-black uppercase text-cyan-200/80">{eyebrow}</p>
-      <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
-        <h2 className="text-2xl font-black text-white">{title}</h2>
-        {tunedBy ? (
-          <div className="flex flex-wrap gap-1.5">
-            {tunedBy.map((item) => (
-              <span key={item} className="rounded-full border border-orange-200/15 bg-orange-300/10 px-2 py-1 text-[0.65rem] font-black uppercase text-orange-100/80">
-                Tuned by {item}
-              </span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-      <div className="mt-5 min-w-0">{children}</div>
+    <section className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/30 backdrop-blur">
+      <button
+        type="button"
+        onClick={onToggle}
+        className={cn(
+          "flex w-full cursor-pointer flex-wrap items-end justify-between gap-3 p-4 text-left transition hover:bg-white/[0.02]",
+          collapsed ? "rounded-2xl" : "rounded-t-2xl",
+        )}
+      >
+        <div>
+          <p className="text-xs font-black uppercase text-cyan-200/80">{eyebrow}</p>
+          <h2 className="mt-1 text-2xl font-black text-white">{title}</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {tunedBy ? (
+            <div className="flex flex-wrap gap-1.5">
+              {tunedBy.map((item) => (
+                <span key={item} className="rounded-full border border-orange-200/15 bg-orange-300/10 px-2 py-1 text-[0.65rem] font-black uppercase text-orange-100/80">
+                  Tuned by {item}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <span className={cn("ml-1 text-slate-500 transition-transform", !collapsed && "rotate-180")}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M2 5l5 5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+        </div>
+      </button>
+      {!collapsed && <div className="min-w-0 border-t border-white/10 p-4 pt-4">{children}</div>}
     </section>
   );
 }
 
 function InlineControls({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div data-testid={`controls-${slugify(title)}`} className="h-fit rounded-2xl border border-white/10 bg-black/25 p-3 2xl:sticky 2xl:top-4">
-      <p className="mb-3 text-xs font-black uppercase text-cyan-100">{title}</p>
-      <div className="grid gap-3">{children}</div>
+    <div data-testid={`controls-${slugify(title)}`} className="h-fit rounded-2xl border border-white/10 bg-black/25 2xl:sticky 2xl:top-4">
+      <p className="px-3 pt-3 text-xs font-black uppercase text-cyan-100">{title}</p>
+      <div className="grid gap-3 overflow-y-auto p-3 pt-2 2xl:max-h-[calc(100vh-6rem)]">{children}</div>
+    </div>
+  );
+}
+
+function ControlDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 pt-1">
+      <div className="h-px flex-1 bg-white/10" />
+      <span className="text-[0.6rem] font-black uppercase tracking-wider text-slate-500">{label}</span>
+      <div className="h-px flex-1 bg-white/10" />
     </div>
   );
 }
@@ -609,18 +679,22 @@ function BoardControls({ config, updateSection }: { config: LabEditorConfig; upd
 function ThemeControls({ config, updateSection, onCornerStyleChange }: { config: LabEditorConfig; updateSection: UpdateSection; onCornerStyleChange: (value: CornerStyle) => void }) {
   return (
     <>
+      <ControlDivider label="Identity" />
       <SelectControl label="Theme" value={config.theme.theme} options={["cyan serpent", "purple plasma", "solar ember", "dark temple"]} onChange={(value) => updateSection("theme", "theme", value)} />
+      <SelectControl label="Background style" value={config.theme.backgroundStyle} options={["grid", "smoke", "clean"]} onChange={(value) => updateSection("theme", "backgroundStyle", value)} />
+      <SelectControl label="Corner style" value={config.theme.cornerStyle} options={["sharp", "soft", "pillowy"]} onChange={onCornerStyleChange} />
+      <SelectControl label="Spacing" value={config.theme.spacing} options={["compact", "balanced", "cinematic"]} onChange={(value) => updateSection("theme", "spacing", value)} />
+      <ControlDivider label="Glow & borders" />
       <SelectControl label="Glow strength" value={config.theme.glowStrength} options={["none", "low", "medium", "high", "nuclear"]} onChange={(value) => updateSection("theme", "glowStrength", value)} />
       <SelectControl label="Border strength" value={config.theme.borderStrength} options={["none", "subtle", "clear", "bright"]} onChange={(value) => updateSection("theme", "borderStrength", value)} />
-      <SelectControl label="Corner style" value={config.theme.cornerStyle} options={["sharp", "soft", "pillowy"]} onChange={onCornerStyleChange} />
-      <SelectControl label="Background style" value={config.theme.backgroundStyle} options={["grid", "smoke", "clean"]} onChange={(value) => updateSection("theme", "backgroundStyle", value)} />
-      <SelectControl label="Animation intensity" value={config.theme.animationIntensity} options={["none", "subtle", "medium", "flashy"]} onChange={(value) => updateSection("theme", "animationIntensity", value)} />
-      <SelectControl label="Spacing" value={config.theme.spacing} options={["compact", "balanced", "cinematic"]} onChange={(value) => updateSection("theme", "spacing", value)} />
       <Slider label="Global glow opacity" value={config.theme.globalGlowOpacity} min={0} max={100} suffix="%" onChange={(value) => updateSection("theme", "globalGlowOpacity", value)} />
       <Slider label="Global glow blur" value={config.theme.globalGlowBlur} min={0} max={80} suffix="px" onChange={(value) => updateSection("theme", "globalGlowBlur", value)} />
       <Slider label="Border opacity" value={config.theme.borderOpacity} min={0} max={100} suffix="%" onChange={(value) => updateSection("theme", "borderOpacity", value)} />
-      <Slider label="Background grid opacity" value={config.theme.backgroundGridOpacity} min={0} max={100} suffix="%" onChange={(value) => updateSection("theme", "backgroundGridOpacity", value)} />
-      <Slider label="Background vignette strength" value={config.theme.backgroundVignetteStrength} min={0} max={100} suffix="%" onChange={(value) => updateSection("theme", "backgroundVignetteStrength", value)} />
+      <ControlDivider label="Background" />
+      <Slider label="Grid opacity" value={config.theme.backgroundGridOpacity} min={0} max={100} suffix="%" onChange={(value) => updateSection("theme", "backgroundGridOpacity", value)} />
+      <Slider label="Vignette strength" value={config.theme.backgroundVignetteStrength} min={0} max={100} suffix="%" onChange={(value) => updateSection("theme", "backgroundVignetteStrength", value)} />
+      <ControlDivider label="Motion" />
+      <SelectControl label="Animation intensity" value={config.theme.animationIntensity} options={["none", "subtle", "medium", "flashy"]} onChange={(value) => updateSection("theme", "animationIntensity", value)} />
       <Slider label="Motion duration" value={config.theme.motionDuration} min={80} max={1200} suffix="ms" onChange={(value) => updateSection("theme", "motionDuration", value)} />
       <Slider label="Hover lift" value={config.theme.hoverLift} min={0} max={18} suffix="px" onChange={(value) => updateSection("theme", "hoverLift", value)} />
     </>
@@ -630,23 +704,28 @@ function ThemeControls({ config, updateSection, onCornerStyleChange }: { config:
 function ButtonControls({ config, updateSection }: { config: LabEditorConfig; updateSection: UpdateSection }) {
   return (
     <>
+      <ControlDivider label="Style & intent" />
       <SelectControl label="Button style" value={config.button.buttonStyle} options={["solid", "gradient", "glass", "outline", "neon"]} onChange={(value) => updateSection("button", "buttonStyle", value)} />
-      <SelectControl label="Button shape" value={config.button.buttonShape} options={["sharp", "soft", "pillowy"]} onChange={(value) => updateSection("button", "buttonShape", value)} />
       <SelectControl label="Primary intent" value={config.button.primaryIntent} options={["cyan", "purple", "ember", "serpent"]} onChange={(value) => updateSection("button", "primaryIntent", value)} />
       <SelectControl label="Draft button intent" value={config.button.draftButtonIntent} options={["ember", "red alert", "solar", "white hot"]} onChange={(value) => updateSection("button", "draftButtonIntent", value)} />
-      <SelectControl label="Hover effect" value={config.button.hoverEffect} options={["none", "lift", "brighten", "glow flare", "scanline"]} onChange={(value) => updateSection("button", "hoverEffect", value)} />
-      <SelectControl label="Press effect" value={config.button.pressEffect} options={["none", "compress", "flash", "ripple"]} onChange={(value) => updateSection("button", "pressEffect", value)} />
-      <SelectControl label="Disabled style" value={config.button.disabledStyle} options={["dim", "locked", "ghosted"]} onChange={(value) => updateSection("button", "disabledStyle", value)} />
+      <ControlDivider label="Shape & size" />
+      <SelectControl label="Button shape" value={config.button.buttonShape} options={["sharp", "soft", "pillowy"]} onChange={(value) => updateSection("button", "buttonShape", value)} />
       <Slider label="Button height" value={config.button.buttonHeight} min={28} max={64} suffix="px" onChange={(value) => updateSection("button", "buttonHeight", value)} />
       <Slider label="Button radius" value={config.button.buttonRadius} min={4} max={32} suffix="px" onChange={(value) => updateSection("button", "buttonRadius", value)} />
       <Slider label="Button padding-x" value={config.button.buttonPaddingX} min={10} max={32} suffix="px" onChange={(value) => updateSection("button", "buttonPaddingX", value)} />
       <Slider label="Button text size" value={config.button.buttonTextSize} min={11} max={18} suffix="px" onChange={(value) => updateSection("button", "buttonTextSize", value)} />
+      <ControlDivider label="Glow & border" />
       <Slider label="Button border opacity" value={config.button.buttonBorderOpacity} min={0} max={100} suffix="%" onChange={(value) => updateSection("button", "buttonBorderOpacity", value)} />
       <Slider label="Button glow opacity" value={config.button.buttonGlowOpacity} min={0} max={100} suffix="%" onChange={(value) => updateSection("button", "buttonGlowOpacity", value)} />
       <Slider label="Button glow blur" value={config.button.buttonGlowBlur} min={0} max={60} suffix="px" onChange={(value) => updateSection("button", "buttonGlowBlur", value)} />
-      <Slider label="Gradient blend intensity" value={config.button.gradientBlendIntensity} min={0} max={100} suffix="%" onChange={(value) => updateSection("button", "gradientBlendIntensity", value)} />
+      <Slider label="Gradient blend" value={config.button.gradientBlendIntensity} min={0} max={100} suffix="%" onChange={(value) => updateSection("button", "gradientBlendIntensity", value)} />
+      <ControlDivider label="Interaction" />
+      <SelectControl label="Hover effect" value={config.button.hoverEffect} options={["none", "lift", "brighten", "glow flare", "scanline"]} onChange={(value) => updateSection("button", "hoverEffect", value)} />
+      <SelectControl label="Press effect" value={config.button.pressEffect} options={["none", "compress", "flash", "ripple"]} onChange={(value) => updateSection("button", "pressEffect", value)} />
       <Slider label="Hover lift" value={config.button.hoverLift} min={0} max={12} suffix="px" onChange={(value) => updateSection("button", "hoverLift", value)} />
       <Slider label="Press scale" value={config.button.pressScale} min={0.92} max={1} step={0.01} onChange={(value) => updateSection("button", "pressScale", value)} />
+      <ControlDivider label="Disabled state" />
+      <SelectControl label="Disabled style" value={config.button.disabledStyle} options={["dim", "locked", "ghosted"]} onChange={(value) => updateSection("button", "disabledStyle", value)} />
       <Slider label="Disabled opacity" value={config.button.disabledOpacity} min={20} max={80} suffix="%" onChange={(value) => updateSection("button", "disabledOpacity", value)} />
     </>
   );
