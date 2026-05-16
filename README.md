@@ -4,6 +4,32 @@ Serpent Ascension League (SAL) is a persistent Smite 2 Conquest league platform 
 
 This repository is currently in planning and component-design mode. The first implementation target is a mock-data Card Lab, not the full production draft engine.
 
+## Run Locally
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start the local dev server:
+
+```bash
+npm run dev
+```
+
+Open the Card Lab:
+
+```text
+http://localhost:3000/lab/cards
+```
+
+Optional production-build verification:
+
+```bash
+npm run build
+```
+
 ## Product North Star
 
 Build a Discord-native competitive esports draft experience for SAL.

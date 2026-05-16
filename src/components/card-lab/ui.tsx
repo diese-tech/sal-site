@@ -1,0 +1,125 @@
+import type { PlayerRole, PlayerStatus } from "@/types/card-lab";
+import { cn } from "@/lib/utils";
+
+const roleStyles: Record<PlayerRole, string> = {
+  Solo: "border-emerald-300/35 bg-emerald-300/10 text-emerald-100",
+  Jungle: "border-cyan-300/35 bg-cyan-300/10 text-cyan-100",
+  Mid: "border-fuchsia-300/35 bg-fuchsia-300/10 text-fuchsia-100",
+  Carry: "border-amber-300/35 bg-amber-300/10 text-amber-100",
+  Support: "border-sky-300/35 bg-sky-300/10 text-sky-100",
+  Flex: "border-violet-300/35 bg-violet-300/10 text-violet-100",
+};
+
+const statusLabels: Record<PlayerStatus, string> = {
+  "free-agent": "Free Agent",
+  "org-affiliated": "Org Affiliated",
+  drafted: "Drafted",
+  "queued-ghost": "Ghost Queued",
+  active: "On The Clock",
+};
+
+const statusStyles: Record<PlayerStatus, string> = {
+  "free-agent": "border-cyan-300/35 bg-cyan-300/10 text-cyan-100",
+  "org-affiliated": "border-violet-300/35 bg-violet-300/10 text-violet-100",
+  drafted: "border-zinc-400/25 bg-zinc-300/10 text-zinc-200",
+  "queued-ghost": "border-white/20 bg-white/5 text-white/65",
+  active: "border-orange-300/55 bg-orange-400/15 text-orange-100 shadow-[0_0_24px_rgba(251,146,60,0.2)]",
+};
+
+export function GlowPanel({
+  children,
+  className,
+  active,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  active?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "group relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-cyan-950/30 backdrop-blur",
+        "transition duration-300 hover:-translate-y-1 hover:border-cyan-200/25 hover:shadow-cyan-500/10",
+        active && "border-orange-300/45 shadow-orange-500/15",
+        className,
+      )}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.16),transparent_32%)] opacity-80" />
+      {active ? (
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-orange-300 to-transparent" />
+      ) : null}
+      <div className="relative">{children}</div>
+    </div>
+  );
+}
+
+export function RolePill({ role, compact = false }: { role: PlayerRole; compact?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border font-semibold leading-none tracking-normal",
+        compact ? "px-2 py-1 text-[0.65rem]" : "px-2.5 py-1.5 text-xs",
+        roleStyles[role],
+      )}
+    >
+      {role}
+    </span>
+  );
+}
+
+export function StatusChip({ status, label }: { status: PlayerStatus; label?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2.5 py-1 text-[0.68rem] font-bold uppercase leading-none tracking-normal",
+        statusStyles[status],
+      )}
+    >
+      {label ?? statusLabels[status]}
+    </span>
+  );
+}
+
+export function AvatarMark({
+  initials,
+  gradient,
+  className,
+}: {
+  initials: string;
+  gradient: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid shrink-0 place-items-center rounded-2xl border border-white/25 bg-gradient-to-br text-sm font-black text-white shadow-lg shadow-black/30",
+        gradient,
+        className,
+      )}
+    >
+      {initials}
+    </div>
+  );
+}
+
+export function OrgLogo({
+  initials,
+  gradient,
+  className,
+}: {
+  initials: string;
+  gradient: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "grid shrink-0 place-items-center rounded-xl border border-white/20 bg-gradient-to-br text-sm font-black text-white shadow-lg shadow-black/30",
+        gradient,
+        className,
+      )}
+    >
+      {initials}
+    </div>
+  );
+}

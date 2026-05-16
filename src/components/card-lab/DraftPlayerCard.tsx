@@ -1,0 +1,47 @@
+import { AvatarMark, RolePill, StatusChip } from "@/components/card-lab/ui";
+import type { PlayerProfile } from "@/types/card-lab";
+import { cn } from "@/lib/utils";
+
+export function DraftPlayerCard({ player }: { player: PlayerProfile }) {
+  const ghosted = player.status === "queued-ghost";
+  const drafted = player.status === "drafted";
+
+  return (
+    <article
+      className={cn(
+        "group relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/72 p-3 shadow-xl shadow-black/30 backdrop-blur transition duration-300",
+        "hover:-translate-y-1 hover:border-cyan-300/35 hover:bg-slate-900/85",
+        player.status === "active" && "border-orange-300/50 shadow-orange-500/15",
+        ghosted && "border-dashed opacity-70",
+        drafted && "opacity-55 grayscale",
+      )}
+    >
+      <div className={cn("absolute inset-x-0 top-0 h-16 bg-gradient-to-br opacity-80", player.bannerGradient)} />
+      <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-white/10 to-slate-950/60" />
+      <div className="relative flex items-start gap-3">
+        <AvatarMark initials={player.avatarInitials} gradient={player.avatarGradient} className="size-14 rounded-xl text-base" />
+        <div className="min-w-0 flex-1 pt-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="truncate text-base font-black leading-tight text-white">{player.ign}</h3>
+              <p className="truncate text-xs font-medium text-slate-400">@{player.discordUsername}</p>
+            </div>
+            <StatusChip status={player.status} />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            <RolePill role={player.primaryRole} compact />
+            {player.secondaryRoles.slice(0, 2).map((role) => (
+              <RolePill key={role} role={role} compact />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="relative mt-4 grid grid-cols-[1fr_auto_auto] items-center gap-2 border-t border-white/10 pt-3 text-xs font-bold text-slate-300">
+        <span>{player.timezone}</span>
+        <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-slate-300">Queue</span>
+        <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-slate-300">Note</span>
+      </div>
+    </article>
+  );
+}
