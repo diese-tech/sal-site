@@ -26,7 +26,7 @@ export function OrgRosterCard({ org, editorConfig }: { org: OrgRoster; editorCon
         style={{
           minHeight: orgConfig ? `${orgConfig.headerHeight}px` : undefined,
           padding: orgConfig ? `${orgConfig.orgCardPadding}px` : undefined,
-          opacity: orgConfig?.headerIntensity === "low" ? 0.76 : orgConfig?.headerIntensity === "high" ? 1 : undefined,
+          opacity: orgConfig?.headerIntensity === "low" ? 0.72 : orgConfig?.headerIntensity === "medium" ? 0.87 : 1,
         }}
       >
         <div className="flex items-center justify-between gap-4">
