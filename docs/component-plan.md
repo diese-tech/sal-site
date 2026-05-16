@@ -8,14 +8,16 @@ The initial implementation target is a reusable visual system using mock data.
 
 Do not begin with backend systems.
 
-## Initial Route
+## Routes
 
-`/lab/cards`
+`/lab/cards` — static component showcase, all card types with mock data.
+
+`/lab/editor` — live design editor. Controls sit beside the component they affect. Config persists to localStorage with JSON export/import. Sections are collapsible. Stream canvas preview at 1920×1080 and 1280×720.
 
 Purpose:
 
-- experiment rapidly
-- establish visual language
+- experiment rapidly without editing CSS or TSX
+- establish and validate visual language
 - test component states
 - validate stream readability
 - validate responsive layouts
@@ -95,6 +97,8 @@ Should:
 - sit in future roster slot
 - disappear if drafted elsewhere
 
+Editor-configurable: card opacity, hover opacity, border style (dashed/solid/none), avatar size, radius, padding, role pills, position badge, subtext visibility.
+
 ## OrgRosterCard
 
 Primary board card.
@@ -135,13 +139,18 @@ Displays:
 
 Board should NOT use naive equal grids.
 
-Preferred layouts:
+Implemented as centered flex rows via `getBoardRows(teamCount, layoutPreset)`:
 
-- 4-4
-- 5-4
-- centered weighted rows
+- balanced 6: [3, 3]
+- balanced 7: [4, 3]
+- balanced 8: [4, 4]
+- balanced 9: [5, 4]
+- balanced 10: [5, 5]
+- 4-4 preset: rows of 4
+- 5-4 preset: [5, remainder]
+- 4-5 preset: [4, remainder]
 
-The board should feel intentionally composed.
+Each row is `justify-center` flex, so shorter rows appear centered rather than left-aligned. The board should feel intentionally composed, not like a wrapping grid.
 
 ## Future Stream Components
 

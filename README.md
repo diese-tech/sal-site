@@ -2,7 +2,7 @@
 
 Serpent Ascension League (SAL) is a persistent Smite 2 Conquest league platform centered around live snake drafts, stream-ready presentation, and social player identity.
 
-This repository is currently in planning and component-design mode. The first implementation target is a mock-data Card Lab, not the full production draft engine.
+The Card Lab (`/lab/cards`) and design editor (`/lab/editor`) are built and functional. The editor provides live visual configuration of all card and board components using mock data, with no backend required. The next implementation target is the production draft engine.
 
 ## Run Locally
 
@@ -55,24 +55,24 @@ SAL should feel like a premium live event board, not a spreadsheet, fantasy foot
 - Org participation is season-based and interchangeable.
 - Public draft presentation is a first-class product concern.
 
-## First Build Target
+## Current State
 
-Create `/lab/cards`, a component lab using mock data only, and `/lab/editor`, a mock-data visual configuration lab for tuning SAL component styling without editing CSS or TSX.
+`/lab/cards` — static component lab using mock data. Displays all card types with their states.
 
-The Card Lab should explore:
+`/lab/editor` — live design editor with collapsible sections, inline controls, and real-time previews for:
 
-- full player profile cards
-- compact draft player cards
-- roster slot cards
-- empty roster slots
-- ghost queue states
-- captain-locked roster cards
-- org roster cards
-- active/on-clock states
-- free agent and team affiliation badges
-- public/spectator vs captain-only variants
+- player profile cards (density, banner, avatar, radius, tags, etc.)
+- draft player cards
+- roster slot cards (height, pulse, ghost opacity, etc.)
+- ghost queue cards (opacity, border style, role pills, etc.)
+- org roster cards (header intensity, active glow, captain slot, etc.)
+- mock draft board (row composition, view modes, stream canvas at 1920×1080 / 1280×720)
+- buttons (style, intent, hover/press effects, shape)
+- page theme (glow, borders, motion, background, corner style)
 
-No auth, database, live draft engine, Google sync, or production routing should be built before the Card Lab visual language is established.
+Config persists to `localStorage`. JSON export/import supported. No auth, database, or production draft state.
+
+The next target is the production draft engine (Phase 3).
 
 ## Planned Stack
 
