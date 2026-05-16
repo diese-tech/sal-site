@@ -9,7 +9,7 @@ import { RosterSlotCard } from "@/components/card-lab/RosterSlotCard";
 import { SalButton } from "@/components/sal-ui/SalButton";
 import { labEditorDefaults } from "@/data/lab-editor-defaults";
 import { orgRosters, players, rosterSlotStates } from "@/data/mock-card-lab";
-import type { LabEditorConfig, CornerStyle, GhostBorderStyle } from "@/types/lab-editor";
+import type { LabEditorConfig, CornerStyle, GhostBorderStyle, LayoutPreset } from "@/types/lab-editor";
 import type { OrgRoster } from "@/types/card-lab";
 import { cn } from "@/lib/utils";
 
@@ -362,35 +362,61 @@ export function LabEditor() {
                 </PreviewTarget>
                   ) : null}
 
-                  <PreviewTarget label="Board team grid" affectedBy="Board controls: team count, layout, gaps, active team, inactive opacity, board scale. View mode: spectator hides ghost queue; captain shows ghost queue">
-              <p className="mb-3 text-xs font-bold text-slate-400">View: {config.board.viewMode}</p>
-              <div className="mx-auto overflow-hidden" style={{ maxWidth: `${config.board.boardMaxWidth}px` }}>
+                  <PreviewTarget label="Board team grid" affectedBy="Board controls: team count, layout preset, gaps, active team, inactive opacity, board scale. Layout presets render as centered flex rows.">
+              <div className="mb-3 flex items-center gap-3">
+                <p className="text-xs font-bold text-slate-400">View: <span className="text-slate-200">{config.board.viewMode}</span></p>
+                <p className="text-xs font-bold text-slate-400">Layout: <span className="text-slate-200">{config.board.layoutPreset} → [{getBoardRows(config.board.teamCount, config.board.layoutPreset).join(", ")}]</span></p>
+              </div>
               <div
-                className="w-full min-w-0 grid"
+                className="mx-auto w-full"
                 style={{
-                  gap: `${config.board.rowGap}px ${config.board.boardGap}px`,
-                  gridTemplateColumns: getGridTemplateColumns(config),
+                  maxWidth: `${config.board.boardMaxWidth}px`,
                   transform: config.board.boardScale !== 1 ? `scale(${config.board.boardScale})` : undefined,
                   transformOrigin: "top center",
                 }}
               >
-                {boardOrgs.map((org, index) => (
-                  <div
-                    key={`${org.id}-${index}`}
-                    style={{
-                      opacity: index === config.board.activeTeamIndex ? 1 : config.board.inactiveCardOpacity / 100,
-                      transform: index === config.board.activeTeamIndex ? `scale(${config.board.activeCardScale})` : undefined,
-                    }}
-                  >
-                    <OrgRosterCard org={org} editorConfig={config} />
-                  </div>
-                ))}
-              </div>
+                <div className="flex flex-col" style={{ gap: `${config.board.rowGap}px` }}>
+                  {sliceBoardRows(boardOrgs, config.board.teamCount, config.board.layoutPreset).map(({ orgs, startIndex }, rowIndex) => (
+                    <div key={rowIndex} className="flex justify-center" style={{ gap: `${config.board.boardGap}px` }}>
+                      {orgs.map((org, i) => {
+                        const gi = startIndex + i;
+                        return (
+                          <div
+                            key={`${org.id}-${gi}`}
+                            style={{
+                              opacity: gi === config.board.activeTeamIndex ? 1 : config.board.inactiveCardOpacity / 100,
+                              transform: gi === config.board.activeTeamIndex ? `scale(${config.board.activeCardScale})` : undefined,
+                            }}
+                          >
+                            <OrgRosterCard org={org} editorConfig={config} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
               </div>
                   </PreviewTarget>
 
+                  {config.board.viewMode === "captain" && (
+                <PreviewTarget label="Captain ghost queue" affectedBy="Captain view only — private pick queue, hidden from spectators and caster">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <GhostQueueCard player={players[4]} queuePosition={1} editorConfig={config} />
+                  <GhostQueueCard player={players[0]} queuePosition={2} editorConfig={config} />
+                </div>
+                </PreviewTarget>
+                  )}
+
+                  {config.board.viewMode === "caster" && (
+                <PreviewTarget label="Caster overlay" affectedBy="Caster mode — all elements visible including picks and stats">
+                <div className="rounded-xl border border-fuchsia-300/20 bg-fuchsia-300/[0.06] px-3 py-2">
+                  <p className="text-xs font-black uppercase text-fuchsia-200">Caster mode active — recent picks + full board always visible regardless of captain queue</p>
+                </div>
+                </PreviewTarget>
+                  )}
+
                   {config.board.showRecentPicksWidget && config.board.viewMode !== "captain" ? (
-                <PreviewTarget label="Recent picks widget" affectedBy="Board controls: recent picks toggle; Theme controls affect its surface">
+                <PreviewTarget label="Recent picks widget" affectedBy="Board controls: recent picks toggle; hidden in captain view; Theme controls affect surface">
                 <div className="mt-5 grid gap-2 rounded-2xl border border-white/10 bg-black/25 p-3 sm:grid-cols-3">
                   {players.slice(0, 3).map((player, index) => (
                     <div key={player.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
@@ -522,28 +548,33 @@ function BoardCanvas({
           ) : null}
 
           <div
-            className="flex-1 grid min-w-0"
+            className="flex-1 min-w-0 w-full mx-auto"
             style={{
-              gap: `${config.board.rowGap}px ${config.board.boardGap}px`,
-              gridTemplateColumns: getGridTemplateColumns(config),
               maxWidth: `${config.board.boardMaxWidth}px`,
-              margin: "0 auto",
-              width: "100%",
               transform: config.board.boardScale !== 1 ? `scale(${config.board.boardScale})` : undefined,
               transformOrigin: "top center",
             }}
           >
-            {boardOrgs.map((org, index) => (
-              <div
-                key={`${org.id}-${index}`}
-                style={{
-                  opacity: index === config.board.activeTeamIndex ? 1 : config.board.inactiveCardOpacity / 100,
-                  transform: index === config.board.activeTeamIndex ? `scale(${config.board.activeCardScale})` : undefined,
-                }}
-              >
-                <OrgRosterCard org={org} editorConfig={config} />
-              </div>
-            ))}
+            <div className="flex flex-col" style={{ gap: `${config.board.rowGap}px` }}>
+              {sliceBoardRows(boardOrgs, config.board.teamCount, config.board.layoutPreset).map(({ orgs, startIndex }, rowIndex) => (
+                <div key={rowIndex} className="flex justify-center" style={{ gap: `${config.board.boardGap}px` }}>
+                  {orgs.map((org, i) => {
+                    const gi = startIndex + i;
+                    return (
+                      <div
+                        key={`${org.id}-${gi}`}
+                        style={{
+                          opacity: gi === config.board.activeTeamIndex ? 1 : config.board.inactiveCardOpacity / 100,
+                          transform: gi === config.board.activeTeamIndex ? `scale(${config.board.activeCardScale})` : undefined,
+                        }}
+                      >
+                        <OrgRosterCard org={org} editorConfig={config} />
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
 
           {config.board.showRecentPicksWidget && config.board.viewMode !== "captain" ? (
@@ -700,6 +731,7 @@ function BoardControls({ config, updateSection }: { config: LabEditorConfig; upd
       <SelectControl label="Layout preset" value={config.board.layoutPreset} options={["balanced", "4-4", "5-4", "4-5"]} onChange={(value) => updateSection("board", "layoutPreset", value)} />
       <Slider label="Active team index" value={config.board.activeTeamIndex} min={0} max={config.board.teamCount - 1} onChange={(value) => updateSection("board", "activeTeamIndex", Math.round(value))} />
       <SelectControl label="View mode" value={config.board.viewMode} options={["spectator", "captain", "caster"]} onChange={(value) => updateSection("board", "viewMode", value)} />
+      <p className="text-[0.65rem] font-semibold text-slate-500">Spectator: no queue. Captain: ghost queue shown, no recent picks. Caster: all elements visible.</p>
       <ToggleRow label="Recent picks widget" value={config.board.showRecentPicksWidget} onChange={(value) => updateSection("board", "showRecentPicksWidget", value)} />
       <ToggleRow label="Top banner" value={config.board.showTopBanner} onChange={(value) => updateSection("board", "showTopBanner", value)} />
       <Slider label="Board max width" value={config.board.boardMaxWidth} min={900} max={1800} suffix="px" onChange={(value) => updateSection("board", "boardMaxWidth", value)} />
@@ -720,17 +752,19 @@ function ThemeControls({ config, updateSection, onCornerStyleChange }: { config:
       <SelectControl label="Background style" value={config.theme.backgroundStyle} options={["grid", "smoke", "clean"]} onChange={(value) => updateSection("theme", "backgroundStyle", value)} />
       <SelectControl label="Corner style" value={config.theme.cornerStyle} options={["sharp", "soft", "pillowy"]} onChange={onCornerStyleChange} />
       <SelectControl label="Spacing" value={config.theme.spacing} options={["compact", "balanced", "cinematic"]} onChange={(value) => updateSection("theme", "spacing", value)} />
-      <ControlDivider label="Glow & borders" />
-      <SelectControl label="Glow strength" value={config.theme.glowStrength} options={["none", "low", "medium", "high", "nuclear"]} onChange={(value) => updateSection("theme", "glowStrength", value)} />
-      <SelectControl label="Border strength" value={config.theme.borderStrength} options={["none", "subtle", "clear", "bright"]} onChange={(value) => updateSection("theme", "borderStrength", value)} />
-      <Slider label="Global glow opacity" value={config.theme.globalGlowOpacity} min={0} max={100} suffix="%" onChange={(value) => updateSection("theme", "globalGlowOpacity", value)} />
-      <Slider label="Global glow blur" value={config.theme.globalGlowBlur} min={0} max={80} suffix="px" onChange={(value) => updateSection("theme", "globalGlowBlur", value)} />
+      <ControlDivider label="Glow & border presets (multiply sliders)" />
+      <SelectControl label="Glow preset" value={config.theme.glowStrength} options={["none", "low", "medium", "high", "nuclear"]} onChange={(value) => updateSection("theme", "glowStrength", value)} />
+      <SelectControl label="Border preset" value={config.theme.borderStrength} options={["none", "subtle", "clear", "bright"]} onChange={(value) => updateSection("theme", "borderStrength", value)} />
+      <ControlDivider label="Fine-grain controls" />
+      <Slider label="Glow opacity" value={config.theme.globalGlowOpacity} min={0} max={100} suffix="%" onChange={(value) => updateSection("theme", "globalGlowOpacity", value)} />
+      <Slider label="Glow blur" value={config.theme.globalGlowBlur} min={0} max={80} suffix="px" onChange={(value) => updateSection("theme", "globalGlowBlur", value)} />
       <Slider label="Border opacity" value={config.theme.borderOpacity} min={0} max={100} suffix="%" onChange={(value) => updateSection("theme", "borderOpacity", value)} />
       <ControlDivider label="Background" />
       <Slider label="Grid opacity" value={config.theme.backgroundGridOpacity} min={0} max={100} suffix="%" onChange={(value) => updateSection("theme", "backgroundGridOpacity", value)} />
       <Slider label="Vignette strength" value={config.theme.backgroundVignetteStrength} min={0} max={100} suffix="%" onChange={(value) => updateSection("theme", "backgroundVignetteStrength", value)} />
-      <ControlDivider label="Motion" />
-      <SelectControl label="Animation intensity" value={config.theme.animationIntensity} options={["none", "subtle", "medium", "flashy"]} onChange={(value) => updateSection("theme", "animationIntensity", value)} />
+      <ControlDivider label="Motion preset (multiplies duration + lift)" />
+      <SelectControl label="Motion preset" value={config.theme.animationIntensity} options={["none", "subtle", "medium", "flashy"]} onChange={(value) => updateSection("theme", "animationIntensity", value)} />
+      <ControlDivider label="Fine-grain controls" />
       <Slider label="Motion duration" value={config.theme.motionDuration} min={80} max={1200} suffix="ms" onChange={(value) => updateSection("theme", "motionDuration", value)} />
       <Slider label="Hover lift" value={config.theme.hoverLift} min={0} max={18} suffix="px" onChange={(value) => updateSection("theme", "hoverLift", value)} />
     </>
@@ -883,12 +917,41 @@ function buildBoardOrgs(config: LabEditorConfig): OrgRoster[] {
   });
 }
 
-function getGridTemplateColumns(config: LabEditorConfig): string {
-  const minWidth = config.board.teamCount >= 9 ? 220 : 240;
-  if (config.board.layoutPreset === "4-4") return "repeat(4, minmax(0, 1fr))";
-  if (config.board.layoutPreset === "5-4") return "repeat(5, minmax(0, 1fr))";
-  if (config.board.layoutPreset === "4-5") return "repeat(4, minmax(0, 1fr))";
-  return `repeat(auto-fit, minmax(min(100%, ${minWidth}px), 1fr))`;
+function getBoardRows(teamCount: number, layoutPreset: LayoutPreset): number[] {
+  if (layoutPreset === "4-4") {
+    const rows: number[] = [];
+    let rem = teamCount;
+    while (rem > 0) { rows.push(Math.min(4, rem)); rem -= 4; }
+    return rows;
+  }
+  if (layoutPreset === "5-4") {
+    if (teamCount <= 5) return [teamCount];
+    if (teamCount <= 9) return [5, teamCount - 5];
+    return [5, 5];
+  }
+  if (layoutPreset === "4-5") {
+    if (teamCount <= 4) return [teamCount];
+    if (teamCount <= 9) return [4, teamCount - 4];
+    return [5, 5];
+  }
+  // balanced
+  if (teamCount <= 5) return [teamCount];
+  if (teamCount === 6) return [3, 3];
+  if (teamCount === 7) return [4, 3];
+  if (teamCount === 8) return [4, 4];
+  if (teamCount === 9) return [5, 4];
+  return [5, 5];
+}
+
+function sliceBoardRows(orgs: OrgRoster[], teamCount: number, layoutPreset: LayoutPreset): Array<{ orgs: OrgRoster[]; startIndex: number }> {
+  const rows = getBoardRows(teamCount, layoutPreset);
+  const result: Array<{ orgs: OrgRoster[]; startIndex: number }> = [];
+  let offset = 0;
+  for (const count of rows) {
+    result.push({ orgs: orgs.slice(offset, offset + count), startIndex: offset });
+    offset += count;
+  }
+  return result;
 }
 
 function getCornerStylePresets(style: CornerStyle) {

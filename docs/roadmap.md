@@ -1,46 +1,33 @@
 # Roadmap
 
-## Phase 0 — Planning
+## Phase 0 — Planning ✓
 
-Current phase.
+Complete.
 
-Goals:
+Established product identity, component architecture, draft flow, visual direction.
 
-- establish product identity
-- define component architecture
-- define draft flow
-- define visual direction
-- avoid premature backend complexity
+## Phase 1 — Card Lab ✓
 
-## Phase 1 — Card Lab
+Complete.
 
-Primary implementation target.
+Routes: `/lab/cards`, `/lab/editor`
 
-Route:
+Delivered:
 
-`/lab/cards`
+- full card component system (player profile, draft pool, roster slots, ghost queue, org roster)
+- live design editor with collapsible sections, real-time previews, localStorage persistence
+- mock draft board with row composition, view modes (spectator/captain/caster)
+- 1920×1080 and 1280×720 stream canvas preview mode
+- JSON config export/import
 
-Goals:
-
-- build reusable card system
-- validate visual identity
-- validate responsiveness
-- test stream readability
-- establish motion language
-
-No backend.
-No auth.
-No production draft state.
+No backend. No auth. No production draft state.
 
 ## Phase 2 — Mock Draft Board
 
-Goals:
+Partially started within the editor. Remaining goals:
 
-- responsive board composition
 - snake order visualization
-- roster slot animation
-- active org highlighting
-- recent picks widgets
+- roster slot draft animation
 - mobile spectator behavior
 
 Still powered by mock data.
