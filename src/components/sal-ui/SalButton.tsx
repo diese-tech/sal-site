@@ -12,11 +12,13 @@ const intentColors = {
   serpent: { rgb: "45,212,191", from: "from-teal-300", to: "to-emerald-600", text: "text-teal-50" },
 };
 
-const draftIntentMap: Record<DraftButtonIntent, keyof typeof intentColors | "white"> = {
-  ember: "ember",
-  "red alert": "ember",
-  solar: "ember",
-  "white hot": "white",
+type IntentColor = { rgb: string; from: string; to: string; text: string };
+
+const draftIntentColors: Record<DraftButtonIntent, IntentColor> = {
+  ember: { rgb: "251,146,60", from: "from-orange-300", to: "to-rose-600", text: "text-orange-50" },
+  "red alert": { rgb: "239,68,68", from: "from-red-400", to: "to-red-700", text: "text-red-50" },
+  solar: { rgb: "234,179,8", from: "from-yellow-300", to: "to-amber-500", text: "text-amber-950" },
+  "white hot": { rgb: "255,255,255", from: "from-white", to: "to-orange-200", text: "text-slate-950" },
 };
 
 export function SalButton({
@@ -100,13 +102,9 @@ function getButtonClasses(config: ButtonEditorConfig, variant: SalButtonVariant,
   );
 }
 
-function getVariantColor(config: ButtonEditorConfig, variant: SalButtonVariant) {
+function getVariantColor(config: ButtonEditorConfig, variant: SalButtonVariant): IntentColor {
   if (variant === "draft") {
-    const mapped = draftIntentMap[config.draftButtonIntent];
-    if (mapped === "white") {
-      return { rgb: "255,255,255", from: "from-white", to: "to-orange-200", text: "text-slate-950" };
-    }
-    return intentColors[mapped];
+    return draftIntentColors[config.draftButtonIntent];
   }
 
   if (variant === "admin") return intentColors.purple;

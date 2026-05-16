@@ -8,7 +8,7 @@ import { RosterSlotCard } from "@/components/card-lab/RosterSlotCard";
 import { SalButton } from "@/components/sal-ui/SalButton";
 import { labEditorDefaults } from "@/data/lab-editor-defaults";
 import { orgRosters, players, rosterSlotStates } from "@/data/mock-card-lab";
-import type { LabEditorConfig } from "@/types/lab-editor";
+import type { LabEditorConfig, CornerStyle } from "@/types/lab-editor";
 import type { OrgRoster } from "@/types/card-lab";
 import { cn } from "@/lib/utils";
 
@@ -81,6 +81,18 @@ export function LabEditor() {
     }));
   }
 
+  function handleCornerStyleChange(value: CornerStyle) {
+    const presets = getCornerStylePresets(value);
+    setConfig((current) => ({
+      ...current,
+      theme: { ...current.theme, cornerStyle: value },
+      playerCard: { ...current.playerCard, cardRadius: presets.cardRadius },
+      orgCard: { ...current.orgCard, orgCardRadius: presets.orgCardRadius },
+      rosterSlot: { ...current.rosterSlot, slotRadius: presets.slotRadius },
+      button: { ...current.button, buttonRadius: presets.buttonRadius },
+    }));
+  }
+
   async function copyJson() {
     await navigator.clipboard.writeText(configJson);
     setJsonMessage("Copied current config JSON.");
@@ -142,7 +154,7 @@ export function LabEditor() {
             <PreviewPanel eyebrow="Theme" title="Page theme, card chrome, and motion" tunedBy={["Theme"]}>
               <div className="grid gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
                 <InlineControls title="Theme controls">
-                  <ThemeControls config={config} updateSection={updateSection} />
+                  <ThemeControls config={config} updateSection={updateSection} onCornerStyleChange={handleCornerStyleChange} />
                 </InlineControls>
                 <PreviewTarget label="Theme surface samples" affectedBy="Theme controls affect the page backdrop, card borders/glow/corners, and transition speed. Button shape/style lives in the Button section.">
                   <div className="grid gap-3 lg:grid-cols-3">
@@ -291,12 +303,14 @@ export function LabEditor() {
 
                   <PreviewTarget label="Board team grid" affectedBy="Board controls: team count, layout, gaps, active team, inactive opacity, board scale. View mode: spectator hides ghost queue; captain shows ghost queue">
               <p className="mb-3 text-xs font-bold text-slate-400">View: {config.board.viewMode}</p>
+              <div className="mx-auto overflow-hidden" style={{ maxWidth: `${config.board.boardMaxWidth}px` }}>
               <div
-                className="mx-auto grid w-full min-w-0"
+                className="w-full min-w-0 grid"
                 style={{
-                  maxWidth: `${Math.round(config.board.boardMaxWidth * config.board.boardScale)}px`,
                   gap: `${config.board.rowGap}px ${config.board.boardGap}px`,
-                  gridTemplateColumns: `repeat(auto-fit, minmax(min(100%, ${getBoardMinCardWidth(config)}px), 1fr))`,
+                  gridTemplateColumns: getGridTemplateColumns(config),
+                  transform: config.board.boardScale !== 1 ? `scale(${config.board.boardScale})` : undefined,
+                  transformOrigin: "top center",
                 }}
               >
                 {boardOrgs.map((org, index) => (
@@ -310,6 +324,7 @@ export function LabEditor() {
                     <OrgRosterCard org={org} editorConfig={config} />
                   </div>
                 ))}
+              </div>
               </div>
                   </PreviewTarget>
 
@@ -463,13 +478,13 @@ function BoardControls({ config, updateSection }: { config: LabEditorConfig; upd
   );
 }
 
-function ThemeControls({ config, updateSection }: { config: LabEditorConfig; updateSection: UpdateSection }) {
+function ThemeControls({ config, updateSection, onCornerStyleChange }: { config: LabEditorConfig; updateSection: UpdateSection; onCornerStyleChange: (value: CornerStyle) => void }) {
   return (
     <>
       <SelectControl label="Theme" value={config.theme.theme} options={["cyan serpent", "purple plasma", "solar ember", "dark temple"]} onChange={(value) => updateSection("theme", "theme", value)} />
       <SelectControl label="Glow strength" value={config.theme.glowStrength} options={["none", "low", "medium", "high", "nuclear"]} onChange={(value) => updateSection("theme", "glowStrength", value)} />
       <SelectControl label="Border strength" value={config.theme.borderStrength} options={["none", "subtle", "clear", "bright"]} onChange={(value) => updateSection("theme", "borderStrength", value)} />
-      <SelectControl label="Corner style" value={config.theme.cornerStyle} options={["sharp", "soft", "pillowy"]} onChange={(value) => updateSection("theme", "cornerStyle", value)} />
+      <SelectControl label="Corner style" value={config.theme.cornerStyle} options={["sharp", "soft", "pillowy"]} onChange={onCornerStyleChange} />
       <SelectControl label="Background style" value={config.theme.backgroundStyle} options={["grid", "smoke", "clean"]} onChange={(value) => updateSection("theme", "backgroundStyle", value)} />
       <SelectControl label="Animation intensity" value={config.theme.animationIntensity} options={["none", "subtle", "medium", "flashy"]} onChange={(value) => updateSection("theme", "animationIntensity", value)} />
       <SelectControl label="Spacing" value={config.theme.spacing} options={["compact", "balanced", "cinematic"]} onChange={(value) => updateSection("theme", "spacing", value)} />
@@ -624,10 +639,18 @@ function buildBoardOrgs(config: LabEditorConfig): OrgRoster[] {
   });
 }
 
-function getBoardMinCardWidth(config: LabEditorConfig) {
-  if (config.board.layoutPreset === "5-4" || config.board.teamCount >= 9) return 220;
-  if (config.board.layoutPreset === "4-4" || config.board.layoutPreset === "4-5") return 260;
-  return 240;
+function getGridTemplateColumns(config: LabEditorConfig): string {
+  const minWidth = config.board.teamCount >= 9 ? 220 : 240;
+  if (config.board.layoutPreset === "4-4") return "repeat(4, minmax(0, 1fr))";
+  if (config.board.layoutPreset === "5-4") return "repeat(5, minmax(0, 1fr))";
+  if (config.board.layoutPreset === "4-5") return "repeat(4, minmax(0, 1fr))";
+  return `repeat(auto-fit, minmax(min(100%, ${minWidth}px), 1fr))`;
+}
+
+function getCornerStylePresets(style: CornerStyle) {
+  if (style === "sharp") return { cardRadius: 6, orgCardRadius: 8, slotRadius: 4, buttonRadius: 6 };
+  if (style === "pillowy") return { cardRadius: 32, orgCardRadius: 32, slotRadius: 20, buttonRadius: 28 };
+  return { cardRadius: 20, orgCardRadius: 20, slotRadius: 12, buttonRadius: 14 };
 }
 
 function getThemeRadius(config: LabEditorConfig) {

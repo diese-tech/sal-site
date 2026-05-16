@@ -13,7 +13,10 @@ export function PlayerProfileCard({
   editorConfig?: LabEditorConfig;
 }) {
   const card = editorConfig?.playerCard;
+  const density = card?.density ?? "standard";
   const padding = card?.cardPadding ?? 20;
+  const isFull = density === "full";
+  const isCompact = density === "compact";
 
   return (
     <GlowPanel
@@ -45,27 +48,27 @@ export function PlayerProfileCard({
           {card?.showOrgBadge === false ? null : <StatusChip status={player.status} label={player.orgName ?? undefined} />}
         </div>
 
-        <div className="mt-4">
-          <h3 className={cn("font-black leading-tight text-white", card?.density === "compact" ? "text-xl" : "text-2xl")}>{player.ign}</h3>
-          {card?.showDiscordUsername === false ? null : <p className="mt-1 text-sm font-medium text-slate-400">@{player.discordUsername}</p>}
+        <div className={cn(isFull ? "mt-5" : "mt-4")}>
+          <h3 className={cn("font-black leading-tight text-white", isCompact ? "text-xl" : isFull ? "text-3xl" : "text-2xl")}>{player.ign}</h3>
+          {card?.showDiscordUsername === false ? null : <p className={cn("font-medium text-slate-400", isFull ? "mt-2 text-base" : "mt-1 text-sm")}>@{player.discordUsername}</p>}
         </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          <RolePill role={player.primaryRole} />
+        <div className={cn("flex flex-wrap gap-2", isFull ? "mt-6" : "mt-5")}>
+          <RolePill role={player.primaryRole} compact={isCompact} />
           {player.secondaryRoles.map((role) => (
-            <RolePill key={role} role={role} compact />
+            <RolePill key={role} role={role} compact={!isFull} />
           ))}
         </div>
 
         {card?.showTimezone === false ? null : (
-          <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-4 text-sm text-slate-300">
+          <div className={cn("flex items-center justify-between border-t border-white/10 text-sm text-slate-300", isFull ? "mt-6 pt-5" : "mt-5 pt-4")}>
             <span className="font-semibold text-slate-400">Timezone</span>
-            <span className="font-bold text-white">{player.timezone}</span>
+            <span className={cn("font-bold text-white", isFull && "text-base")}>{player.timezone}</span>
           </div>
         )}
 
         {card?.showTags === false ? null : (
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className={cn("flex flex-wrap gap-2", isFull ? "mt-5" : "mt-4")}>
             {player.tags.map((tag) => (
               <span
                 key={tag}
