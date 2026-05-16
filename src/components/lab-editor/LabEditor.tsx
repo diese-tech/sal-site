@@ -65,6 +65,7 @@ export function LabEditor() {
   const configJson = useMemo(() => JSON.stringify(config, null, 2), [config]);
   const boardOrgs = useMemo(() => buildBoardOrgs(config), [config]);
   const themeClass = getThemeClass(config);
+  const previewPanelGapClass = getPreviewPanelGapClass(config);
 
   function updateSection<Section extends keyof LabEditorConfig, Key extends keyof LabEditorConfig[Section]>(
     section: Section,
@@ -137,7 +138,7 @@ export function LabEditor() {
           </div>
         </header>
         <section className="min-w-0">
-          <div className="grid gap-5">
+          <div className={cn("grid", previewPanelGapClass)}>
             <PreviewPanel eyebrow="Theme" title="Page theme, card chrome, and motion" tunedBy={["Theme"]}>
               <div className="grid gap-4 2xl:grid-cols-[360px_minmax(0,1fr)]">
                 <InlineControls title="Theme controls">
@@ -288,7 +289,8 @@ export function LabEditor() {
                 </PreviewTarget>
                   ) : null}
 
-                  <PreviewTarget label="Board team grid" affectedBy="Board controls: team count, layout, gaps, active team, inactive opacity, board scale">
+                  <PreviewTarget label="Board team grid" affectedBy="Board controls: team count, layout, gaps, active team, inactive opacity, board scale. View mode: spectator hides ghost queue; captain shows ghost queue">
+              <p className="mb-3 text-xs font-bold text-slate-400">View: {config.board.viewMode}</p>
               <div
                 className="mx-auto grid w-full min-w-0"
                 style={{
@@ -311,7 +313,7 @@ export function LabEditor() {
               </div>
                   </PreviewTarget>
 
-                  {config.board.showRecentPicksWidget ? (
+                  {config.board.showRecentPicksWidget && config.board.viewMode !== "captain" ? (
                 <PreviewTarget label="Recent picks widget" affectedBy="Board controls: recent picks toggle; Theme controls affect its surface">
                 <div className="mt-5 grid gap-2 rounded-2xl border border-white/10 bg-black/25 p-3 sm:grid-cols-3">
                   {players.slice(0, 3).map((player, index) => (
@@ -639,4 +641,10 @@ function getThemeClass(config: LabEditorConfig) {
   if (config.theme.theme === "solar ember") return "bg-[radial-gradient(circle_at_25%_0%,rgba(251,146,60,0.2),transparent_30rem),linear-gradient(135deg,#080604,#17100b_55%,#050505)]";
   if (config.theme.theme === "dark temple") return "bg-[linear-gradient(135deg,#020305,#090d14_55%,#020305)]";
   return "bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.16),transparent_30rem),linear-gradient(135deg,#05070d,#08111f_55%,#05070d)]";
+}
+
+function getPreviewPanelGapClass(config: LabEditorConfig) {
+  if (config.theme.spacing === "compact") return "gap-3";
+  if (config.theme.spacing === "cinematic") return "gap-8";
+  return "gap-5";
 }

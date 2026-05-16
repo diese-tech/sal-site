@@ -53,3 +53,11 @@ body {
 .sal-active-pulse {
   animation: sal-pulse 2.2s ease-in-out infinite;
 }
+
+.sal-glowpanel:hover {
+  transform: translateY(calc(-1 * var(--sal-hover-lift, 4px)));
+}
+
+.sal-button:hover:not(:active) {
+  transform: translateY(calc(-1 * var(--sal-button-hover-lift, 4px)));
+}

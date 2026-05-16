@@ -3,6 +3,8 @@ import type { LabEditorConfig } from "@/types/lab-editor";
 import { cn } from "@/lib/utils";
 import type { CSSProperties } from "react";
 
+type GlowPanelStyle = CSSProperties & { "--sal-hover-lift"?: string };
+
 const roleStyles: Record<PlayerRole, string> = {
   Solo: "border-emerald-300/35 bg-emerald-300/10 text-emerald-100",
   Jungle: "border-cyan-300/35 bg-cyan-300/10 text-cyan-100",
@@ -54,17 +56,18 @@ export function GlowPanel({
   return (
     <div
       className={cn(
-        "group relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-cyan-950/30 backdrop-blur",
-        "transition duration-300 hover:-translate-y-1 hover:border-cyan-200/25 hover:shadow-cyan-500/10",
+        "sal-glowpanel group relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-cyan-950/30 backdrop-blur",
+        "transition duration-300 hover:border-cyan-200/25 hover:shadow-cyan-500/10",
         active && "border-orange-300/45 shadow-orange-500/15",
         className,
       )}
       style={{
+        "--sal-hover-lift": `${theme?.hoverLift ?? 4}px`,
         borderColor: theme ? `rgba(255,255,255,${Math.max(0.06, borderOpacity)})` : undefined,
         borderRadius: radius,
         transitionDuration: `${motionDuration}ms`,
         ...style,
-      }}
+      } as GlowPanelStyle}
     >
       <div
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.18),transparent_34%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.16),transparent_32%)] opacity-80"

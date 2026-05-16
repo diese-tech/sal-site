@@ -8,6 +8,7 @@ export function DraftPlayerCard({ player, editorConfig }: { player: PlayerProfil
   const drafted = player.status === "drafted";
   const card = editorConfig?.playerCard;
   const theme = editorConfig?.theme;
+  const showTimezone = card?.showTimezone !== false;
 
   return (
     <article
@@ -59,8 +60,8 @@ export function DraftPlayerCard({ player, editorConfig }: { player: PlayerProfil
         </div>
       </div>
 
-      <div className="relative mt-4 grid grid-cols-[1fr_auto_auto] items-center gap-2 border-t border-white/10 pt-3 text-xs font-bold text-slate-300">
-        <span>{card?.showTimezone === false ? "" : player.timezone}</span>
+      <div className={cn("relative mt-4 grid items-center gap-2 border-t border-white/10 pt-3 text-xs font-bold text-slate-300", showTimezone ? "grid-cols-[1fr_auto_auto]" : "grid-cols-[auto_auto] justify-start")}>
+        {showTimezone ? <span>{player.timezone}</span> : null}
         <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-slate-300">Queue</span>
         <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-slate-300">Note</span>
       </div>

@@ -3,7 +3,7 @@ import type { ButtonEditorConfig, DraftButtonIntent } from "@/types/lab-editor";
 import { cn } from "@/lib/utils";
 
 type SalButtonVariant = "primary" | "queue" | "draft" | "notes" | "admin";
-type PressStyle = CSSProperties & { "--sal-press-scale"?: string };
+type PressStyle = CSSProperties & { "--sal-press-scale"?: string; "--sal-button-hover-lift"?: string };
 
 const intentColors = {
   cyan: { rgb: "34,211,238", from: "from-cyan-300", to: "to-blue-500", text: "text-cyan-50" },
@@ -35,6 +35,7 @@ export function SalButton({
     <button
       className={cn(
         "group relative isolate inline-flex items-center justify-center overflow-hidden border font-black uppercase tracking-normal transition",
+        !disabled && config.hoverEffect === "lift" && "sal-button",
         disabled ? "cursor-not-allowed" : "cursor-pointer",
         !disabled && "active:translate-y-0.5 active:scale-[var(--sal-press-scale)] active:brightness-125 active:saturate-150 active:[box-shadow:inset_0_2px_18px_rgba(0,0,0,0.48)]",
         "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-200",
@@ -61,6 +62,7 @@ export function getButtonStyle(config: ButtonEditorConfig, variant: SalButtonVar
 
   return {
     "--sal-press-scale": String(pressScale),
+    "--sal-button-hover-lift": `${config.hoverLift}px`,
     minHeight: `${config.buttonHeight}px`,
     borderRadius: `${shapeRadius}px`,
     paddingInline: `${config.buttonPaddingX}px`,
@@ -91,7 +93,6 @@ function getButtonClasses(config: ButtonEditorConfig, variant: SalButtonVariant,
     config.buttonStyle === "glass" && "bg-white/[0.075] backdrop-blur",
     config.buttonStyle === "outline" && "bg-transparent",
     config.buttonStyle === "neon" && `bg-black ${color.text}`,
-    config.hoverEffect === "lift" && "hover:-translate-y-1",
     config.hoverEffect === "brighten" && "hover:brightness-125",
     config.hoverEffect === "glow flare" && "hover:shadow-white/20",
     config.pressEffect === "flash" && "active:bg-white/25",

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 export function RosterSlotCard({ slot, compact = false, editorConfig }: { slot: RosterSlot; compact?: boolean; editorConfig?: LabEditorConfig }) {
   const player = slot.player ?? slot.projectedPlayer;
   const slotConfig = editorConfig?.rosterSlot;
+  const isCompact = editorConfig ? slotConfig?.slotDensity === "compact" : compact;
   const showPickNumber = slotConfig?.showPickNumbers !== false;
   const pulsePreset = slotConfig?.selectedSlotPulse === "off" ? 0 : slotConfig?.selectedSlotPulse === "strong" ? 1.35 : 1;
   const pulseStrength = ((slotConfig?.selectedPulseStrength ?? 16) / 100) * pulsePreset;
@@ -38,7 +39,7 @@ export function RosterSlotCard({ slot, compact = false, editorConfig }: { slot: 
         <>
           <AvatarMark initials={player.avatarInitials} gradient={player.avatarGradient} className="size-10 rounded-xl text-xs" />
           <div className="min-w-0 flex-1">
-            <p className={cn("truncate font-black text-white", compact ? "text-sm" : "text-base")}>{player.ign}</p>
+            <p className={cn("truncate font-black text-white", isCompact ? "text-sm" : "text-base")}>{player.ign}</p>
             <div className="mt-1 flex items-center gap-1.5">
               <RolePill role={player.primaryRole} compact />
               {slot.state === "queued-ghost" ? <span className="text-[0.65rem] font-bold uppercase text-cyan-100/60">Projected</span> : null}
