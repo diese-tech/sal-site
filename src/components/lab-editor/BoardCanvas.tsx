@@ -66,6 +66,15 @@ export function BoardCanvas({
   const canvasH = canvasSize === "1920x1080" ? 1080 : 720;
   const scaledH = Math.round(canvasH * canvasScale);
 
+  // Auto-fit: if the widest row of cards exceeds the usable canvas width, scale down to fit.
+  const canvasPad = 64; // p-8 = 32px × 2
+  const usableW = Math.min(canvasW - canvasPad, config.board.boardMaxWidth);
+  const rows = sliceBoardRows(boardOrgs, config.board.teamCount, config.board.layoutPreset);
+  const maxTeamsPerRow = Math.max(...rows.map((r) => r.orgs.length), 1);
+  const naturalRowW = maxTeamsPerRow * config.orgCard.orgCardWidth + (maxTeamsPerRow - 1) * config.board.boardGap;
+  const fitScale = naturalRowW > usableW ? usableW / naturalRowW : 1;
+  const effectiveBoardScale = config.board.boardScale * fitScale;
+
   return (
     <div
       ref={containerRef}
@@ -112,7 +121,7 @@ export function BoardCanvas({
             className="min-w-0 w-full mx-auto flex-1"
             style={{
               maxWidth: `${config.board.boardMaxWidth}px`,
-              transform: config.board.boardScale !== 1 ? `scale(${config.board.boardScale})` : undefined,
+              transform: effectiveBoardScale !== 1 ? `scale(${effectiveBoardScale})` : undefined,
               transformOrigin: "top center",
             }}
           >
