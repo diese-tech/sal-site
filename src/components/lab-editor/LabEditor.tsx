@@ -66,8 +66,7 @@ export function LabEditor() {
   const boardContentRef = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(1);
   const [boardNaturalHeight, setBoardNaturalHeight] = useState(600);
-  const prevConfigRef = useRef<LabEditorConfig | null>(null);
-  const [, forceRender] = useState(0);
+  const [prevConfig, setPrevConfig] = useState<LabEditorConfig | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set<string>();
     try {
@@ -207,19 +206,17 @@ export function LabEditor() {
   }
 
   function resetConfig() {
-    prevConfigRef.current = config;
+    setPrevConfig(config);
     setConfig(labEditorDefaults);
     setJsonDraft("");
     setJsonMessage("Reset to SAL defaults.");
-    forceRender((n) => n + 1);
   }
 
   function undoReset() {
-    if (!prevConfigRef.current) return;
-    setConfig(prevConfigRef.current);
-    prevConfigRef.current = null;
+    if (!prevConfig) return;
+    setConfig(prevConfig);
+    setPrevConfig(null);
     setJsonMessage("Restored pre-reset config.");
-    forceRender((n) => n + 1);
   }
 
   return (
@@ -260,7 +257,7 @@ export function LabEditor() {
               >
                 {debugMode ? "Debug On" : "Debug"}
               </button>
-              {prevConfigRef.current && (
+              {prevConfig && (
                 <button
                   onClick={undoReset}
                   className={cn(utilityButtonClass, "border-orange-300/30 bg-orange-300/10 text-orange-100 hover:bg-orange-300/20")}
