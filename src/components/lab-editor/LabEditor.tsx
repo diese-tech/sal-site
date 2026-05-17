@@ -33,6 +33,11 @@ export function LabEditor() {
   const [canvasSize, setCanvasSize] = useState<CanvasSize>("preview");
   const [canvasScale, setCanvasScale] = useState(1);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const [previewZoom, setPreviewZoom] = useState<number | "fit">("fit");
+  const boardPreviewRef = useRef<HTMLDivElement>(null);
+  const boardContentRef = useRef<HTMLDivElement>(null);
+  const [fitScale, setFitScale] = useState(1);
+  const [boardNaturalHeight, setBoardNaturalHeight] = useState(600);
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set<string>();
     try {
@@ -51,18 +56,46 @@ export function LabEditor() {
     if (canvasSize === "preview") return;
     const el = canvasContainerRef.current;
     if (!el) return;
-    const targetWidth = canvasSize === "1920x1080" ? 1920 : 1280;
-    const update = () => setCanvasScale(el.getBoundingClientRect().width / targetWidth);
+    const targetW = canvasSize === "1920x1080" ? 1920 : 1280;
+    const targetH = canvasSize === "1920x1080" ? 1080 : 720;
+    const maxPreviewH = 620;
+    const update = () => {
+      const scaleByW = el.getBoundingClientRect().width / targetW;
+      const scaleByH = maxPreviewH / targetH;
+      setCanvasScale(Math.min(scaleByW, scaleByH));
+    };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(el);
     return () => observer.disconnect();
   }, [canvasSize]);
 
+  useEffect(() => {
+    if (previewZoom !== "fit" || canvasSize !== "preview") return;
+    const el = boardPreviewRef.current;
+    if (!el) return;
+    const update = () => setFitScale(Math.min(1, el.getBoundingClientRect().width / config.board.boardMaxWidth));
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [previewZoom, canvasSize, config.board.boardMaxWidth]);
+
+  useEffect(() => {
+    const el = boardContentRef.current;
+    if (!el) return;
+    const update = () => setBoardNaturalHeight(el.scrollHeight);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const configJson = useMemo(() => JSON.stringify(config, null, 2), [config]);
   const boardOrgs = useMemo(() => buildBoardOrgs(config), [config]);
   const themeClass = getThemeClass(config);
   const previewPanelGapClass = getPreviewPanelGapClass(config);
+  const effectivePreviewScale = previewZoom === "fit" ? fitScale : (previewZoom as number);
 
   function updateSection<Section extends keyof LabEditorConfig, Key extends keyof LabEditorConfig[Section]>(
     section: Section,
@@ -324,27 +357,59 @@ export function LabEditor() {
                   <BoardControls config={config} updateSection={updateSection} />
                 </InlineControls>
                 <div className="min-w-0">
-                  {/* Canvas size toggle */}
-                  <div className="mb-4 flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-black uppercase text-slate-400">Preview mode</span>
-                    {(["preview", "1920x1080", "1280x720"] as CanvasSize[]).map((size) => (
-                      <button
-                        key={size}
-                        onClick={() => setCanvasSize(size)}
-                        className={cn(
-                          "rounded-lg border px-3 py-1.5 text-xs font-black uppercase transition",
-                          canvasSize === size
-                            ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100"
-                            : "border-white/10 bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-slate-200",
-                        )}
-                      >
-                        {size === "preview" ? "Editor" : size}
-                      </button>
-                    ))}
-                    {canvasSize !== "preview" && (
-                      <span className="ml-1 text-[0.65rem] font-bold text-slate-500">
-                        Scale {(canvasScale * 100).toFixed(0)}% — showing {canvasSize} stream canvas
-                      </span>
+                  {/* Canvas size toggle + preview zoom */}
+                  <div className="mb-4 flex flex-col gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-black uppercase text-slate-400">Preview mode</span>
+                      {(["preview", "1920x1080", "1280x720"] as CanvasSize[]).map((size) => (
+                        <button
+                          key={size}
+                          onClick={() => setCanvasSize(size)}
+                          className={cn(
+                            "rounded-lg border px-3 py-1.5 text-xs font-black uppercase transition",
+                            canvasSize === size
+                              ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100"
+                              : "border-white/10 bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-slate-200",
+                          )}
+                        >
+                          {size === "preview" ? "Editor" : size}
+                        </button>
+                      ))}
+                      {canvasSize !== "preview" && (
+                        <span className="ml-1 text-[0.65rem] font-bold text-slate-500">
+                          Scale {(canvasScale * 100).toFixed(0)}% — full canvas visible · {canvasSize}
+                        </span>
+                      )}
+                    </div>
+                    {canvasSize === "preview" && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-black uppercase text-slate-400">Zoom</span>
+                        {(["fit", 0.5, 0.75, 1] as const).map((z) => (
+                          <button
+                            key={String(z)}
+                            onClick={() => setPreviewZoom(z)}
+                            className={cn(
+                              "rounded-lg border px-3 py-1.5 text-xs font-black uppercase transition",
+                              previewZoom === z
+                                ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100"
+                                : "border-white/10 bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-slate-200",
+                            )}
+                          >
+                            {z === "fit" ? "Fit" : `${Math.round((z as number) * 100)}%`}
+                          </button>
+                        ))}
+                        <input
+                          type="range"
+                          min={20}
+                          max={100}
+                          value={Math.round(effectivePreviewScale * 100)}
+                          onInput={(e) => setPreviewZoom(Number((e.target as HTMLInputElement).value) / 100)}
+                          className="w-24 accent-cyan-300"
+                        />
+                        <span className="text-[0.65rem] font-bold text-slate-500">
+                          {Math.round(effectivePreviewScale * 100)}%{previewZoom === "fit" ? " (fit)" : ""}
+                        </span>
+                      </div>
                     )}
                   </div>
 
@@ -368,32 +433,45 @@ export function LabEditor() {
                 <p className="text-xs font-bold text-slate-400">Layout: <span className="text-slate-200">{config.board.layoutPreset} → [{getBoardRows(config.board.teamCount, config.board.layoutPreset).join(", ")}]</span></p>
               </div>
               <div
-                className="mx-auto w-full"
-                style={{
-                  maxWidth: `${config.board.boardMaxWidth}px`,
-                  transform: config.board.boardScale !== 1 ? `scale(${config.board.boardScale})` : undefined,
-                  transformOrigin: "top center",
-                }}
+                ref={boardPreviewRef}
+                className="w-full overflow-hidden"
+                style={{ height: `${Math.round(boardNaturalHeight * effectivePreviewScale)}px` }}
               >
-                <div className="flex flex-col" style={{ gap: `${config.board.rowGap}px` }}>
-                  {sliceBoardRows(boardOrgs, config.board.teamCount, config.board.layoutPreset).map(({ orgs, startIndex }, rowIndex) => (
-                    <div key={rowIndex} className="flex justify-center" style={{ gap: `${config.board.boardGap}px` }}>
-                      {orgs.map((org, i) => {
-                        const gi = startIndex + i;
-                        return (
-                          <div
-                            key={`${org.id}-${gi}`}
-                            style={{
-                              opacity: gi === config.board.activeTeamIndex ? 1 : config.board.inactiveCardOpacity / 100,
-                              transform: gi === config.board.activeTeamIndex ? `scale(${config.board.activeCardScale})` : undefined,
-                            }}
-                          >
-                            <OrgRosterCard org={org} editorConfig={config} />
-                          </div>
-                        );
-                      })}
+                <div
+                  ref={boardContentRef}
+                  style={{
+                    transform: `scale(${effectivePreviewScale})`,
+                    transformOrigin: "top left",
+                    width: `${config.board.boardMaxWidth}px`,
+                  }}
+                >
+                  <div
+                    style={{
+                      transform: config.board.boardScale !== 1 ? `scale(${config.board.boardScale})` : undefined,
+                      transformOrigin: "top center",
+                    }}
+                  >
+                    <div className="flex flex-col" style={{ gap: `${config.board.rowGap}px` }}>
+                      {sliceBoardRows(boardOrgs, config.board.teamCount, config.board.layoutPreset).map(({ orgs, startIndex }, rowIndex) => (
+                        <div key={rowIndex} className="flex justify-center" style={{ gap: `${config.board.boardGap}px` }}>
+                          {orgs.map((org, i) => {
+                            const gi = startIndex + i;
+                            return (
+                              <div
+                                key={`${org.id}-${gi}`}
+                                style={{
+                                  opacity: gi === config.board.activeTeamIndex ? 1 : config.board.inactiveCardOpacity / 100,
+                                  transform: gi === config.board.activeTeamIndex ? `scale(${config.board.activeCardScale})` : undefined,
+                                }}
+                              >
+                                <OrgRosterCard org={org} editorConfig={config} />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
               </div>
                   </PreviewTarget>
@@ -506,8 +584,8 @@ function BoardCanvas({
   return (
     <div
       ref={containerRef}
-      className="w-full overflow-hidden rounded-2xl border border-white/15"
-      style={{ height: scaledH > 0 ? `${scaledH}px` : undefined }}
+      className="w-full rounded-2xl border border-white/15 overflow-hidden"
+      style={{ height: scaledH > 0 ? `${scaledH}px` : "620px" }}
     >
       <div
         className={cn("relative overflow-hidden", themeClass)}
