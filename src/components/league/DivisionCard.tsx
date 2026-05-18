@@ -1,5 +1,7 @@
 import type { Division, OrgStanding, Org } from "@/types/league";
 import { GlowPanel, OrgLogo } from "@/components/card-lab/ui";
+import { BRAND_ASSETS } from "@/lib/assets";
+import Image from "next/image";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +43,7 @@ export function DivisionCard({
 }) {
   const accent = divisionAccent[division.id];
   const topOrgs = standings.slice(0, 3).map((s) => orgs.find((o) => o.id === s.orgId)).filter(Boolean) as Org[];
+  const art = division.id === "solar" || division.id === "lunar" ? BRAND_ASSETS.division[division.id] : undefined;
 
   return (
     <GlowPanel className={cn("transition-all duration-300 h-full", accent.border)}>
@@ -48,8 +51,18 @@ export function DivisionCard({
       <div className={cn("h-1 w-full rounded-t-2xl", accent.bar)} />
 
       {/* Division header */}
-      <div className={cn("relative bg-gradient-to-br p-4 pb-3", accent.header)}>
-        <div className="flex items-start justify-between gap-3">
+      <div className={cn("relative overflow-hidden bg-gradient-to-br p-4 pb-3", accent.header)}>
+        {art && (
+          <Image
+            src={art}
+            alt=""
+            fill
+            sizes="380px"
+            className="pointer-events-none object-cover opacity-18 mix-blend-screen"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/92 via-slate-950/72 to-slate-950/35" />
+        <div className="relative flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="mb-0.5 text-[0.65rem] font-black uppercase text-slate-500">Tier {division.tier}</p>
             <h3 className={cn("text-xl font-black", accent.text)}>{division.name}</h3>

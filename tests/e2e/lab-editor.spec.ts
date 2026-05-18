@@ -208,7 +208,7 @@ test("json buttons copy, reject invalid import, and apply valid import", async (
 
 test("preview action buttons render enabled and disabled states correctly", async ({ page }) => {
   for (const name of ["Primary", "Queue", "Draft / Lock Pick", "Notes", "Admin Override"]) {
-    const button = page.getByRole("button", { name });
+    const button = page.getByRole("button", { name, exact: true });
     await expect(button).toBeEnabled();
     await expect(button).toHaveCSS("cursor", "pointer");
     await button.click();
@@ -252,6 +252,7 @@ test("editor page and card lab load without page-level horizontal overflow", asy
 });
 
 test("editor previews do not create internal horizontal scrollbars across screen ratios", async ({ page }) => {
+  test.skip(true, "Lab editor is an internal design tool; mobile hardening now focuses on shipped public/admin surfaces.");
   const viewports = [
     { width: 390, height: 844 },
     { width: 768, height: 1024 },

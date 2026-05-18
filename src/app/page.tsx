@@ -4,24 +4,25 @@ import { DivisionCard } from "@/components/league/DivisionCard";
 import { MatchCard } from "@/components/league/MatchCard";
 import { StandingsTable } from "@/components/league/StandingsTable";
 import { AnnouncementCard } from "@/components/league/AnnouncementCard";
-import { MOCK_LEAGUE_DATA } from "@/data/mock-league";
+import { getLeagueData } from "@/lib/league-data";
+import { cn } from "@/lib/utils";
 
-export default function HomePage() {
-  const { season, divisions, orgs, matches, standings, announcements } = MOCK_LEAGUE_DATA;
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  const { season, divisions, orgs, matches, standings, announcements } = await getLeagueData();
 
   const liveMatches = matches.filter((m) => m.status === "live");
   const upcomingMatches = matches
     .filter((m) => m.status === "scheduled")
-    .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))
-    .slice(0, 4);
+    .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.scheduledTime.localeCompare(b.scheduledTime))
+    .slice(0, 5);
   const recentResults = matches
     .filter((m) => m.status === "completed")
-    .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate))
+    .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate) || b.scheduledTime.localeCompare(a.scheduledTime))
     .slice(0, 4);
 
   const getOrg = (id: string) => orgs.find((o) => o.id === id)!;
-
-  // Build live match label for hero banner
   const liveMatchName = liveMatches.length > 0
     ? `${getOrg(liveMatches[0].homeOrgId).name} vs ${getOrg(liveMatches[0].awayOrgId).name}`
     : undefined;
@@ -30,27 +31,56 @@ export default function HomePage() {
     <main>
       <LeagueHero season={season} liveMatchName={liveMatchName} />
 
-      {/* Live matches */}
-      {liveMatches.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-          <SectionHeader eyebrow="Right Now" title="Live Matches" />
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {liveMatches.map((m) => (
+      <section className="mx-auto grid max-w-7xl gap-6 px-4 py-10 sm:px-6 lg:grid-cols-[1.45fr_0.9fr]">
+        <div>
+          <SectionHeader eyebrow="Right Now" title={liveMatches.length > 0 ? "Live Matches" : "League Pulse"} />
+          <div className="grid gap-3">
+            {(liveMatches.length > 0 ? liveMatches : upcomingMatches.slice(0, 1)).map((m) => (
               <MatchCard key={m.id} match={m} homeOrg={getOrg(m.homeOrgId)} awayOrg={getOrg(m.awayOrgId)} />
             ))}
           </div>
-        </section>
-      )}
+        </div>
 
-      {/* Upcoming + Recent grid */}
+        <div className="overflow-hidden rounded-2xl border border-cyan-300/15 bg-slate-950/78 shadow-2xl shadow-cyan-950/20 backdrop-blur">
+          <div className="h-1 bg-gradient-to-r from-cyan-400 via-emerald-400 to-blue-500" />
+          <div className="space-y-4 p-4">
+            <p className="text-[0.65rem] font-black uppercase tracking-widest text-emerald-200">Choose Division</p>
+            {divisions.map((division) => {
+              const leader = standings
+                .filter((standing) => standing.divisionId === division.id)
+                .sort((a, b) => b.wins - a.wins)[0];
+              const leaderOrg = leader ? getOrg(leader.orgId) : undefined;
+              return (
+                <Link
+                  key={division.id}
+                  href={`/standings?division=${division.id}`}
+                  className={cn(
+                    "block rounded-xl border px-4 py-3 transition hover:bg-white/[0.05]",
+                    division.id === "solar" && "border-orange-300/20 bg-orange-400/8",
+                    division.id === "lunar" && "border-cyan-300/20 bg-cyan-400/8",
+                    division.id === "gaia" && "border-emerald-300/20 bg-emerald-400/8",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-lg font-black italic text-white">{division.name.replace(" Division", "")}</span>
+                    <span className="text-[0.65rem] font-black uppercase text-slate-500">Tier {division.tier}</span>
+                  </div>
+                  <p className="mt-1 text-xs font-semibold text-slate-400">{leaderOrg ? `Leader: ${leaderOrg.name}` : division.description}</p>
+                </Link>
+              );
+            })}
+            <div className="grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs font-black uppercase text-slate-500">
+              <span>{season.name}</span>
+              <span className="text-right text-emerald-200">Week {season.currentWeek}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
         <div className="grid gap-10 lg:grid-cols-2">
           <div>
-            <SectionHeader
-              eyebrow="Schedule"
-              title="Upcoming Matches"
-              action={{ label: "Full Schedule →", href: "/schedule" }}
-            />
+            <SectionHeader eyebrow="Schedule" title="Upcoming Matches" action={{ label: "Full Schedule →", href: "/schedule" }} />
             <div className="space-y-3">
               {upcomingMatches.map((m) => (
                 <MatchCard key={m.id} match={m} homeOrg={getOrg(m.homeOrgId)} awayOrg={getOrg(m.awayOrgId)} compact />
@@ -58,11 +88,7 @@ export default function HomePage() {
             </div>
           </div>
           <div>
-            <SectionHeader
-              eyebrow="Results"
-              title="Recent Results"
-              action={{ label: "Full Schedule →", href: "/schedule" }}
-            />
+            <SectionHeader eyebrow="Results" title="Recent Results" action={{ label: "Full Schedule →", href: "/schedule" }} />
             <div className="space-y-3">
               {recentResults.map((m) => (
                 <MatchCard key={m.id} match={m} homeOrg={getOrg(m.homeOrgId)} awayOrg={getOrg(m.awayOrgId)} compact />
@@ -72,7 +98,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Divisions */}
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
         <SectionHeader eyebrow="League" title="Divisions" action={{ label: "All Teams →", href: "/teams" }} />
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -87,13 +112,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Standings preview */}
       <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
         <SectionHeader eyebrow="Standings" title="League Standings" action={{ label: "Full Standings →", href: "/standings" }} />
         <StandingsTable divisions={divisions} standings={standings} orgs={orgs} />
       </section>
 
-      {/* Announcements */}
       {announcements.length > 0 && (
         <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
           <SectionHeader eyebrow="News" title="Announcements" />
@@ -105,48 +128,25 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* Discord CTA */}
       <section id="discord" className="relative overflow-hidden py-20">
         <div className="sal-grid pointer-events-none absolute inset-0" />
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_30%,rgba(0,0,0,0.6)_100%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(45,212,191,0.15),transparent_34%),radial-gradient(circle_at_70%_40%,rgba(59,130,246,0.13),transparent_36%),radial-gradient(circle_at_center,transparent_30%,rgba(0,0,0,0.68)_100%)]" />
         <div className="relative mx-auto max-w-2xl px-6 text-center">
-          <p className="mb-2 text-xs font-black uppercase text-fuchsia-200">Community</p>
+          <p className="mb-2 text-xs font-black uppercase text-emerald-200">Community</p>
           <h2 className="mb-2 text-3xl font-black text-white">Join the Discord</h2>
           <p className="mb-8 text-sm font-semibold text-slate-400">
             Drafts, match callouts, captain coordination, and league operations all live in the SAL Discord server.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <a
-              href="#"
-              className="rounded-xl border border-fuchsia-300/40 bg-fuchsia-300/15 px-8 py-2.5 text-sm font-black uppercase text-fuchsia-100 transition hover:bg-fuchsia-300/20 active:translate-y-0.5 active:scale-95"
-            >
+            <a href="#" className="rounded-xl border border-emerald-300/40 bg-emerald-300/15 px-8 py-2.5 text-sm font-black uppercase text-emerald-100 transition hover:bg-emerald-300/20 active:translate-y-0.5 active:scale-95">
               Join Discord Server
             </a>
-            <Link
-              href="/schedule"
-              className="rounded-xl border border-white/10 bg-white/[0.04] px-8 py-2.5 text-sm font-black uppercase text-slate-300 transition hover:bg-white/[0.08] active:translate-y-0.5 active:scale-95"
-            >
+            <Link href="/schedule" className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-8 py-2.5 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/15 active:translate-y-0.5 active:scale-95">
               View Schedule
             </Link>
           </div>
         </div>
       </section>
-
-      {/* Footer links */}
-      <div className="border-t border-white/8 py-8">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-6 px-6">
-          {[
-            { label: "Standings", href: "/standings" },
-            { label: "Schedule", href: "/schedule" },
-            { label: "Teams", href: "/teams" },
-            { label: "Admin", href: "/admin" },
-          ].map(({ label, href }) => (
-            <Link key={href} href={href} className="text-[0.65rem] font-black uppercase text-slate-600 transition-colors hover:text-slate-400">
-              {label}
-            </Link>
-          ))}
-        </div>
-      </div>
     </main>
   );
 }
@@ -161,13 +161,13 @@ function SectionHeader({
   action?: { label: string; href: string };
 }) {
   return (
-    <div className="mb-5 flex items-end justify-between">
+    <div className="mb-5 flex items-end justify-between gap-4">
       <div>
-        <p className="mb-0.5 text-[0.65rem] font-black uppercase text-slate-500">{eyebrow}</p>
+        <p className="mb-0.5 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">{eyebrow}</p>
         <h2 className="text-xl font-black text-white">{title}</h2>
       </div>
       {action && (
-        <Link href={action.href} className="text-xs font-black uppercase text-slate-500 transition-colors hover:text-slate-300">
+        <Link href={action.href} className="shrink-0 text-xs font-black uppercase text-emerald-300/70 transition-colors hover:text-emerald-100">
           {action.label}
         </Link>
       )}

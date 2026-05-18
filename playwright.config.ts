@@ -12,6 +12,12 @@ export default defineConfig({
   },
   webServer: {
     command: "npm run build && npm run start -- --hostname 127.0.0.1 --port 3107",
+    env: {
+      ADMIN_PASSWORD: "test-admin-password",
+      ADMIN_SESSION_SECRET: "test-admin-session-secret",
+      NEXT_PUBLIC_SUPABASE_URL: "",
+      SUPABASE_SERVICE_ROLE_KEY: "",
+    },
     url: "http://127.0.0.1:3107/lab/editor",
     reuseExistingServer: false,
     timeout: 120_000,

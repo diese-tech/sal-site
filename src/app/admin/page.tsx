@@ -1,10 +1,13 @@
 import { AdminStatCard } from "@/components/league/AdminStatCard";
-import { MOCK_LEAGUE_DATA } from "@/data/mock-league";
+import { requireAdmin } from "@/lib/admin-auth";
+import { getLeagueData } from "@/lib/league-data";
+import Link from "next/link";
 
-export const metadata = { title: "Admin — SAL" };
+export const metadata = { title: "Admin - SAL" };
 
-export default function AdminOverviewPage() {
-  const { orgs, players, matches, standings, season } = MOCK_LEAGUE_DATA;
+export default async function AdminOverviewPage() {
+  await requireAdmin();
+  const { orgs, players, matches, standings, season } = await getLeagueData();
 
   const totalPlayers = players.length;
   const scheduledMatches = matches.filter((m) => m.status === "scheduled").length;
@@ -16,26 +19,25 @@ export default function AdminOverviewPage() {
     orgs: orgs.filter((o) => o.divisionId === id).length,
     players: players.filter((p) => p.divisionId === id).length,
     topOrg: (() => {
-      const divStandings = standings
-        .filter((s) => s.divisionId === id)
-        .sort((a, b) => b.wins - a.wins);
+      const divStandings = standings.filter((s) => s.divisionId === id).sort((a, b) => b.wins - a.wins);
       if (!divStandings[0]) return "—";
       return orgs.find((o) => o.id === divStandings[0].orgId)?.name ?? "—";
     })(),
   }));
 
   return (
-    <main className="p-8">
-      <div className="mb-8">
-        <p className="mb-1 text-[0.65rem] font-bold uppercase tracking-widest text-white/35">Admin</p>
-        <h1 className="text-2xl font-black text-white">Dashboard</h1>
-        <p className="mt-1 text-sm text-white/40">
-          {season.name} · Week {season.currentWeek} · Status:{" "}
-          <span className="font-semibold text-emerald-400">{season.status}</span>
-        </p>
+    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <div className="mb-8 overflow-hidden rounded-2xl border border-cyan-300/15 bg-slate-950/84 shadow-2xl shadow-cyan-950/20 backdrop-blur">
+        <div className="h-1 bg-gradient-to-r from-cyan-400 via-emerald-400 to-blue-500" />
+        <div className="p-5">
+          <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">Admin</p>
+          <h1 className="text-2xl font-black text-white">League Control</h1>
+          <p className="mt-1 text-sm font-semibold text-slate-400">
+            {season.name} · Week {season.currentWeek} · Status: <span className="text-emerald-300">{season.status}</span>
+          </p>
+        </div>
       </div>
 
-      {/* Top stats */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <AdminStatCard label="Total Orgs" value={orgs.length} accent="cyan" />
         <AdminStatCard label="Total Players" value={totalPlayers} accent="violet" />
@@ -43,43 +45,43 @@ export default function AdminOverviewPage() {
         <AdminStatCard label="Scheduled Matches" value={scheduledMatches} sub={liveMatches > 0 ? `${liveMatches} live now` : undefined} accent="orange" />
       </div>
 
-      {/* Division overview */}
-      <div className="mb-8">
-        <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-white/35">Division Breakdown</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {divisionBreakdown.map(({ id, orgs: orgCount, players: playerCount, topOrg }) => {
-            const divName = id.charAt(0).toUpperCase() + id.slice(1);
-            const accentMap = { solar: "orange", lunar: "cyan", gaia: "emerald" } as const;
-            return (
-              <div key={id} className="rounded-xl border border-white/8 bg-slate-950/60 p-4">
-                <p className="mb-3 text-xs font-bold uppercase tracking-wider text-white/35">{divName} Division</p>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Orgs</span>
-                    <span className="font-bold text-white/90">{orgCount}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Players</span>
-                    <span className="font-bold text-white/90">{playerCount}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-white/50">Leader</span>
-                    <span className="truncate max-w-[120px] text-right font-bold text-white/90">{topOrg}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      <div className="mb-8 grid gap-4 md:grid-cols-3">
+        {[
+          { href: "/admin/matches", title: "Edit Schedule", body: "Create matches, change dates, set live status, and enter scores." },
+          { href: "/admin/players", title: "Edit Roster", body: "Assign players to orgs and update starter, captain, role, and status." },
+          { href: "/admin/standings", title: "Edit Standings", body: "Use completed match scores to recalculate division tables." },
+        ].map((item) => (
+          <Link key={item.href} href={item.href} className="rounded-2xl border border-emerald-300/15 bg-slate-950/72 p-5 shadow-xl shadow-emerald-950/10 transition hover:border-emerald-300/35 hover:bg-white/[0.04]">
+            <p className="text-lg font-black text-white">{item.title}</p>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-400">{item.body}</p>
+          </Link>
+        ))}
       </div>
 
-      {/* TODO notice */}
-      <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-4">
-        <p className="text-xs font-semibold text-orange-300/80">
-          {/* TODO: wire to backend/auth */}
-          Admin tools are currently mock-data driven. Backend integration and authentication are future work.
-        </p>
+      <div>
+        <h2 className="mb-4 text-sm font-black uppercase tracking-widest text-cyan-300/70">Division Breakdown</h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {divisionBreakdown.map(({ id, orgs: orgCount, players: playerCount, topOrg }) => (
+            <div key={id} className="rounded-xl border border-white/8 bg-slate-950/60 p-4">
+              <p className="mb-3 text-xs font-black uppercase tracking-wider text-white/35">{id} Division</p>
+              <div className="space-y-2 text-sm">
+                <Row label="Orgs" value={orgCount} />
+                <Row label="Players" value={playerCount} />
+                <Row label="Leader" value={topOrg} />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </main>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <span className="text-white/50">{label}</span>
+      <span className="truncate text-right font-bold text-white/90">{value}</span>
+    </div>
   );
 }

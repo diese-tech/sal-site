@@ -23,6 +23,7 @@ export function PreviewPanel({
     <section className="min-w-0 rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/30 backdrop-blur">
       <button
         type="button"
+        aria-label={`${title} section`}
         onClick={onToggle}
         className={cn(
           "flex w-full cursor-pointer flex-wrap items-end justify-between gap-3 p-4 text-left transition hover:bg-white/[0.02]",
@@ -74,7 +75,7 @@ export function PreviewTarget({
   children: React.ReactNode;
 }) {
   return (
-    <div data-testid="preview-target" className="min-w-0 rounded-2xl border border-cyan-200/12 bg-cyan-200/[0.025] p-3">
+    <div data-testid="preview-target" className="min-w-0 overflow-hidden rounded-2xl border border-cyan-200/12 bg-cyan-200/[0.025] p-3">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
         <p className="text-xs font-black uppercase text-cyan-100">{label}</p>
         <p className="text-[0.68rem] font-bold text-slate-400">{affectedBy}</p>

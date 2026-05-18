@@ -3,9 +3,11 @@ import type { DivisionId } from "@/types/league";
 import { GlowPanel, OrgLogo } from "@/components/card-lab/ui";
 import { OrgRosterPanel } from "@/components/league/OrgRosterPanel";
 import { MatchCard } from "@/components/league/MatchCard";
-import { MOCK_LEAGUE_DATA } from "@/data/mock-league";
+import { getLeagueData } from "@/lib/league-data";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+
+export const dynamic = "force-dynamic";
 
 const divisionAccent: Record<DivisionId, { badge: string; bar: string; header: string; name: string }> = {
   solar: {
@@ -16,7 +18,7 @@ const divisionAccent: Record<DivisionId, { badge: string; bar: string; header: s
   },
   lunar: {
     badge: "border-cyan-300/40 bg-cyan-400/15 text-cyan-100",
-    bar: "bg-gradient-to-r from-cyan-400 to-violet-500",
+    bar: "bg-gradient-to-r from-cyan-400 to-blue-500",
     header: "from-cyan-500/20 via-blue-500/8 to-transparent",
     name: "Lunar Division",
   },
@@ -29,18 +31,20 @@ const divisionAccent: Record<DivisionId, { badge: string; bar: string; header: s
 };
 
 export async function generateStaticParams() {
-  return MOCK_LEAGUE_DATA.orgs.map((o) => ({ teamId: o.id }));
+  const data = await getLeagueData();
+  return data.orgs.map((org) => ({ teamId: org.id }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ teamId: string }> }) {
   const { teamId } = await params;
-  const org = MOCK_LEAGUE_DATA.orgs.find((o) => o.id === teamId);
-  return { title: org ? `${org.name} — SAL` : "Team — SAL" };
+  const data = await getLeagueData();
+  const org = data.orgs.find((o) => o.id === teamId);
+  return { title: org ? `${org.name} - SAL` : "Team - SAL" };
 }
 
 export default async function TeamPage({ params }: { params: Promise<{ teamId: string }> }) {
   const { teamId } = await params;
-  const { orgs, players, matches, standings } = MOCK_LEAGUE_DATA;
+  const { orgs, players, matches, standings } = await getLeagueData();
 
   const org = orgs.find((o) => o.id === teamId);
   if (!org) notFound();
@@ -48,54 +52,40 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
   const roster = players.filter((p) => p.orgId === org.id);
   const standing = standings.find((s) => s.orgId === org.id);
   const accent = divisionAccent[org.divisionId];
-
   const getOrg = (id: string) => orgs.find((o) => o.id === id)!;
 
   const orgMatches = matches
     .filter((m) => m.homeOrgId === org.id || m.awayOrgId === org.id)
-    .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
+    .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.scheduledTime.localeCompare(b.scheduledTime));
 
   const upcoming = orgMatches.filter((m) => m.status === "scheduled" || m.status === "live").slice(0, 3);
   const results = orgMatches
     .filter((m) => m.status === "completed")
-    .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate))
+    .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate) || b.scheduledTime.localeCompare(a.scheduledTime))
     .slice(0, 3);
 
-  const winPct =
-    standing && standing.matchesPlayed > 0
-      ? ((standing.wins / standing.matchesPlayed) * 100).toFixed(0)
-      : "—";
+  const winPct = standing && standing.matchesPlayed > 0 ? ((standing.wins / standing.matchesPlayed) * 100).toFixed(0) : "—";
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-      {/* Back link */}
-      <Link
-        href="/teams"
-        className="mb-5 inline-flex items-center gap-1.5 text-xs font-black uppercase text-slate-500 transition-colors hover:text-slate-300"
-      >
+      <Link href="/teams" className="mb-5 inline-flex items-center gap-1.5 text-xs font-black uppercase text-slate-500 transition-colors hover:text-slate-300">
         ← All Teams
       </Link>
 
-      {/* Team banner — editor header card style with division gradient */}
-      <div className="mb-8 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/84 shadow-2xl shadow-black/35 backdrop-blur">
+      <div className="mb-8 overflow-hidden rounded-2xl border border-cyan-300/15 bg-slate-950/84 shadow-2xl shadow-cyan-950/20 backdrop-blur">
         <div className={cn("h-1 w-full", accent.bar)} />
         <div className={cn("relative bg-gradient-to-br p-6", accent.header)}>
           <div className="flex flex-wrap items-center gap-5">
             <OrgLogo initials={org.logoInitials} gradient={org.logoGradient} className="h-20 w-20 shrink-0 text-xl" />
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="mb-2 flex flex-wrap items-center gap-2">
-                <span className={cn("rounded-xl border px-2.5 py-0.5 text-xs font-black uppercase", accent.badge)}>
-                  {accent.name}
-                </span>
-                {org.founded && (
-                  <span className="text-[0.65rem] font-black uppercase text-slate-600">Est. {org.founded}</span>
-                )}
+                <span className={cn("rounded-xl border px-2.5 py-0.5 text-xs font-black uppercase", accent.badge)}>{accent.name}</span>
+                {org.founded && <span className="text-[0.65rem] font-black uppercase text-slate-600">Est. {org.founded}</span>}
               </div>
               <h1 className="text-3xl font-black text-white">{org.name}</h1>
               <p className="text-xs font-black uppercase text-slate-500">[{org.tag}]</p>
             </div>
 
-            {/* Standing stats */}
             {standing && (
               <div className="flex gap-5 rounded-xl border border-white/10 bg-black/20 px-5 py-3">
                 {[
@@ -114,9 +104,7 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
         </div>
       </div>
 
-      {/* Main grid: roster + sidebar */}
       <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
-        {/* Roster */}
         <div>
           <p className="mb-3 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Full Roster</p>
           <GlowPanel>
@@ -126,7 +114,6 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
           </GlowPanel>
         </div>
 
-        {/* Sidebar */}
         <div className="space-y-6">
           {upcoming.length > 0 && (
             <div>
@@ -150,7 +137,6 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
             </div>
           )}
 
-          {/* Social links */}
           {org.socialLinks && Object.keys(org.socialLinks).length > 0 && (
             <div>
               <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Links</p>
