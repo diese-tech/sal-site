@@ -11,6 +11,7 @@ const ADMIN_NAV = [
   { href: "/admin/players", label: "Roster" },
   { href: "/admin/matches", label: "Schedule" },
   { href: "/admin/standings", label: "Standings" },
+  { href: "/admin/draft", label: "Draft" },
   { href: "/admin/announcements", label: "Announcements" },
 ];
 
