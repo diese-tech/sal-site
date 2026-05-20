@@ -53,6 +53,7 @@ export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatc
             <h1 className="mb-2 font-display text-5xl font-bold leading-[0.95] tracking-tight text-white sm:text-6xl lg:text-7xl">
               Serpent{" "}
               <span className="italic text-orange-400">Ascension</span>
+              {" "}League
             </h1>
             <p className="mb-10 font-mono text-xs uppercase tracking-[0.22em] text-slate-400">
               League · {season.name}
