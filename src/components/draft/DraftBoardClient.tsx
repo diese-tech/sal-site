@@ -86,8 +86,24 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
   const getOrg = (id: string) => orgs.find((o) => o.id === id);
   const getPlayer = (id: string) => players.find((p) => p.id === id);
   const pickedIds = new Set(picks.map((p) => p.playerId));
-  const divisionPlayers = players.filter((p) => p.divisionId === room.divisionId);
-  const availablePlayers = divisionPlayers.filter((p) => !pickedIds.has(p.id));
+
+  // Division tier hierarchy — higher number = lower tier
+  const DIVISION_TIER: Record<string, number> = { solar: 1, lunar: 2, gaia: 3 };
+  const DIVISION_LABELS: Record<string, string> = { solar: "Solar", lunar: "Lunar", gaia: "Gaia" };
+  const roomTier = DIVISION_TIER[room.divisionId] ?? 1;
+
+  // Tabs visible to this captain: their own division + any lower-tier divisions
+  const visibleDivisions = (["solar", "lunar", "gaia"] as const).filter(
+    (d) => (DIVISION_TIER[d] ?? 0) >= roomTier,
+  );
+
+  const [playerTab, setPlayerTab] = useState<string>(room.divisionId);
+
+  const availableByDivision = (divId: string) =>
+    players
+      .filter((p) => p.divisionId === divId && !pickedIds.has(p.id));
+
+  const availablePlayers = availableByDivision(playerTab);
   const isMyTurn = captainOrgId !== null && currentOrgId === captainOrgId && room.status === "active";
 
   const statusLabel = {
@@ -148,9 +164,35 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
           {/* Available players */}
           <section>
-            <h2 className="mb-3 text-xs font-black uppercase text-slate-400">
-              Available Players ({availablePlayers.length})
-            </h2>
+            {/* Division tabs — default: captain's own division */}
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-xs font-black uppercase text-slate-400">
+                Available Players ({availablePlayers.length})
+              </h2>
+              {visibleDivisions.length > 1 && (
+                <div className="flex rounded-xl border border-white/10 overflow-hidden text-[0.65rem] font-black uppercase">
+                  {visibleDivisions.map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setPlayerTab(d)}
+                      className={cn(
+                        "px-3 py-1.5 transition",
+                        playerTab === d
+                          ? d === "solar" ? "bg-orange-400/20 text-orange-200"
+                            : d === "lunar" ? "bg-cyan-400/20 text-cyan-200"
+                            : "bg-emerald-400/20 text-emerald-200"
+                          : "text-slate-500 hover:text-slate-300",
+                      )}
+                    >
+                      {DIVISION_LABELS[d]}
+                      {d !== room.divisionId && (
+                        <span className="ml-1 opacity-60">({availableByDivision(d).length})</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="grid gap-2 sm:grid-cols-2">
               {availablePlayers.map((p) => (
                 <div key={p.id} className={cn("flex items-center justify-between gap-3 rounded-xl border bg-slate-950/70 px-4 py-3 transition", isMyTurn && !picking ? "cursor-pointer border-white/10 hover:border-cyan-300/40 hover:bg-white/[0.04]" : "border-white/5")}>
@@ -173,7 +215,9 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
                 </div>
               ))}
               {availablePlayers.length === 0 && room.status !== "complete" && (
-                <p className="col-span-2 py-4 text-sm text-slate-500">No available players in this division.</p>
+                <p className="col-span-2 py-4 text-sm text-slate-500">
+                  No available {DIVISION_LABELS[playerTab] ?? playerTab} players.
+                </p>
               )}
             </div>
           </section>
