@@ -3,15 +3,16 @@
 import { usePathname } from "next/navigation";
 import { SiteNav } from "./SiteNav";
 
-export function NavShell({ children }: { children: React.ReactNode }) {
+export function NavShell({ children, ticker }: { children: React.ReactNode; ticker: React.ReactNode }) {
   const pathname = usePathname();
-  const hideSiteNav = pathname.startsWith("/admin") || pathname.startsWith("/lab");
+  const hideChrome = pathname.startsWith("/admin") || pathname.startsWith("/lab");
 
   return (
     <>
-      {!hideSiteNav && <SiteNav />}
+      {!hideChrome && ticker}
+      {!hideChrome && <SiteNav />}
       {/* pt-24 = ticker (32px) + nav (64px) */}
-      <div className={!hideSiteNav ? "pt-24" : undefined}>{children}</div>
+      <div className={!hideChrome ? "pt-24" : undefined}>{children}</div>
     </>
   );
 }

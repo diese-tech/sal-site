@@ -33,9 +33,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="font-sans antialiased">
-        {/* Ticker sits at top-0, nav sits at top-8 (32px below) */}
-        <TickerBar />
-        <NavShell>{children}</NavShell>
+        <NavShell ticker={<TickerBar />}>{children}</NavShell>
       </body>
     </html>
   );
