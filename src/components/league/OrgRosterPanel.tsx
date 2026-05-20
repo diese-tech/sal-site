@@ -14,7 +14,7 @@ function PlayerRow({ player, divisionId }: { player: LeaguePlayer; divisionId: D
     <Link
       href={`/players/${player.id}`}
       className={cn(
-        "group relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-4 pt-3 shadow-xl shadow-black/30 backdrop-blur transition duration-300",
+        "group rounded-2xl border border-white/10 bg-slate-950/72 px-4 pb-4 pt-3 shadow-xl shadow-black/30 backdrop-blur transition duration-300",
         "hover:-translate-y-0.5 hover:border-cyan-300/25 hover:bg-slate-900/85",
         player.isCaptain && "border-orange-300/35 shadow-orange-500/10",
       )}
