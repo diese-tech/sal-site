@@ -30,33 +30,32 @@ export function AuthButton() {
     router.refresh();
   }
 
-  if (user === undefined) return null; // loading — render nothing
+  if (user === undefined) return null;
 
   if (!user) {
     return (
       <Link
         href="/auth/signin"
-        className="hidden shrink-0 rounded-xl border border-indigo-400/35 bg-indigo-400/10 px-3 py-1.5 text-xs font-black uppercase text-indigo-200 transition hover:bg-indigo-400/20 sm:block"
+        className="shrink-0 rounded-xl border border-indigo-400/35 bg-indigo-400/10 px-3 py-1.5 text-xs font-black uppercase text-indigo-200 transition hover:bg-indigo-400/20"
       >
         Sign In
       </Link>
     );
   }
 
-  const initials = (user.user_metadata?.user_name as string | undefined)
-    ?.slice(0, 2)
-    .toUpperCase() ?? "??";
+  const username = user.user_metadata?.user_name as string | undefined;
+  const initials = username?.slice(0, 2).toUpperCase() ?? "??";
 
   return (
-    <div className="relative hidden sm:block">
+    <div className="relative">
       <button
         onClick={() => setMenuOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-black uppercase text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
+        className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-2 py-1.5 text-xs font-black uppercase text-slate-300 transition hover:bg-white/[0.08] hover:text-white sm:px-3"
       >
         <span className="grid h-5 w-5 place-items-center rounded-full bg-indigo-500/40 text-[0.55rem] font-black text-indigo-200">
           {initials}
         </span>
-        {(user.user_metadata?.user_name as string | undefined) ?? "Player"}
+        <span className="hidden sm:inline">{username ?? "Player"}</span>
       </button>
 
       {menuOpen && (

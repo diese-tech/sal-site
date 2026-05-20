@@ -15,7 +15,12 @@ import { RegisterClient } from "@/components/auth/RegisterClient";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Register — SAL" };
 
-export default async function RegisterPage() {
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ skip?: string }>;
+}) {
+  const { skip } = await searchParams;
   const user = await getAuthUser();
   if (!user) redirect("/auth/signin");
 
@@ -29,13 +34,12 @@ export default async function RegisterPage() {
     getRegistrationByDiscordId(discordId),
   ]);
 
-  // Try to match by discord username if no discord_id link yet
+  // Try to match by discord username if no discord_id link yet.
+  // Suppressed when skip=1 (user clicked "Not me" on the claim prompt).
   const discordUsername = user.user_metadata?.user_name as string | undefined;
-  const matchedByUsername = !claimedPlayer && discordUsername
+  const matchedByUsername = !claimedPlayer && !skip && discordUsername
     ? players.find(
-        (p) =>
-          p.discordUsername.toLowerCase() === discordUsername.toLowerCase() &&
-          !p.stats, // avoid matching if already stats-rich (unlikely to be unclaimed)
+        (p) => p.discordUsername.toLowerCase() === discordUsername.toLowerCase(),
       ) ?? null
     : null;
 

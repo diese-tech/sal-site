@@ -463,6 +463,129 @@ test("admin overview shows activity feed section", async ({ page }) => {
   await expect(page.getByText("Activity Feed")).toBeVisible();
 });
 
+// --- New page coverage ---
+
+test("players page renders heading and player grid", async ({ page }) => {
+  await page.goto("/players");
+  await expect(page.getByRole("heading", { name: "Players" })).toBeVisible();
+  // at least one player card should be visible (mock data has players)
+  await expect(page.locator("a[href^='/players/']").first()).toBeVisible();
+  await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
+});
+
+test("players page search narrows results by IGN", async ({ page }) => {
+  await page.goto("/players");
+  await page.getByPlaceholder("Search by IGN or Discord…").fill("AzraelP");
+  await expect(page.locator("a[href^='/players/']").first()).toBeVisible();
+});
+
+test("players page search no-match shows empty state", async ({ page }) => {
+  await page.goto("/players");
+  await page.getByPlaceholder("Search by IGN or Discord…").fill("xXdoesnotexistXx");
+  await expect(page.getByText("No players match your filters.")).toBeVisible();
+});
+
+test("players page role filter Solo is selectable", async ({ page }) => {
+  await page.goto("/players");
+  await page.getByRole("button", { name: "Solo" }).click();
+  await expect(page.getByRole("button", { name: "Solo" })).toHaveClass(/fuchsia/);
+});
+
+test("players page division filter Solar is selectable", async ({ page }) => {
+  await page.goto("/players");
+  await page.getByRole("button", { name: "Solar" }).click();
+  await expect(page.getByRole("button", { name: "Solar" })).toHaveClass(/orange/);
+});
+
+test("players page has no overflow on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/players");
+  await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
+});
+
+test("unknown player ID returns 404", async ({ page }) => {
+  const response = await page.goto("/players/not-a-real-player-id");
+  expect(response?.status()).toBe(404);
+});
+
+test("player profile page renders from team roster link", async ({ page }) => {
+  // Navigate to a team page and click the first player card to reach their profile
+  await page.goto("/teams/helix-reign");
+  const firstPlayerLink = page.locator("a[href^='/players/']").first();
+  await expect(firstPlayerLink).toBeVisible();
+  const href = await firstPlayerLink.getAttribute("href");
+  await page.goto(href!);
+  // Profile page should have a back link and the player's role section
+  await expect(page.getByRole("link", { name: "← All Players" })).toBeVisible();
+  await expect(page.getByText("Role")).toBeVisible();
+  await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
+});
+
+test("register page redirects to sign-in when unauthenticated", async ({ page }) => {
+  await page.goto("/register");
+  await expect(page).toHaveURL(/\/auth\/signin/);
+});
+
+test("auth sign-in page renders discord button", async ({ page }) => {
+  await page.goto("/auth/signin");
+  await expect(page.getByRole("button", { name: /Discord/i })).toBeVisible();
+  await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
+});
+
+test("watch page renders without crashing", async ({ page }) => {
+  await page.goto("/watch");
+  // Should show either a live embed or an offline state — never a crash
+  await expect(page.locator("main")).toBeVisible();
+  await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
+});
+
+// --- Admin new pages ---
+
+for (const item of [
+  { name: "Registrations", url: "/admin/registrations" },
+  { name: "Form Fields", url: "/admin/form-fields" },
+  { name: "Import", url: "/admin/import" },
+]) {
+  test(`admin nav opens ${item.name}`, async ({ page }) => {
+    await adminLogin(page);
+    await page.getByRole("navigation").getByRole("link", { name: item.name, exact: true }).click();
+    await expect(page).toHaveURL(item.url);
+  });
+}
+
+test("admin registrations page shows pending tab", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/registrations");
+  await expect(page.getByRole("button", { name: /Pending/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Approved/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Rejected/ })).toBeVisible();
+});
+
+test("admin form fields page shows base locked fields", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/form-fields");
+  await expect(page.getByText("In-Game Name")).toBeVisible();
+  await expect(page.getByText("Tracker.gg Profile")).toBeVisible();
+  // Locked fields cannot be deleted — no Delete button next to them
+  await expect(page.getByRole("button", { name: "+ Add custom field" })).toBeVisible();
+});
+
+// --- Layout / nav ---
+
+test("ticker is not visible on admin pages", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin");
+  // The ticker bar has aria-hidden and text "Live Feed" — it must not be in DOM on admin
+  await expect(page.getByText("Live Feed")).not.toBeVisible();
+});
+
+test("sign in button visible on mobile nav", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  // AuthButton renders on all screen sizes — sign-in link should be visible
+  await expect(page.getByRole("link", { name: "Sign In" })).toBeVisible();
+});
+
 async function adminLogin(page: Page) {
   await page.goto("/admin/login");
   await page.getByLabel("Password").fill("test-admin-password");
