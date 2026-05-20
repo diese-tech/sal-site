@@ -314,11 +314,11 @@ function SectionHeader({
   return (
     <div className="mb-5 flex items-end justify-between gap-4">
       <div>
-        <p className="mb-0.5 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">{eyebrow}</p>
+        <p className="mb-0.5 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300">{eyebrow}</p>
         <h2 className="text-xl font-black text-white">{title}</h2>
       </div>
       {action && (
-        <Link href={action.href} className="shrink-0 text-xs font-black uppercase text-emerald-300/70 transition-colors hover:text-emerald-100">
+        <Link href={action.href} className="shrink-0 text-xs font-black uppercase text-emerald-300 transition-colors hover:text-emerald-100">
           {action.label}
         </Link>
       )}
