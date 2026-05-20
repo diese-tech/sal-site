@@ -75,26 +75,26 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
       <div className="mb-8 overflow-hidden rounded-2xl border border-cyan-300/15 bg-slate-950/84 shadow-2xl shadow-cyan-950/20 backdrop-blur">
         <div className={cn("h-1 w-full", accent.bar)} />
         <div className={cn("relative bg-gradient-to-br p-6", accent.header)}>
-          <div className="flex flex-wrap items-center gap-5">
-            <OrgLogo initials={org.logoInitials} gradient={org.logoGradient} className="h-20 w-20 shrink-0 text-xl" />
+          <div className="flex flex-wrap items-start gap-4">
+            <OrgLogo initials={org.logoInitials} gradient={org.logoGradient} className="h-16 w-16 shrink-0 text-lg sm:h-20 sm:w-20 sm:text-xl" />
             <div className="min-w-0 flex-1">
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <span className={cn("rounded-xl border px-2.5 py-0.5 text-xs font-black uppercase", accent.badge)}>{accent.name}</span>
                 {org.founded && <span className="text-[0.65rem] font-black uppercase text-slate-600">Est. {org.founded}</span>}
               </div>
-              <h1 className="text-3xl font-black text-white">{org.name}</h1>
+              <h1 className="text-2xl font-black text-white sm:text-3xl">{org.name}</h1>
               <p className="text-xs font-black uppercase text-slate-500">[{org.tag}]</p>
             </div>
 
             {standing && (
-              <div className="flex gap-5 rounded-xl border border-white/10 bg-black/20 px-5 py-3">
+              <div className="flex w-full gap-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3 sm:w-auto sm:gap-5 sm:px-5">
                 {[
                   { label: "Wins", value: standing.wins },
                   { label: "Losses", value: standing.losses },
                   { label: "Win%", value: `${winPct}%` },
                 ].map(({ label, value }) => (
-                  <div key={label} className="text-center">
-                    <p className="text-2xl font-black text-white">{value}</p>
+                  <div key={label} className="flex-1 text-center sm:flex-none">
+                    <p className="text-xl font-black text-white sm:text-2xl">{value}</p>
                     <p className="text-[0.6rem] font-black uppercase text-slate-500">{label}</p>
                   </div>
                 ))}

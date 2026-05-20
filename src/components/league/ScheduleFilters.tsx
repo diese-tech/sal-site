@@ -26,6 +26,7 @@ const divisionActive: Record<DivisionId, string> = {
 
 const allActive = "border-white/25 bg-white/10 text-white";
 const inactiveBtn = "border-white/10 bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-slate-200";
+const selectCls = "rounded-xl border border-white/10 bg-black/45 px-3 py-1.5 text-xs font-black uppercase text-white focus:border-cyan-500/40 focus:outline-none";
 
 export function ScheduleFilters({
   division,
@@ -47,7 +48,7 @@ export function ScheduleFilters({
   const weeks = ["all", ...Array.from({ length: maxWeek }, (_, i) => i + 1)] as (number | "all")[];
 
   return (
-    <div className="flex flex-wrap gap-5">
+    <div className="flex flex-wrap gap-4">
       {/* Division */}
       <div>
         <p className="mb-2 text-[0.65rem] font-black uppercase text-slate-300">Division</p>
@@ -71,10 +72,21 @@ export function ScheduleFilters({
         </div>
       </div>
 
-      {/* Status */}
+      {/* Status — select on mobile, buttons on sm+ */}
       <div>
         <p className="mb-2 text-[0.65rem] font-black uppercase text-slate-300">Status</p>
-        <div className="flex flex-wrap gap-1">
+        {/* Mobile select */}
+        <select
+          value={status}
+          onChange={(e) => onStatusChange(e.target.value as MatchStatus | "all")}
+          className={cn(selectCls, "sm:hidden")}
+        >
+          {STATUSES.map(({ id, label }) => (
+            <option key={id} value={id}>{label}</option>
+          ))}
+        </select>
+        {/* Desktop buttons */}
+        <div className="hidden flex-wrap gap-1 sm:flex">
           {STATUSES.map(({ id, label }) => (
             <button
               key={id}
@@ -90,10 +102,22 @@ export function ScheduleFilters({
         </div>
       </div>
 
-      {/* Week */}
+      {/* Week — select on mobile, buttons on sm+ */}
       <div>
         <p className="mb-2 text-[0.65rem] font-black uppercase text-slate-300">Week</p>
-        <div className="flex flex-wrap gap-1">
+        {/* Mobile select */}
+        <select
+          value={week}
+          onChange={(e) => onWeekChange(e.target.value === "all" ? "all" : Number(e.target.value))}
+          className={cn(selectCls, "sm:hidden")}
+        >
+          <option value="all">All Weeks</option>
+          {Array.from({ length: maxWeek }, (_, i) => i + 1).map((w) => (
+            <option key={w} value={w}>Week {w}</option>
+          ))}
+        </select>
+        {/* Desktop buttons */}
+        <div className="hidden flex-wrap gap-1 sm:flex">
           {weeks.map((w) => (
             <button
               key={w}
