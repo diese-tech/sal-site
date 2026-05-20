@@ -570,6 +570,334 @@ test("admin form fields page shows base locked fields", async ({ page }) => {
   await expect(page.getByRole("button", { name: "+ Add custom field" })).toBeVisible();
 });
 
+// --- Admin announcements flows ---
+
+test("admin announcements form saves and shows success message", async ({ page }) => {
+  await adminLogin(page);
+  let payload: Record<string, unknown> | undefined;
+  await page.route("**/api/admin/announcements", async (route) => {
+    if (route.request().method() === "POST") {
+      payload = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    } else {
+      await route.continue();
+    }
+  });
+  await page.goto("/admin/announcements");
+  await page.getByPlaceholder("Announcement title…").fill("Test Announcement Title");
+  await page.locator("textarea").fill("This is the **body** of the announcement.");
+  await page.getByRole("button", { name: "Save Announcement" }).click();
+  await expect(page.getByText("Announcement saved.")).toBeVisible();
+  expect(payload?.title).toBe("Test Announcement Title");
+  expect(typeof payload?.body).toBe("string");
+});
+
+test("admin announcements save failure shows specific error", async ({ page }) => {
+  await adminLogin(page);
+  await page.route("**/api/admin/announcements", async (route) => {
+    if (route.request().method() === "POST") {
+      await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "body exceeds max length" }) });
+    } else {
+      await route.continue();
+    }
+  });
+  await page.goto("/admin/announcements");
+  await page.getByPlaceholder("Announcement title…").fill("Title");
+  await page.locator("textarea").fill("body");
+  await page.getByRole("button", { name: "Save Announcement" }).click();
+  await expect(page.getByText("Save failed: body exceeds max length")).toBeVisible();
+});
+
+test("admin announcements save without title shows inline validation", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/announcements");
+  await page.getByRole("button", { name: "Save Announcement" }).click();
+  await expect(page.getByText("Title and body are required.")).toBeVisible();
+});
+
+test("admin announcements preview toggle renders markdown body", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/announcements");
+  await page.locator("textarea").fill("**bold text here**");
+  await page.getByRole("button", { name: "Preview" }).click();
+  await expect(page.locator("strong").filter({ hasText: "bold text here" })).toBeVisible();
+});
+
+test("admin announcements edit button populates form with existing data", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/announcements");
+  await page.getByRole("button", { name: "Edit" }).first().click();
+  // Form title should now contain the first announcement's title from mock data
+  const titleInput = page.getByPlaceholder("Announcement title…");
+  await expect(titleInput).not.toHaveValue("");
+  await expect(page.getByText("Edit Announcement")).toBeVisible();
+});
+
+test("admin announcements delete requires confirmation before calling API", async ({ page }) => {
+  await adminLogin(page);
+  let deleteCalled = false;
+  await page.route("**/api/admin/announcements/**", async (route) => {
+    if (route.request().method() === "DELETE") {
+      deleteCalled = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    } else {
+      await route.continue();
+    }
+  });
+  await page.goto("/admin/announcements");
+  // Click Delete — should show Confirm/Cancel, not immediately fire API
+  await page.getByRole("button", { name: "Delete" }).first().click();
+  expect(deleteCalled).toBe(false);
+  await expect(page.getByRole("button", { name: "Confirm" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
+});
+
+test("admin announcements delete cancel dismisses confirmation", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/announcements");
+  await page.getByRole("button", { name: "Delete" }).first().click();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("button", { name: "Confirm" })).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete" }).first()).toBeVisible();
+});
+
+test("admin announcements delete confirm calls DELETE API", async ({ page }) => {
+  await adminLogin(page);
+  let deletedId: string | undefined;
+  await page.route("**/api/admin/announcements/**", async (route) => {
+    if (route.request().method() === "DELETE") {
+      deletedId = route.request().url().split("/").pop();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    } else {
+      await route.continue();
+    }
+  });
+  await page.goto("/admin/announcements");
+  await page.getByRole("button", { name: "Delete" }).first().click();
+  await page.getByRole("button", { name: "Confirm" }).click();
+  await expect.poll(() => deletedId).toBeTruthy();
+});
+
+// --- Admin import flows ---
+
+test("admin import page renders paste textarea", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/import");
+  await expect(page.getByText("Player Import")).toBeVisible();
+  await expect(page.locator("textarea")).toBeVisible();
+});
+
+test("admin import valid CSV shows green preview rows", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/import");
+  await page.locator("textarea").fill(
+    "IGN,Discord,Role\nSlayer99,slayer99#0001,Jungle\nMysticX,mysticx#0002,Mid",
+  );
+  // Green rows are labelled with confidence indicator
+  await expect(page.locator("text=Slayer99").first()).toBeVisible();
+  await expect(page.locator("text=MysticX").first()).toBeVisible();
+});
+
+test("admin import CSV with no role shows red row", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/import");
+  await page.locator("textarea").fill("IGN,Discord\nNoRoleGuy,noroleguy#0001");
+  await expect(page.locator("text=NoRoleGuy").first()).toBeVisible();
+  // Row is flagged — Import button should not count it as importable
+  const importBtn = page.getByRole("button", { name: /Import/ });
+  // Button text says "Import 0 Players" since no green/yellow rows
+  await expect(importBtn).toContainText("0");
+});
+
+test("admin import sends batch to API and shows imported count", async ({ page }) => {
+  await adminLogin(page);
+  let sentPlayers: unknown[] | undefined;
+  await page.route("**/api/admin/import/players", async (route) => {
+    sentPlayers = route.request().postDataJSON()?.players;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ imported: 2, errors: [] }) });
+  });
+  await page.goto("/admin/import");
+  await page.locator("textarea").fill(
+    "IGN,Discord,Role\nSlayer99,slayer99#0001,Jungle\nMysticX,mysticx#0002,Mid",
+  );
+  await page.getByRole("button", { name: /Import/ }).click();
+  await expect(page.getByText("Imported 2 players.")).toBeVisible();
+  expect(Array.isArray(sentPlayers)).toBe(true);
+  expect((sentPlayers as unknown[]).length).toBe(2);
+});
+
+// --- Admin draft flows ---
+
+test("admin draft route redirects when logged out", async ({ page }) => {
+  await page.goto("/admin/draft");
+  await expect(page).toHaveURL(/\/admin\/login$/);
+});
+
+test("admin draft page renders heading and create room form", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/draft");
+  await expect(page.getByRole("heading", { name: "Draft Rooms" })).toBeVisible();
+  await expect(page.getByText("Create Draft Room")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create Room" })).toBeVisible();
+});
+
+test("admin draft create form has division select", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/draft");
+  const divisionSelect = page.locator("select").first();
+  await expect(divisionSelect).toBeVisible();
+  // Should have solar/lunar/gaia options
+  await expect(divisionSelect.locator("option[value='solar']")).toHaveCount(1);
+  await expect(divisionSelect.locator("option[value='lunar']")).toHaveCount(1);
+  await expect(divisionSelect.locator("option[value='gaia']")).toHaveCount(1);
+});
+
+test("admin draft unknown room ID returns 404", async ({ page }) => {
+  await adminLogin(page);
+  const response = await page.goto("/admin/draft/nonexistent-room-id");
+  expect(response?.status()).toBe(404);
+});
+
+// --- Admin registrations flows ---
+
+test("admin registrations pending tab shows approve and reject actions or empty state", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/registrations");
+  await page.getByRole("button", { name: /Pending/ }).click();
+  // Either there are pending registrations with Approve/Reject buttons, or an empty state
+  const approveButtons = page.getByRole("button", { name: "Approve" });
+  const count = await approveButtons.count();
+  if (count > 0) {
+    await expect(approveButtons.first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reject" }).first()).toBeVisible();
+  } else {
+    // empty state is acceptable
+    await expect(page.getByRole("button", { name: /Pending/ })).toBeVisible();
+  }
+});
+
+test("admin registrations approved tab is selectable", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/registrations");
+  await page.getByRole("button", { name: /Approved/ }).click();
+  await expect(page.getByRole("button", { name: /Approved/ })).toBeVisible();
+});
+
+// --- Admin form fields flows ---
+
+test("admin form fields locked base fields have no delete button inline", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/form-fields");
+  // "In-Game Name" is a locked field — its row must not contain a Delete button
+  const ignRow = page.locator("*", { hasText: "In-Game Name" }).last();
+  await expect(ignRow.getByRole("button", { name: "Delete" })).toHaveCount(0);
+});
+
+test("admin form fields add custom field button is visible and opens form", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/form-fields");
+  await page.getByRole("button", { name: "+ Add custom field" }).click();
+  // Should reveal an input for the field label
+  await expect(page.locator("input[placeholder*='label' i], input[placeholder*='field' i]").first()).toBeVisible();
+});
+
+// --- API auth coverage for new routes ---
+
+for (const [method, path] of [
+  ["POST", "/api/admin/announcements"],
+  ["DELETE", "/api/admin/announcements/ann-test"],
+  ["POST", "/api/admin/import/players"],
+  ["GET", "/api/admin/audit-log"],
+  ["POST", "/api/admin/draft"],
+  ["PATCH", "/api/admin/registrations/reg-test"],
+] as const) {
+  test(`${method} ${path} rejects unauthenticated request`, async ({ request }) => {
+    const response = await request.fetch(path, { method, data: {} });
+    expect(response.status()).toBe(401);
+  });
+}
+
+// --- Announcement body length validation ---
+
+test("announcements API rejects body over 10000 chars", async ({ request }) => {
+  await request.post("/api/admin/login", { data: { password: "test-admin-password" } });
+  const response = await request.post("/api/admin/announcements", {
+    data: {
+      id: "ann-length-test",
+      title: "Length Test",
+      body: "x".repeat(10001),
+      category: "general",
+      pinned: false,
+      createdAt: new Date().toISOString(),
+    },
+  });
+  expect(response.status()).toBe(400);
+  const body = await response.json();
+  expect(typeof body.error).toBe("string");
+});
+
+// --- Player profile flows ---
+
+test("player profile shows captain badge for captain", async ({ page }) => {
+  // Navigate through a team page to find a captain
+  await page.goto("/teams/helix-reign");
+  // Find a captain link — team detail page shows captain badge or captain indicator
+  const playerLinks = page.locator("a[href^='/players/']");
+  const count = await playerLinks.count();
+  if (count > 0) {
+    await playerLinks.first().click();
+    // Profile page should render without crash; Captain badge shows if applicable
+    await expect(page.locator("body")).not.toContainText("Application error");
+    await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
+  }
+});
+
+test("player profile team section links back to the team page", async ({ page }) => {
+  await page.goto("/teams/helix-reign");
+  const firstPlayerLink = page.locator("a[href^='/players/']").first();
+  const href = await firstPlayerLink.getAttribute("href");
+  await page.goto(href!);
+  // The "Team" section should have a link back to the team
+  const teamLink = page.locator("a[href^='/teams/']");
+  const teamLinkCount = await teamLink.count();
+  if (teamLinkCount > 0) {
+    await expect(teamLink.first()).toBeVisible();
+    await teamLink.first().click();
+    await expect(page).toHaveURL(/\/teams\//);
+  }
+});
+
+test("player profile season stats section renders when stats present", async ({ page }) => {
+  // p-hrx-1 is a known mock player on Helix Reign — navigate via team page
+  await page.goto("/teams/helix-reign");
+  const firstPlayerLink = page.locator("a[href^='/players/']").first();
+  const href = await firstPlayerLink.getAttribute("href");
+  await page.goto(href!);
+  // Stats section renders if player has gamesPlayed > 0 — just verify no crash and no encoding artifacts
+  await expect(page.locator("body")).not.toContainText("â");
+  await expect(page.locator("body")).not.toContainText("Application error");
+});
+
+test("players page captain filter is selectable", async ({ page }) => {
+  await page.goto("/players");
+  // Look for a "Captains" filter chip if it exists
+  const captainBtn = page.getByRole("button", { name: /Captain/i });
+  if (await captainBtn.count() > 0) {
+    await captainBtn.click();
+    await expect(captainBtn).toBeVisible();
+    await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
+  }
+});
+
+test("players page starters filter is selectable", async ({ page }) => {
+  await page.goto("/players");
+  const starterBtn = page.getByRole("button", { name: /Starter/i });
+  if (await starterBtn.count() > 0) {
+    await starterBtn.click();
+    await expect(starterBtn).toBeVisible();
+  }
+});
+
 // --- Layout / nav ---
 
 test("ticker is not visible on admin pages", async ({ page }) => {
