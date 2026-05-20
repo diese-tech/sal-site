@@ -81,6 +81,18 @@ export function PlayersPageClient({ data }: { data: LeagueData }) {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<PlayerRole | "all">("all");
   const [divisionFilter, setDivisionFilter] = useState<DivisionId | "all">("all");
+  const [teamFilter, setTeamFilter] = useState<string>("all");
+
+  // Reset team filter when division changes (keeps the droplist relevant)
+  const handleDivisionChange = (div: DivisionId | "all") => {
+    setDivisionFilter(div);
+    setTeamFilter("all");
+  };
+
+  const visibleOrgs = useMemo(
+    () => divisionFilter === "all" ? orgs : orgs.filter((o) => o.divisionId === divisionFilter),
+    [orgs, divisionFilter],
+  );
 
   const filtered = useMemo(() => {
     return [...players]
@@ -89,9 +101,10 @@ export function PlayersPageClient({ data }: { data: LeagueData }) {
         if (search && !p.ign.toLowerCase().includes(search.toLowerCase()) && !p.discordUsername.toLowerCase().includes(search.toLowerCase())) return false;
         if (roleFilter !== "all" && p.primaryRole !== roleFilter && !p.secondaryRoles.includes(roleFilter)) return false;
         if (divisionFilter !== "all" && p.divisionId !== divisionFilter) return false;
+        if (teamFilter !== "all" && p.orgId !== teamFilter) return false;
         return true;
       });
-  }, [players, search, roleFilter, divisionFilter]);
+  }, [players, search, roleFilter, divisionFilter, teamFilter]);
 
   const getOrg = (orgId?: string) => orgs.find((o) => o.id === orgId);
 
@@ -128,13 +141,26 @@ export function PlayersPageClient({ data }: { data: LeagueData }) {
             return (
               <button
                 key={id}
-                onClick={() => setDivisionFilter(id)}
+                onClick={() => handleDivisionChange(id)}
                 className={cn("rounded-xl border px-2.5 py-1 text-xs font-black uppercase transition", isActive ? activeStyle : inactiveBtn)}
               >
                 {label}
               </button>
             );
           })}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-black uppercase text-slate-500">Team</span>
+          <select
+            value={teamFilter}
+            onChange={(e) => setTeamFilter(e.target.value)}
+            className="rounded-xl border border-white/10 bg-black/45 px-3 py-1 text-xs font-black uppercase text-white focus:border-cyan-500/40 focus:outline-none"
+          >
+            <option value="all">All</option>
+            {visibleOrgs.sort((a, b) => a.name.localeCompare(b.name)).map((o) => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+          </select>
         </div>
         <span className="ml-auto text-[0.65rem] font-black uppercase text-slate-600">
           {filtered.length} / {players.length} players
