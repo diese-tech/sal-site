@@ -46,7 +46,7 @@ export default async function RegisterPage({
   return (
     <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
       <div className="mb-8">
-        <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">
+        <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300">
           Serpent Ascension League
         </p>
         <h1 className="text-2xl font-black text-white">

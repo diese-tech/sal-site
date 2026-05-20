@@ -105,7 +105,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
       <div className="grid gap-4 sm:grid-cols-2">
         {/* Role */}
         <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
-          <p className="mb-3 text-[0.65rem] font-black uppercase text-slate-500">Role</p>
+          <p className="mb-3 text-[0.65rem] font-black uppercase text-slate-300">Role</p>
           <div className="flex flex-wrap gap-2">
             <RolePill role={player.primaryRole} />
             {player.secondaryRoles.map((r) => (
@@ -118,7 +118,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
 
         {/* Org */}
         <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
-          <p className="mb-3 text-[0.65rem] font-black uppercase text-slate-500">Team</p>
+          <p className="mb-3 text-[0.65rem] font-black uppercase text-slate-300">Team</p>
           {org ? (
             <Link
               href={`/teams/${org.id}`}
@@ -137,7 +137,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
       {/* Stats */}
       {player.stats && player.stats.gamesPlayed > 0 && (
         <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-5">
-          <p className="mb-4 text-[0.65rem] font-black uppercase text-slate-500">Season Stats</p>
+          <p className="mb-4 text-[0.65rem] font-black uppercase text-slate-300">Season Stats</p>
           <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
             {[
               { label: "Kills", value: player.stats.kills },

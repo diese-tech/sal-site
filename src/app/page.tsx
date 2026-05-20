@@ -94,13 +94,13 @@ async function PulseSection() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-lg font-black italic text-white">{division.name.replace(" Division", "")}</span>
-                  <span className="text-[0.65rem] font-black uppercase text-slate-500">Tier {division.tier}</span>
+                  <span className="text-[0.65rem] font-black uppercase text-slate-300">Tier {division.tier}</span>
                 </div>
                 <p className="mt-1 text-xs font-semibold text-slate-400">{leaderOrg ? `Leader: ${leaderOrg.name}` : division.description}</p>
               </Link>
             );
           })}
-          <div className="grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs font-black uppercase text-slate-500">
+          <div className="grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs font-black uppercase text-slate-300">
             <span>{season.name}</span>
             <span className="text-right text-emerald-200">Week {season.currentWeek}</span>
           </div>

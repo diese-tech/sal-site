@@ -50,7 +50,7 @@ export function ScheduleFilters({
     <div className="flex flex-wrap gap-5">
       {/* Division */}
       <div>
-        <p className="mb-2 text-[0.65rem] font-black uppercase text-slate-500">Division</p>
+        <p className="mb-2 text-[0.65rem] font-black uppercase text-slate-300">Division</p>
         <div className="flex flex-wrap gap-1">
           {DIVISIONS.map(({ id, label }) => {
             const isActive = division === id;
@@ -73,7 +73,7 @@ export function ScheduleFilters({
 
       {/* Status */}
       <div>
-        <p className="mb-2 text-[0.65rem] font-black uppercase text-slate-500">Status</p>
+        <p className="mb-2 text-[0.65rem] font-black uppercase text-slate-300">Status</p>
         <div className="flex flex-wrap gap-1">
           {STATUSES.map(({ id, label }) => (
             <button
@@ -92,7 +92,7 @@ export function ScheduleFilters({
 
       {/* Week */}
       <div>
-        <p className="mb-2 text-[0.65rem] font-black uppercase text-slate-500">Week</p>
+        <p className="mb-2 text-[0.65rem] font-black uppercase text-slate-300">Week</p>
         <div className="flex flex-wrap gap-1">
           {weeks.map((w) => (
             <button
