@@ -52,8 +52,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
-            <Link href="/" className="rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-3 py-1.5 text-xs font-black uppercase text-emerald-100 transition hover:bg-emerald-300/15">
-              League
+            <Link href="/" className="rounded-lg border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs font-black uppercase text-slate-300 transition hover:border-white/25 hover:bg-white/[0.10] hover:text-white">
+              ← Back to Site
             </Link>
             <AdminLogoutButton />
           </div>
