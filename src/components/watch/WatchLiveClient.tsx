@@ -52,29 +52,35 @@ export function WatchLiveClient({
     <div className="flex flex-col gap-4">
       {/* Match context bar */}
       {liveMatch && homeOrg && awayOrg && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-orange-300/25 bg-orange-400/8 px-4 py-2.5">
-          <div className="flex items-center gap-3">
+        <div className="rounded-xl border border-orange-300/25 bg-orange-400/8 px-4 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 rounded-lg border border-orange-300/50 bg-orange-400/15 px-2 py-0.5 text-[0.6rem] font-black uppercase text-orange-100">
               <span className="h-1.5 w-1.5 rounded-full bg-orange-400 live-pulse" />
               Live
             </span>
-            <OrgLogo initials={homeOrg.logoInitials} gradient={homeOrg.logoGradient} className="h-7 w-7 text-[0.5rem]" />
-            <span className="text-sm font-black text-white">{homeOrg.name}</span>
+            {viewerCount > 0 && (
+              <span className="text-[0.65rem] font-semibold text-slate-500">{viewerCount.toLocaleString()} viewers</span>
+            )}
+          </div>
+          <div className="mt-2 flex items-center justify-center gap-2 sm:gap-3">
+            <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+              <OrgLogo initials={homeOrg.logoInitials} gradient={homeOrg.logoGradient} className="h-6 w-6 shrink-0 text-[0.5rem] sm:h-7 sm:w-7" />
+              <span className="truncate text-xs font-black text-white sm:text-sm">{homeOrg.name}</span>
+            </div>
             {liveMatch.homeScore !== undefined ? (
-              <span className="font-mono text-lg font-black text-white">
+              <span className="shrink-0 font-mono text-base font-black text-white sm:text-lg">
                 {liveMatch.homeScore}
                 <span className="mx-1 text-slate-600">:</span>
                 {liveMatch.awayScore}
               </span>
             ) : (
-              <span className="text-xs text-slate-500">vs</span>
+              <span className="shrink-0 text-xs text-slate-500">vs</span>
             )}
-            <span className="text-sm font-black text-white">{awayOrg.name}</span>
-            <OrgLogo initials={awayOrg.logoInitials} gradient={awayOrg.logoGradient} className="h-7 w-7 text-[0.5rem]" />
+            <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+              <span className="truncate text-xs font-black text-white sm:text-sm">{awayOrg.name}</span>
+              <OrgLogo initials={awayOrg.logoInitials} gradient={awayOrg.logoGradient} className="h-6 w-6 shrink-0 text-[0.5rem] sm:h-7 sm:w-7" />
+            </div>
           </div>
-          {viewerCount > 0 && (
-            <span className="text-[0.65rem] font-semibold text-slate-500">{viewerCount.toLocaleString()} viewers</span>
-          )}
         </div>
       )}
 

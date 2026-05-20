@@ -24,9 +24,9 @@ export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatc
 
       {/* Radial atmosphere */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/4 top-0 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-orange-500/7 blur-3xl" />
-        <div className="absolute right-1/4 top-1/4 h-96 w-96 translate-x-1/2 rounded-full bg-cyan-500/7 blur-3xl" />
-        <div className="absolute bottom-0 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-fuchsia-600/5 blur-3xl" />
+        <div className="absolute left-1/4 top-0 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-orange-500/[0.14] blur-3xl" />
+        <div className="absolute right-1/4 top-1/4 h-96 w-96 translate-x-1/2 rounded-full bg-cyan-500/[0.14] blur-3xl" />
+        <div className="absolute bottom-0 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-fuchsia-600/[0.12] blur-3xl" />
       </div>
 
       {/* Vignette */}
@@ -43,7 +43,7 @@ export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatc
 
         {/* Crest + identity */}
         <div className="flex flex-col items-center text-center">
-          <div className="mb-6 grid h-16 w-16 place-items-center rounded-2xl border border-cyan-500/35 bg-gradient-to-br from-cyan-500/20 via-transparent to-fuchsia-600/20 text-base font-black text-cyan-200 shadow-2xl shadow-cyan-950/50">
+          <div className="mb-6 grid h-16 w-16 place-items-center rounded-2xl border border-cyan-400/60 bg-gradient-to-br from-cyan-400/50 via-cyan-300/15 to-fuchsia-500/45 text-base font-black text-cyan-100 shadow-2xl shadow-cyan-500/25">
             SAL
           </div>
 
@@ -65,7 +65,7 @@ export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatc
           {/* Main title */}
           <h1 className="mb-2 text-5xl font-black leading-tight tracking-tight text-white sm:text-6xl lg:text-7xl">
             Serpent{" "}
-            <span className="bg-gradient-to-r from-cyan-300 via-fuchsia-400 to-orange-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-cyan-200 via-fuchsia-300 to-amber-300 bg-clip-text text-transparent">
               Ascension
             </span>
           </h1>
