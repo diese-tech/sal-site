@@ -13,7 +13,7 @@ export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatc
   return (
     <>
       {/* Fixed full-viewport video — stays pinned as the page scrolls */}
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
         <HeroVideoLoop
           clips={HERO_CLIPS}
           poster="/assets/hero-poster.jpg"
