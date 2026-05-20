@@ -1,6 +1,14 @@
 import type { Season } from "@/types/league";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { HeroVideoLoop } from "./HeroVideoLoop";
+
+// Drop clip URLs here as they become available.
+// Poster image (/assets/hero-poster.jpg) shows until the first clip loads.
+const HERO_CLIPS: string[] = [
+  // "/assets/clips/play-01.webm",
+  // "/assets/clips/play-02.webm",
+];
 
 const seasonStatusLabel = {
   "pre-season": "Pre-Season",
@@ -18,32 +26,56 @@ const seasonStatusStyle = {
 
 export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatchName?: string }) {
   return (
-    <section className="relative overflow-hidden">
+    <section className="relative min-h-[88vh] overflow-hidden">
+      {/* Video background — poster shows until first clip loads, then clips play back-to-back with hard cuts */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <HeroVideoLoop
+          clips={HERO_CLIPS}
+          poster="/assets/hero-poster.jpg"
+          className="absolute inset-0 h-full w-full object-cover opacity-40"
+        />
+        {/* Static poster fallback shown while clips list is empty */}
+        {HERO_CLIPS.length === 0 && (
+          <div className="absolute inset-0 flex items-end justify-end p-8">
+            <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 backdrop-blur-sm">
+              <div className="h-2 w-2 rounded-full border border-white/20 bg-white/[0.08]" />
+              <p className="text-[0.6rem] font-black uppercase tracking-widest text-white/25">Highlight Reel — Coming Soon</p>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Tactical grid */}
       <div className="sal-grid pointer-events-none absolute inset-0" />
 
-      {/* Radial atmosphere */}
+      {/* Radial atmosphere — shifted right so blobs sit behind the video area */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-1/4 top-0 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-orange-500/[0.14] blur-3xl" />
-        <div className="absolute right-1/4 top-1/4 h-96 w-96 translate-x-1/2 rounded-full bg-cyan-500/[0.14] blur-3xl" />
-        <div className="absolute bottom-0 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-fuchsia-600/[0.12] blur-3xl" />
+        <div className="absolute right-0 top-0 h-[40rem] w-[40rem] translate-x-1/4 rounded-full bg-cyan-500/[0.16] blur-3xl" />
+        <div className="absolute right-1/4 top-1/3 h-80 w-80 translate-x-1/2 rounded-full bg-orange-500/[0.12] blur-3xl" />
+        <div className="absolute bottom-0 right-1/3 h-64 w-64 rounded-full bg-fuchsia-600/[0.10] blur-3xl" />
       </div>
 
-      {/* Vignette */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_30%,rgba(0,0,0,0.65)_100%)]" />
+      {/* Left-to-right gradient — keeps text readable, lets video show on the right */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/75 to-slate-950/20" />
+      {/* Bottom fade into page */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950 to-transparent" />
 
-      <div className="relative mx-auto max-w-5xl px-6 pb-20 pt-20">
-        {/* Live match banner — if there's a live match */}
+      <div className="relative mx-auto max-w-7xl px-6 pb-24 pt-24">
+        {/* Live match banner — left-aligned pill */}
         {liveMatchName && (
-          <div className="mx-auto mb-8 max-w-2xl rounded-2xl border border-orange-300/25 bg-orange-400/10 px-4 py-3 text-center backdrop-blur">
-            <p className="text-xs font-black uppercase text-orange-200">Live Now</p>
-            <p className="mt-0.5 text-lg font-black text-white">{liveMatchName} is on stream</p>
+          <div className="mb-8 inline-flex items-center gap-3 rounded-2xl border border-orange-300/25 bg-orange-400/10 px-4 py-3 backdrop-blur">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-orange-400" />
+            </span>
+            <span className="text-xs font-black uppercase text-orange-200">Live —</span>
+            <span className="text-xs font-semibold text-white">{liveMatchName}</span>
           </div>
         )}
 
-        {/* Crest + identity */}
-        <div className="flex flex-col items-center text-center">
-          <div className="mb-6 grid h-16 w-16 place-items-center rounded-2xl border border-cyan-400/60 bg-gradient-to-br from-cyan-400/50 via-cyan-300/15 to-fuchsia-500/45 text-base font-black text-cyan-100 shadow-2xl shadow-cyan-500/25">
+        {/* Crest + identity — left-anchored, max half-width */}
+        <div className="flex max-w-xl flex-col">
+          <div className="mb-6 grid h-14 w-14 place-items-center rounded-2xl border border-cyan-400/60 bg-gradient-to-br from-cyan-400/50 via-cyan-300/15 to-fuchsia-500/45 text-sm font-black text-cyan-100 shadow-2xl shadow-cyan-500/25">
             SAL
           </div>
 
@@ -72,12 +104,12 @@ export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatc
           <p className="mb-3 text-xs font-black uppercase tracking-widest text-slate-500">
             League · {season.name}
           </p>
-          <p className="mb-10 max-w-lg text-base font-semibold leading-relaxed text-slate-400">
-            Competitive Smite 2. Three divisions. One throne. The season is live — follow every match, every roster, every moment.
+          <p className="mb-10 max-w-sm text-base font-semibold leading-relaxed text-slate-400">
+            Competitive Smite 2. Three divisions. One throne. Every play, every rivalry, every moment — on the record and in the spotlight.
           </p>
 
-          {/* CTAs — styled like lab utility buttons */}
-          <div className="flex flex-wrap items-center justify-center gap-2">
+          {/* CTAs */}
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/standings"
               className="rounded-xl border border-cyan-300/40 bg-cyan-300/15 px-6 py-2.5 text-sm font-black uppercase text-cyan-100 shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-300/20 active:translate-y-0.5 active:scale-95"
