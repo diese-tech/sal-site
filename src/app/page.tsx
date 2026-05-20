@@ -144,7 +144,7 @@ export default async function HomePage() {
             Drafts, match callouts, captain coordination, and league operations all live in the SAL Discord server.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <a href="#" className="rounded-xl border border-emerald-300/40 bg-emerald-300/15 px-8 py-2.5 text-sm font-black uppercase text-emerald-100 transition hover:bg-emerald-300/20 active:translate-y-0.5 active:scale-95">
+            <a href="https://discord.gg/qY8uFve4Dd" target="_blank" rel="noopener noreferrer" className="rounded-xl border border-emerald-300/40 bg-emerald-300/15 px-8 py-2.5 text-sm font-black uppercase text-emerald-100 transition hover:bg-emerald-300/20 active:translate-y-0.5 active:scale-95">
               Join Discord Server
             </a>
             <Link href="/schedule" className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 px-8 py-2.5 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/15 active:translate-y-0.5 active:scale-95">

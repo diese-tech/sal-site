@@ -164,7 +164,11 @@ export function RegisterClient({
         )}
         {existingRegistration.status === "pending" && (
           <p className="mt-3 text-xs text-slate-500">
-            An admin will review your registration. You&apos;ll receive a Discord DM when approved.
+            An admin will review your registration. Make sure you&apos;ve joined the{" "}
+            <a href="https://discord.gg/qY8uFve4Dd" target="_blank" rel="noopener noreferrer" className="text-indigo-400 underline hover:text-indigo-300">
+              SAL Discord server
+            </a>
+            {" "}— admins reach out there when your registration is processed.
           </p>
         )}
       </div>
@@ -228,7 +232,11 @@ export function RegisterClient({
         <p className="text-2xl font-black text-emerald-300">✓</p>
         <p className="mt-2 font-black text-white">Registration submitted!</p>
         <p className="mt-1 text-sm text-slate-400">
-          An admin will review your registration. You&apos;ll receive a Discord DM when approved.
+          An admin will review your registration. Make sure you&apos;ve joined the{" "}
+          <a href="https://discord.gg/qY8uFve4Dd" target="_blank" rel="noopener noreferrer" className="text-indigo-400 underline hover:text-indigo-300">
+            SAL Discord server
+          </a>
+          {" "}— that&apos;s where admins reach out when your registration is processed.
         </p>
       </div>
     );
