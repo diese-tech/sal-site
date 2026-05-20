@@ -1,94 +1,124 @@
-# Serpent Ascension League Draft Platform
+# Serpent Ascension League
 
-Serpent Ascension League (SAL) is a persistent Smite 2 Conquest league platform centered around live snake drafts, stream-ready presentation, and social player identity.
+**SAL** is a community-run competitive Smite 2 draft league for players looking to break into the competitive scene. The league is designed for lower-skilled players who want structured team play and a real competitive environment — a place to learn, grow, and eventually ascend into higher lobbies.
 
-The Card Lab (`/lab/cards`) and design editor (`/lab/editor`) are built and functional. The editor provides live visual configuration of all card and board components using mock data, with no backend required. The next implementation target is the production draft engine.
+SAL is not affiliated with Hi-Rez Studios or the Smite franchise.
 
-## Run Locally
+**Site:** https://sal-draft-league.vercel.app  
+**Discord:** https://discord.gg/qY8uFve4Dd  
+**Twitch:** https://twitch.tv/serpentascensionleague
 
-Install dependencies:
+---
 
-```bash
-npm install
-```
+## What the Site Does
 
-Start the local dev server:
+The SAL website is the public hub for the league. It covers:
 
-```bash
-npm run dev
-```
+- **Home** — live match status, upcoming matches, recent results, division standings, and league announcements
+- **Standings** — win/loss records, games back, and streak per division (Solar, Lunar, Gaia)
+- **Schedule** — full season schedule, filterable by division, week, and match status
+- **Teams** — all orgs with their rosters, division, and social links
+- **Players** — searchable player directory with role/division filters and individual player profiles
+- **Watch** — live Twitch stream embed and chat when the league is broadcasting
 
-Open the Card Lab:
+---
 
-```text
-http://localhost:3000/lab/cards
-```
+## Who It's For
 
-Open the design editor:
+SAL is open to anyone who comes across an invite link. There is no minimum skill requirement, but there are maximums — the admin team vets players before placements happen to keep the level of play appropriate for the league's goals.
 
-```text
-http://localhost:3000/lab/editor
-```
+The site is useful for:
+- **Players** — tracking standings, viewing their team, watching matches
+- **Captains** — managing their roster and participating in drafts
+- **Spectators** — following the league, reading announcements, watching streams
+- **Admins** — running the league through the admin panel
 
-Optional production-build verification:
+---
 
-```bash
-npm run build
-```
+## How to Join
 
-## Product North Star
+There are two ways to sign up for a season:
 
-Build a Discord-native competitive esports draft experience for SAL.
+### Option 1 — Discord Sign-Up Form
+When a new season is announced, a Google Form is shared in the Discord server. This is the primary sign-up method. Fill it out, join the server, and the admin team will handle the rest.
 
-SAL should feel like a premium live event board, not a spreadsheet, fantasy football clone, or trading card simulator.
+### Option 2 — Site Registration
+If sign-ups are live and you missed the Discord announcement, you can register directly on the site:
 
-## Confirmed Direction
+1. Click **Sign In** in the top navigation
+2. Authenticate with your Discord account
+3. The site checks whether you're already in the system (from a prior Google Form submission)
 
-- SAL is one league with multiple seasons.
-- Future tournaments may exist, but they are not MVP.
-- Drafts assign individual players to org/captain-led rosters.
-- Orgs are selected by the league and assign captains to represent them.
-- Captains are players, are not draftable, and usually count as a roster slot.
-- Rosters are normally 6 to 8 players.
-- Roles follow Smite 2 Conquest: Solo, Jungle, Mid, Carry/ADC, Support.
-- Player identity persists across seasons.
-- Org participation is season-based and interchangeable.
-- Public draft presentation is a first-class product concern.
+**If your Discord username matches an existing player record (Flow A):** You'll see your player profile and can claim it with one click. No form needed — you're already in.
 
-## Current State
+**If you're new to the system (Flow B):** You'll fill out a short registration form with your name, in-game name, tracker.gg profile link, and two roles. Your submission goes into a review queue for the admin team.
 
-`/lab/cards` — static component lab using mock data. Displays all card types with their states.
+> **Important for Flow B registrations:** Make sure you join the Discord server after submitting — https://discord.gg/qY8uFve4Dd. The admin team works through Discord and will need you there to complete your onboarding.
 
-`/lab/editor` — live design editor with collapsible sections, inline controls, and real-time previews for:
+---
 
-- player profile cards (density, banner, avatar, radius, tags, etc.)
-- draft player cards
-- roster slot cards (height, pulse, ghost opacity, etc.)
-- ghost queue cards (opacity, border style, role pills, etc.)
-- org roster cards (header intensity, active glow, captain slot, etc.)
-- mock draft board (row composition, view modes, stream canvas at 1920×1080 / 1280×720)
-- buttons (style, intent, hover/press effects, shape)
-- page theme (glow, borders, motion, background, corner style)
+## After You Sign Up
 
-Config persists to `localStorage`. JSON export/import supported. No auth, database, or production draft state.
+- **Existing players (Flow A):** Await the placements phase. The admin team will assign you to a team based on your role, availability, and skill level. You'll be notified in Discord.
+- **New registrations (Flow B):** An admin will review your submission and contact you in Discord. Join the server if you haven't already.
 
-The next target is the production draft engine (Phase 3).
+Placements are followed by a scouting period where captains evaluate players before the live draft.
 
-## Planned Stack
+---
 
-Likely production stack:
+## Admin Panel
 
-- Next.js
-- TypeScript
-- Tailwind CSS
-- Prisma
-- Neon Postgres
-- Auth.js / NextAuth
-- Discord OAuth eventually
-- Vercel hosting
+The admin panel lives at `/admin` and is password-protected. It is used by the SAL admin team to run the league.
 
-Realtime can begin with polling/SSE before introducing heavier WebSocket infrastructure.
+| Section | What it does |
+|---|---|
+| **Overview** | League health snapshot — active season, org count, player count, pending matches |
+| **Teams** | View all orgs and their captains |
+| **Roster** | Edit player details — IGN, Discord, team, role, starter/captain status |
+| **Schedule** | Create and edit matches, enter scores, update match status |
+| **Standings** | View current standings; trigger a manual recalculation |
+| **Draft** | Create and manage draft rooms; control the live draft |
+| **Announcements** | Write and publish league news visible on the homepage |
+| **Import** | Bulk-import players via CSV or pasted spreadsheet data |
+| **Registrations** | Review, approve, or reject player sign-ups from the site |
+| **Form Fields** | Customize the player registration form — hide base fields, add new ones for future seasons |
 
-## Documentation
+### Managing Registrations
 
-See `docs/` for current product and architecture planning.
+When a player signs up via the site (Flow B), their submission appears in **Admin → Registrations** with a Pending status. From there you can:
+
+- **Approve** — confirms their registration
+- **Reject** — rejects with an optional note explaining why
+
+Approved players still need to be added to the system roster manually via Import or the Roster editor.
+
+### Publishing Announcements
+
+Announcements support Markdown. From **Admin → Announcements** you can write posts with headers, bullet lists, bold text, and links. A live preview toggle shows the rendered output before saving. Pinned announcements appear at the top of the homepage feed. Each announcement also gets a full-page article view at `/announcements/[id]`.
+
+### Importing Players
+
+**Admin → Import** accepts CSV or tab-separated data pasted from Google Sheets or exported from Discord bots. The parser auto-detects column headers and maps them to player fields. Preview parsed rows before committing — green rows are ready, yellow have warnings, red have missing required fields. Re-importing a player whose IGN already exists will update their record.
+
+---
+
+## Season Structure
+
+- The league runs in seasons. Season 1 is currently active.
+- Each season has three divisions: **Solar**, **Lunar**, and **Gaia**
+- Rosters are 6–8 players per org, including a captain
+- Captains are selected by the league, represent their org, and are not draftable
+- Player identities (IGN, stats, history) persist across seasons
+- Org participation is season-based
+
+---
+
+## Links
+
+| | |
+|---|---|
+| Website | https://sal-draft-league.vercel.app |
+| Discord | https://discord.gg/qY8uFve4Dd |
+| Twitch | https://twitch.tv/serpentascensionleague |
+
+For local development and technical setup, see [DEVELOPMENT.md](./DEVELOPMENT.md).
