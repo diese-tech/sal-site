@@ -85,7 +85,7 @@ export function OrgRosterPanel({
       {/* Captain */}
       {captain && (
         <div>
-          <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Captain locked</p>
+          <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-300">Captain locked</p>
           <PlayerRow player={captain} divisionId={divisionId} />
         </div>
       )}
@@ -93,7 +93,7 @@ export function OrgRosterPanel({
       {/* Starters */}
       {starters.length > 0 && (
         <div>
-          <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Starting roster</p>
+          <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-300">Starting roster</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {starters.map((p) => (
               <PlayerRow key={p.id} player={p} divisionId={divisionId} />
@@ -105,7 +105,7 @@ export function OrgRosterPanel({
       {/* Subs */}
       {subs.length > 0 && (
         <div>
-          <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Substitutes</p>
+          <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-300">Substitutes</p>
           <div className="grid gap-2 sm:grid-cols-2">
             {subs.map((p) => (
               <PlayerRow key={p.id} player={p} divisionId={divisionId} />

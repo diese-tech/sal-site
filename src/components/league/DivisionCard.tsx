@@ -64,7 +64,7 @@ export function DivisionCard({
         <div className="absolute inset-0 bg-gradient-to-r from-slate-950/92 via-slate-950/72 to-slate-950/35" />
         <div className="relative flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="mb-0.5 text-[0.65rem] font-black uppercase text-slate-500">Tier {division.tier}</p>
+            <p className="mb-0.5 text-[0.65rem] font-black uppercase text-slate-300">Tier {division.tier}</p>
             <h3 className={cn("text-xl font-black", accent.text)}>{division.name}</h3>
             <p className="mt-1 text-xs font-semibold text-slate-400">{division.description}</p>
           </div>
@@ -73,7 +73,7 @@ export function DivisionCard({
 
       {/* Standings body */}
       <div className="space-y-2 p-4 pt-3">
-        <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Standings</p>
+        <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-300">Standings</p>
         {topOrgs.map((org, i) => {
           const standing = standings[i];
           return (

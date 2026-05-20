@@ -106,7 +106,7 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
 
       <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
         <div>
-          <p className="mb-3 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Full Roster</p>
+          <p className="mb-3 text-[0.68rem] font-black uppercase tracking-normal text-slate-300">Full Roster</p>
           <GlowPanel>
             <div className="p-4">
               <OrgRosterPanel players={roster} divisionId={org.divisionId} />
@@ -117,7 +117,7 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
         <div className="space-y-6">
           {upcoming.length > 0 && (
             <div>
-              <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Upcoming Matches</p>
+              <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-300">Upcoming Matches</p>
               <div className="space-y-2">
                 {upcoming.map((m) => (
                   <MatchCard key={m.id} match={m} homeOrg={getOrg(m.homeOrgId)} awayOrg={getOrg(m.awayOrgId)} compact />
@@ -128,7 +128,7 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
 
           {results.length > 0 && (
             <div>
-              <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Recent Results</p>
+              <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-300">Recent Results</p>
               <div className="space-y-2">
                 {results.map((m) => (
                   <MatchCard key={m.id} match={m} homeOrg={getOrg(m.homeOrgId)} awayOrg={getOrg(m.awayOrgId)} compact />
@@ -139,7 +139,7 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
 
           {org.socialLinks && Object.keys(org.socialLinks).length > 0 && (
             <div>
-              <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Links</p>
+              <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-300">Links</p>
               <div className="flex flex-wrap gap-2">
                 {org.socialLinks.discord && (
                   <a href={org.socialLinks.discord} className="rounded-xl border border-fuchsia-300/30 bg-fuchsia-300/10 px-3 py-1.5 text-xs font-black uppercase text-fuchsia-100 transition hover:bg-fuchsia-300/15">

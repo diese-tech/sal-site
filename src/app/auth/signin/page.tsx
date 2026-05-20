@@ -13,7 +13,7 @@ export default async function SignInPage() {
     <main className="flex min-h-screen flex-col items-center justify-center px-4 py-16">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">
+          <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300">
             Serpent Ascension League
           </p>
           <h1 className="text-2xl font-black text-white">Player Sign In</h1>

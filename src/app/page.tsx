@@ -94,13 +94,13 @@ async function PulseSection() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-lg font-black italic text-white">{division.name.replace(" Division", "")}</span>
-                  <span className="text-[0.65rem] font-black uppercase text-slate-500">Tier {division.tier}</span>
+                  <span className="text-[0.65rem] font-black uppercase text-slate-300">Tier {division.tier}</span>
                 </div>
                 <p className="mt-1 text-xs font-semibold text-slate-400">{leaderOrg ? `Leader: ${leaderOrg.name}` : division.description}</p>
               </Link>
             );
           })}
-          <div className="grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs font-black uppercase text-slate-500">
+          <div className="grid grid-cols-2 gap-3 border-t border-white/10 pt-4 text-xs font-black uppercase text-slate-300">
             <span>{season.name}</span>
             <span className="text-right text-emerald-200">Week {season.currentWeek}</span>
           </div>
@@ -314,11 +314,11 @@ function SectionHeader({
   return (
     <div className="mb-5 flex items-end justify-between gap-4">
       <div>
-        <p className="mb-0.5 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">{eyebrow}</p>
+        <p className="mb-0.5 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300">{eyebrow}</p>
         <h2 className="text-xl font-black text-white">{title}</h2>
       </div>
       {action && (
-        <Link href={action.href} className="shrink-0 text-xs font-black uppercase text-emerald-300/70 transition-colors hover:text-emerald-100">
+        <Link href={action.href} className="shrink-0 text-xs font-black uppercase text-emerald-300 transition-colors hover:text-emerald-100">
           {action.label}
         </Link>
       )}
