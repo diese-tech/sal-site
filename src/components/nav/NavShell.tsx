@@ -13,6 +13,13 @@ export function NavShell({ children, ticker }: { children: React.ReactNode; tick
       {!hideChrome && <SiteNav />}
       {/* pt-24 = ticker (32px) + nav (64px) */}
       <div className={!hideChrome ? "pt-24" : undefined}>{children}</div>
+      {!hideChrome && (
+        <footer className="border-t border-white/10 mt-16 py-6 px-4 text-center text-xs text-white/40 leading-relaxed">
+          The Serpent Ascension League is an independent community tournament and is not affiliated with, endorsed by, or
+          officially supported by Hi-Rez Studios, Inc. SMITE 2® is a registered trademark of Hi-Rez Studios, Inc. This
+          tournament operates under the Hi-Rez Community Tournament License.
+        </footer>
+      )}
     </>
   );
 }
