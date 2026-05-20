@@ -268,7 +268,7 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
                           <button
                             onClick={() => makePick(p.id)}
                             disabled={picking}
-                            className="rounded-lg border border-emerald-300/40 bg-emerald-300/15 px-3 py-1 text-xs font-black uppercase text-emerald-100 disabled:opacity-50"
+                            className="rounded-lg border border-emerald-300/40 bg-emerald-300/15 px-4 py-2 text-xs font-black uppercase text-emerald-100 disabled:opacity-50 active:scale-95"
                           >
                             {picking ? "…" : "Pick"}
                           </button>

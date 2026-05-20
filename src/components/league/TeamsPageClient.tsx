@@ -38,13 +38,13 @@ export function TeamsPageClient({ data }: { data: LeagueData }) {
 
   return (
     <>
-      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-cyan-300/15 bg-slate-950/84 p-4 shadow-2xl shadow-cyan-950/20 backdrop-blur">
+      <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-cyan-300/15 bg-slate-950/84 p-4 shadow-2xl shadow-cyan-950/20 backdrop-blur sm:flex-row sm:flex-wrap sm:items-center">
         <input
           type="text"
           placeholder="Search teams..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          className="rounded-xl border border-white/10 bg-black/45 px-4 py-2 text-sm font-semibold text-white placeholder:text-slate-600 focus:border-cyan-500/40 focus:outline-none focus:ring-1 focus:ring-cyan-500/20"
+          className="w-full rounded-xl border border-white/10 bg-black/45 px-4 py-2 text-sm font-semibold text-white placeholder:text-slate-600 focus:border-cyan-500/40 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 sm:w-56"
         />
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-black uppercase text-slate-500">Division</span>
