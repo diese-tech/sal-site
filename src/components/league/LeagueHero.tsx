@@ -1,6 +1,14 @@
 import type { Season } from "@/types/league";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { HeroVideoLoop } from "./HeroVideoLoop";
+
+// Drop clip URLs here as they become available.
+// Poster image (/assets/hero-poster.jpg) shows until the first clip loads.
+const HERO_CLIPS: string[] = [
+  // "/assets/clips/play-01.webm",
+  // "/assets/clips/play-02.webm",
+];
 
 const seasonStatusLabel = {
   "pre-season": "Pre-Season",
@@ -19,19 +27,22 @@ const seasonStatusStyle = {
 export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatchName?: string }) {
   return (
     <section className="relative min-h-[88vh] overflow-hidden">
-      {/* TODO: replace this placeholder with a <video> element when assets are ready:
-          <video autoPlay loop muted playsInline poster="/assets/hero-poster.jpg"
-                 className="absolute inset-0 h-full w-full object-cover opacity-40">
-            <source src="/assets/hero.webm" type="video/webm" />
-            <source src="/assets/hero.mp4" type="video/mp4" />
-          </video>
-      */}
+      {/* Video background — poster shows until first clip loads, then clips play back-to-back with hard cuts */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        {/* Placeholder panel — visible on the right when text is left-anchored */}
-        <div className="absolute bottom-8 right-8 flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 backdrop-blur-sm">
-          <div className="h-2 w-2 rounded-full border border-white/20 bg-white/[0.08]" />
-          <p className="text-[0.6rem] font-black uppercase tracking-widest text-white/25">Highlight Reel — Coming Soon</p>
-        </div>
+        <HeroVideoLoop
+          clips={HERO_CLIPS}
+          poster="/assets/hero-poster.jpg"
+          className="absolute inset-0 h-full w-full object-cover opacity-40"
+        />
+        {/* Static poster fallback shown while clips list is empty */}
+        {HERO_CLIPS.length === 0 && (
+          <div className="absolute inset-0 flex items-end justify-end p-8">
+            <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 backdrop-blur-sm">
+              <div className="h-2 w-2 rounded-full border border-white/20 bg-white/[0.08]" />
+              <p className="text-[0.6rem] font-black uppercase tracking-widest text-white/25">Highlight Reel — Coming Soon</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tactical grid */}
