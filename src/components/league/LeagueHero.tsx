@@ -19,6 +19,17 @@ const seasonStatusStyle = {
 export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatchName?: string }) {
   return (
     <section className="relative overflow-hidden">
+      {/* Video background — placeholder until real assets are ready */}
+      {/* TODO: replace placeholder with <video> when /assets/hero.webm and /assets/hero.mp4 are ready */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-slate-900/40 to-slate-950/90">
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-8 py-5 text-center backdrop-blur-sm">
+            <div className="h-8 w-8 rounded-full border-2 border-white/20 bg-white/[0.05]" />
+            <p className="text-[0.6rem] font-black uppercase tracking-widest text-white/30">Highlight Reel — Coming Soon</p>
+          </div>
+        </div>
+      </div>
+
       {/* Tactical grid */}
       <div className="sal-grid pointer-events-none absolute inset-0" />
 

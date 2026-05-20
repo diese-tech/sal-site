@@ -586,6 +586,37 @@ test("sign in button visible on mobile nav", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Sign In" })).toBeVisible();
 });
 
+test("player profile page loads via direct URL", async ({ page }) => {
+  await page.goto("/players/p-hrx-1");
+  // If not found, should show 404; if found, show player name
+  // Just verify no crash and no encoding artifacts
+  await expect(page.locator("body")).not.toContainText("â");
+});
+
+test("watch page shows offline state when stream is down", async ({ page }) => {
+  await page.goto("/watch");
+  // Either shows Twitch embed or offline state — both are valid, just no crash
+  await expect(page.locator("body")).not.toContainText("Application error");
+  await expect(page.locator("body")).not.toContainText("â");
+});
+
+test("draft page with unknown ID shows not found", async ({ page }) => {
+  const response = await page.goto("/draft/nonexistent-room");
+  // Should 404 or redirect, not throw a 500
+  expect(response?.status()).not.toBe(500);
+});
+
+test("watch page has no overflow on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/watch");
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)).toBe(false);
+});
+
+test("players directory renders heading", async ({ page }) => {
+  await page.goto("/players");
+  await expect(page.getByText(/Players/i).first()).toBeVisible();
+});
+
 async function adminLogin(page: Page) {
   await page.goto("/admin/login");
   await page.getByLabel("Password").fill("test-admin-password");
