@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { DraftState } from "@/types/draft";
 import type { LeaguePlayer, Org } from "@/types/league";
@@ -19,7 +19,28 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
   players: LeaguePlayer[];
 }) {
   const router = useRouter();
-  const { room, picks, pickSequence, currentOrgId, totalPicks } = state;
+  const [liveState, setLiveState] = useState(state);
+
+  useEffect(() => {
+    setLiveState(state); // sync if parent re-renders
+  }, [state]);
+
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/draft/${state.room.id}`);
+        if (res.ok) {
+          const data = await res.json() as { state: typeof state };
+          setLiveState(data.state);
+        }
+      } catch {
+        // network blip — ignore, next poll will catch up
+      }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [state.room.id]);
+
+  const { room, picks, pickSequence, currentOrgId, totalPicks } = liveState;
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [tokens, setTokens] = useState<Record<string, string> | null>(null);
@@ -46,6 +67,21 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
     }
     router.refresh();
     return true;
+  }
+
+  async function callUndo() {
+    setBusy(true);
+    setMessage("");
+    const res = await fetch(`/api/admin/draft/${room.id}/undo`, { method: "POST" });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null) as { error?: string } | null;
+      setMessage(data?.error ?? "Undo failed.");
+      return;
+    }
+    const data = await res.json() as { state: typeof state };
+    if (data.state) setLiveState(data.state);
+    router.refresh();
   }
 
   async function saveOrder() {
@@ -103,6 +139,7 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
           {isActive && <AdminBtn onClick={() => call("pause")} disabled={busy} variant="yellow">Pause</AdminBtn>}
           {isPaused && <AdminBtn onClick={() => call("resume")} disabled={busy}>Resume</AdminBtn>}
           {(isActive || isPaused) && <AdminBtn onClick={() => call("skip")} disabled={busy} variant="red">Skip Pick</AdminBtn>}
+          {isActive && liveState.picks.length > 0 && <AdminBtn onClick={() => callUndo()} disabled={busy} variant="yellow">Undo Pick</AdminBtn>}
         </div>
       </div>
       {message && <p className="text-sm font-semibold text-orange-200">{message}</p>}
