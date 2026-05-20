@@ -105,24 +105,16 @@ export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatc
             League · {season.name}
           </p>
           <p className="mb-10 max-w-sm text-base font-semibold leading-relaxed text-slate-400">
-            A community built around competitive Smite 2. Three divisions, real rivalries, every match documented. Join the server and be part of it.
+            Competitive Smite 2. Three divisions. One throne. Every play, every rivalry, every moment — on the record and in the spotlight.
           </p>
 
           {/* CTAs */}
           <div className="flex flex-wrap items-center gap-2">
-            <a
-              href="https://discord.gg/qY8uFve4Dd"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-xl border border-emerald-300/40 bg-emerald-300/15 px-6 py-2.5 text-sm font-black uppercase text-emerald-100 shadow-lg shadow-emerald-950/30 transition hover:bg-emerald-300/20 active:translate-y-0.5 active:scale-95"
-            >
-              Join the Community
-            </a>
             <Link
               href="/standings"
-              className="rounded-xl border border-cyan-300/40 bg-cyan-300/15 px-6 py-2.5 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20 active:translate-y-0.5 active:scale-95"
+              className="rounded-xl border border-cyan-300/40 bg-cyan-300/15 px-6 py-2.5 text-sm font-black uppercase text-cyan-100 shadow-lg shadow-cyan-950/30 transition hover:bg-cyan-300/20 active:translate-y-0.5 active:scale-95"
             >
-              Standings
+              View Standings
             </Link>
             <Link
               href="/schedule"
@@ -136,6 +128,12 @@ export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatc
             >
               Teams
             </Link>
+            <a
+              href="#discord"
+              className="rounded-xl border border-fuchsia-300/30 bg-fuchsia-300/10 px-6 py-2.5 text-sm font-black uppercase text-fuchsia-100 transition hover:bg-fuchsia-300/15 active:translate-y-0.5 active:scale-95"
+            >
+              Discord
+            </a>
           </div>
         </div>
       </div>
