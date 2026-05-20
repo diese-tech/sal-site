@@ -10,9 +10,9 @@ const divisionHeaderGradient: Record<DivisionId, string> = {
 };
 
 const divisionBorder: Record<DivisionId, string> = {
-  solar: "border-orange-500/25 hover:border-orange-500/45",
-  lunar: "border-cyan-500/25 hover:border-cyan-500/45",
-  gaia: "border-emerald-500/25 hover:border-emerald-500/45",
+  solar: "border-orange-500/35 hover:border-orange-500/55",
+  lunar: "border-cyan-500/35 hover:border-cyan-500/55",
+  gaia: "border-emerald-500/35 hover:border-emerald-500/55",
 };
 
 const statusConfig = {

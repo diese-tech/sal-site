@@ -12,7 +12,7 @@
 }
 
 html {
-  background: #05070d;
+  background: #060d1c;
 }
 
 /* --- Design tokens --- */
@@ -33,19 +33,21 @@ html {
   --sal-button-radius: 14px;
 }
 
-/* --- Body — smoke background --- */
+/* --- Body — deep navy smoke background --- */
 body {
   min-height: 100vh;
   margin: 0;
   background:
-    /* Smoke wisps — diffuse atmospheric layers */
-    radial-gradient(ellipse 140% 60% at 10% -5%,  rgba(34, 211, 238, 0.22),  transparent 55%),
-    radial-gradient(ellipse 100% 50% at 88% 5%,   rgba(16, 185, 129, 0.18),  transparent 52%),
-    radial-gradient(ellipse 80%  40% at 50% 0%,   rgba(59, 130, 246, 0.12),  transparent 48%),
-    radial-gradient(ellipse 60%  30% at 22% 35%,  rgba(34, 211, 238, 0.06),  transparent 40%),
-    radial-gradient(ellipse 55%  25% at 78% 28%,  rgba(16, 185, 129, 0.05),  transparent 38%),
-    /* Deep smoke base */
-    linear-gradient(160deg, #050c18 0%, #06101e 30%, #05070d 60%, #040609 100%);
+    /* Smoke wisps — stronger atmosphere */
+    radial-gradient(ellipse 140% 60% at 10% -5%,  rgba(34, 211, 238, 0.34),  transparent 55%),
+    radial-gradient(ellipse 100% 50% at 88% 5%,   rgba(16, 185, 129, 0.28),  transparent 52%),
+    radial-gradient(ellipse 80%  40% at 50% 0%,   rgba(59, 130, 246, 0.18),  transparent 48%),
+    radial-gradient(ellipse 60%  30% at 22% 35%,  rgba(34, 211, 238, 0.10),  transparent 40%),
+    radial-gradient(ellipse 55%  25% at 78% 28%,  rgba(16, 185, 129, 0.09),  transparent 38%),
+    /* Fuchsia mid-page warmth */
+    radial-gradient(ellipse 70%  35% at 50% 55%,  rgba(168, 85, 247, 0.07),  transparent 45%),
+    /* Deep navy base */
+    linear-gradient(160deg, #060d1c 0%, #081526 30%, #060d1c 60%, #040b18 100%);
   color: #f8fafc;
 }
 
@@ -57,8 +59,8 @@ body {
 /* --- Grid overlay — 100% opacity --- */
 .sal-grid {
   background-image:
-    linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+    linear-gradient(rgba(148, 163, 184, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.16) 1px, transparent 1px);
   background-size: 44px 44px;
   mask-image: linear-gradient(to bottom, transparent, black 10%, black 85%, transparent);
 }
