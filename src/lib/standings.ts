@@ -43,7 +43,7 @@ export function recalcStandings(data: Pick<LeagueData, "orgs" | "matches">): Org
     }
   }
 
-  for (const divisionId of ["solar", "lunar", "gaia"] satisfies DivisionId[]) {
+  for (const divisionId of ["gaia", "solar", "lunar"] satisfies DivisionId[]) {
     const divStandings = [...map.values()].filter((s) => s.divisionId === divisionId);
     if (divStandings.length === 0) continue;
     const leader = divStandings.reduce((a, b) => (b.wins - b.losses > a.wins - a.losses ? b : a), divStandings[0]);

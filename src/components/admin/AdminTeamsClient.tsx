@@ -22,7 +22,7 @@ function emptyOrg(): Org {
     id: `org-${crypto.randomUUID().slice(0, 8)}`,
     name: "",
     tag: "",
-    divisionId: "solar",
+    divisionId: "gaia",
     logoInitials: "",
     logoGradient: "from-orange-500 to-amber-400",
     primaryColor: "#f97316",
@@ -248,7 +248,7 @@ export function AdminTeamsClient({
             </Field>
             <Field label="Division">
               <select value={editing.divisionId} onChange={(e) => setEditing({ ...editing, divisionId: e.target.value as DivisionId })} className={inputClass}>
-                {(["solar", "lunar", "gaia"] as DivisionId[]).map((d) => (
+                {(["gaia", "solar", "lunar"] as DivisionId[]).map((d) => (
                   <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>
                 ))}
               </select>

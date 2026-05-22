@@ -33,7 +33,7 @@ type ImportedPlayer = {
 };
 
 const VALID_ROLES: PlayerRole[] = ["Solo", "Jungle", "Mid", "Carry", "Support", "Flex"];
-const VALID_DIVISIONS: DivisionId[] = ["solar", "lunar", "gaia"];
+const VALID_DIVISIONS: DivisionId[] = ["gaia", "solar", "lunar"];
 
 const ROLE_ALIASES: Record<string, PlayerRole> = {
   solo: "Solo", top: "Solo",

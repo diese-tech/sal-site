@@ -2,25 +2,25 @@ import type { LeagueData, Division, Org, LeaguePlayer, Match, OrgStanding, Annou
 
 const DIVISIONS: Division[] = [
   {
+    id: "gaia",
+    name: "Gaia Division",
+    description: "Top-tier competitive play. The pinnacle where champions are forged.",
+    tier: 1,
+    accentColor: "emerald",
+  },
+  {
     id: "solar",
     name: "Solar Division",
-    description: "Top-tier competitive play. The crucible where champions are forged.",
-    tier: 1,
+    description: "High-level competition where elite players contest for supremacy.",
+    tier: 2,
     accentColor: "orange",
   },
   {
     id: "lunar",
     name: "Lunar Division",
-    description: "High-level competition across the midnight battlefield.",
-    tier: 2,
-    accentColor: "cyan",
-  },
-  {
-    id: "gaia",
-    name: "Gaia Division",
-    description: "The proving grounds. Rise through the roots.",
+    description: "The proving grounds. Rise through the roots and earn your place.",
     tier: 3,
-    accentColor: "emerald",
+    accentColor: "cyan",
   },
 ];
 
@@ -296,7 +296,7 @@ function calcStandings(): OrgStanding[] {
   }
 
   // Calculate games back per division
-  const divIds: import("@/types/league").DivisionId[] = ["solar", "lunar", "gaia"];
+  const divIds: import("@/types/league").DivisionId[] = ["gaia", "solar", "lunar"];
   for (const divId of divIds) {
     const divStandings = [...map.values()].filter((s) => s.divisionId === divId);
     const leader = divStandings.reduce((a, b) => (b.wins - b.losses > a.wins - a.losses ? b : a), divStandings[0]);
