@@ -3,12 +3,20 @@ import { isAdminRequest } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getAdminLeagueData } from "@/lib/league-data";
 import type { ExtractedGame } from "@/types/match-report";
-import Anthropic from "@anthropic-ai/sdk";
 
 const SMITE_ROLES = ["Solo", "Jungle", "Mid", "Carry", "Support"] as const;
 
-const EXTRACTION_PROMPT = (homeOrgName: string, homeIgns: string[], awayOrgName: string, awayIgns: string[]) => `
-You are analyzing a SMITE 2 end-of-match DETAILS tab screenshot. Extract the scoreboard.
+// Best-value vision model on OpenRouter for scoreboard OCR.
+// Override via OPENROUTER_MODEL env var if needed.
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL ?? "google/gemini-2.0-flash-001";
+
+const EXTRACTION_PROMPT = (
+  homeOrgName: string,
+  homeIgns: string[],
+  awayOrgName: string,
+  awayIgns: string[],
+) => `
+You are analyzing a SMITE 2 end-of-match DETAILS tab screenshot. Extract the scoreboard data.
 
 Home team: ${homeOrgName}
 Known home players: ${homeIgns.length > 0 ? homeIgns.join(", ") : "(unknown roster)"}
@@ -36,13 +44,51 @@ Return ONLY valid JSON in this exact format, no other text:
 
 Instructions:
 - Match each player to home or away using the known rosters above
-- If a player is not in either roster, assign based on which column they appear in (left column vs right column)
+- If a player is not in either roster, assign based on which column they appear in (left vs right)
 - Extract kills, deaths, assists exactly as shown (integers)
 - Extract damage numbers without commas (integers)
-- "winner" is "home" if the home team won this game, "away" if away team won
+- "winner" is "home" if the home team won, "away" if away team won
 - Look for VICTORY/DEFEAT text or trophy icons to determine winner
 - Include all 10 players (5 per side) if visible
 `.trim();
+
+interface OpenRouterMessage {
+  role: "user" | "assistant";
+  content: Array<
+    | { type: "text"; text: string }
+    | { type: "image_url"; image_url: { url: string } }
+  >;
+}
+
+async function callOpenRouter(messages: OpenRouterMessage[]): Promise<string> {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://sal.gg",
+      "X-Title": "SAL Match Report",
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      max_tokens: 2048,
+      messages,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText);
+    throw new Error(`OpenRouter error ${res.status}: ${err}`);
+  }
+
+  const data = await res.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+    error?: { message?: string };
+  };
+
+  if (data.error) throw new Error(data.error.message ?? "OpenRouter API error");
+  return data.choices?.[0]?.message?.content ?? "";
+}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isAdminRequest(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -51,8 +97,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const supabase = getSupabaseServerClient();
   if (!supabase) return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json({ error: "AI extraction not configured (ANTHROPIC_API_KEY missing).", aiUnavailable: true }, { status: 503 });
+  if (!process.env.OPENROUTER_API_KEY) {
+    return NextResponse.json(
+      { error: "AI extraction not configured (OPENROUTER_API_KEY missing).", aiUnavailable: true },
+      { status: 503 },
+    );
   }
 
   // Load report + match context
@@ -63,7 +112,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     .single();
   if (reportErr || !report) return NextResponse.json({ error: "Report not found." }, { status: 404 });
 
-  const r = report as { screenshot_urls: string[]; match_id: string; status: string };
+  const r = report as { screenshot_urls: string[]; match_id: string };
   if (!r.screenshot_urls?.length) return NextResponse.json({ error: "No screenshots uploaded yet." }, { status: 400 });
 
   // Mark as extracting
@@ -77,23 +126,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const homePlayers = leagueData.players.filter((p) => p.orgId === match?.homeOrgId).map((p) => p.ign);
     const awayPlayers = leagueData.players.filter((p) => p.orgId === match?.awayOrgId).map((p) => p.ign);
 
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
     const games: ExtractedGame[] = [];
 
     for (let i = 0; i < r.screenshot_urls.length; i++) {
       const url = r.screenshot_urls[i];
-      let imageBase64: string;
-      let mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" = "image/jpeg";
 
+      // Fetch screenshot and convert to base64 data URL
+      let dataUrl: string;
       try {
         const imgRes = await fetch(url);
-        if (!imgRes.ok) throw new Error(`Failed to fetch screenshot: ${imgRes.status}`);
+        if (!imgRes.ok) throw new Error(`HTTP ${imgRes.status}`);
         const buffer = await imgRes.arrayBuffer();
-        imageBase64 = Buffer.from(buffer).toString("base64");
-        const ct = imgRes.headers.get("content-type") ?? "";
-        if (ct.includes("png")) mediaType = "image/png";
-        else if (ct.includes("webp")) mediaType = "image/webp";
+        const base64 = Buffer.from(buffer).toString("base64");
+        const ct = imgRes.headers.get("content-type") ?? "image/jpeg";
+        const mimeType = ct.includes("png") ? "image/png" : ct.includes("webp") ? "image/webp" : "image/jpeg";
+        dataUrl = `data:${mimeType};base64,${base64}`;
       } catch (err) {
         console.error(`Failed to fetch screenshot ${i + 1}:`, err);
         games.push({ gameNumber: i + 1, winningSide: "unknown", players: [] });
@@ -101,32 +148,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
 
       try {
-        const response = await client.messages.create({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 2048,
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "image",
-                  source: { type: "base64", media_type: mediaType, data: imageBase64 },
-                },
-                {
-                  type: "text",
-                  text: EXTRACTION_PROMPT(
-                    homeOrg?.name ?? "Home Team",
-                    homePlayers,
-                    awayOrg?.name ?? "Away Team",
-                    awayPlayers,
-                  ),
-                },
-              ],
-            },
-          ],
-        });
+        const text = await callOpenRouter([
+          {
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: dataUrl } },
+              {
+                type: "text",
+                text: EXTRACTION_PROMPT(
+                  homeOrg?.name ?? "Home Team",
+                  homePlayers,
+                  awayOrg?.name ?? "Away Team",
+                  awayPlayers,
+                ),
+              },
+            ],
+          },
+        ]);
 
-        const text = response.content[0]?.type === "text" ? response.content[0].text.trim() : "";
         // Strip markdown code fences if present
         const jsonText = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
         const parsed = JSON.parse(jsonText) as {
