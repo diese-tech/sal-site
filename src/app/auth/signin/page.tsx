@@ -5,9 +5,10 @@ import { getAuthUser } from "@/lib/supabase-auth-server";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Sign In — SAL" };
 
-export default async function SignInPage() {
+export default async function SignInPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const { next } = await searchParams;
   const user = await getAuthUser();
-  if (user) redirect("/register");
+  if (user) redirect(next ?? "/register");
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-4 py-16">
@@ -21,7 +22,7 @@ export default async function SignInPage() {
             Sign in with Discord to register for the draft or claim your player profile.
           </p>
         </div>
-        <SignInClient />
+        <SignInClient next={next} />
       </div>
     </main>
   );

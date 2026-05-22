@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 
-export function SignInClient() {
+export function SignInClient({ next }: { next?: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -11,10 +11,12 @@ export function SignInClient() {
     setLoading(true);
     setError(null);
     const supabase = getSupabaseBrowserClient();
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    if (next) callbackUrl.searchParams.set("next", next);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "discord",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: callbackUrl.toString(),
         scopes: "identify",
       },
     });

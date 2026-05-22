@@ -4,12 +4,14 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
+  const next = searchParams.get("next");
 
   if (!code) {
     return NextResponse.redirect(`${origin}/auth/error?message=missing_code`);
   }
 
-  const response = NextResponse.redirect(`${origin}/register`);
+  const redirectPath = next?.startsWith("/") ? next : "/register";
+  const response = NextResponse.redirect(`${origin}${redirectPath}`);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

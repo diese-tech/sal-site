@@ -1,4 +1,5 @@
 import type { Match, Org, DivisionId } from "@/types/league";
+import Link from "next/link";
 import { OrgLogo } from "@/components/card-lab/ui";
 import { formatMatchDate } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
@@ -108,8 +109,13 @@ export function MatchCard({
           </div>
         </div>
 
-        {(match.streamUrl || match.vodUrl) && (
+        {(match.status !== "completed" || match.streamUrl || match.vodUrl) && (
           <div className="mt-3 flex items-center gap-2 border-t border-white/8 pt-3">
+            {match.status !== "completed" && (
+              <Link href={`/draft/god/${match.id}`} className="rounded-lg border border-cyan-300/30 bg-cyan-400/10 px-3 py-1.5 text-xs font-black uppercase text-cyan-100 transition hover:bg-cyan-400/15">
+                Start / Join / Watch Draft
+              </Link>
+            )}
             {match.streamUrl && (
               <a href={match.streamUrl} className="rounded-lg border border-orange-300/30 bg-orange-400/10 px-3 py-1.5 text-xs font-black uppercase text-orange-100 transition hover:bg-orange-400/15">
                 ▶ Watch Live
