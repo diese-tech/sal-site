@@ -135,11 +135,11 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
   const pickedIds = new Set(picks.map((p) => p.playerId));
   const shortlistedIds = new Set(shortlist.map((e) => e.playerId));
 
-  const DIVISION_TIER: Record<string, number> = { solar: 1, lunar: 2, gaia: 3 };
+  const DIVISION_TIER: Record<string, number> = { gaia: 1, solar: 2, lunar: 3 };
   const DIVISION_LABELS: Record<string, string> = { solar: "Solar", lunar: "Lunar", gaia: "Gaia" };
   const roomTier = DIVISION_TIER[room.divisionId] ?? 1;
 
-  const visibleDivisions = (["solar", "lunar", "gaia"] as const).filter(
+  const visibleDivisions = (["gaia", "solar", "lunar"] as const).filter(
     (d) => (DIVISION_TIER[d] ?? 0) >= roomTier,
   );
 

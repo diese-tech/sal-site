@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils";
 
 const DIVISIONS: { id: DivisionId | "all"; label: string }[] = [
   { id: "all", label: "All" },
+  { id: "gaia", label: "Gaia" },
   { id: "solar", label: "Solar" },
   { id: "lunar", label: "Lunar" },
-  { id: "gaia", label: "Gaia" },
 ];
 
 const STATUSES: { id: MatchStatus | "all"; label: string }[] = [

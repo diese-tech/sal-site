@@ -12,7 +12,7 @@ function emptyMatch(data: LeagueData): Match {
   const secondOrg = data.orgs.find((o) => o.id !== firstOrg?.id) ?? data.orgs[1];
   return {
     id: crypto.randomUUID(),
-    divisionId: "solar",
+    divisionId: "gaia",
     homeOrgId: firstOrg?.id ?? "",
     awayOrgId: secondOrg?.id ?? "",
     scheduledDate: new Date().toISOString().slice(0, 10),
@@ -145,7 +145,7 @@ export function AdminMatchesClient({
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">
-        {(["all", "solar", "lunar", "gaia"] as const).map((d) => (
+        {(["all", "gaia", "solar", "lunar"] as const).map((d) => (
           <FilterChip key={d} active={divFilter === d} onClick={() => setDivFilter(d)}>{d === "all" ? "All Divisions" : d.charAt(0).toUpperCase() + d.slice(1)}</FilterChip>
         ))}
         <span className="w-px self-stretch bg-white/10" />

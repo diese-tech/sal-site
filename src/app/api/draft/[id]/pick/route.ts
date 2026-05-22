@@ -5,7 +5,7 @@ import { getCaptainSessionFromRequest } from "@/lib/captain-auth";
 import { buildPickSequence } from "@/types/draft";
 import { getLeagueData, writeAuditLog } from "@/lib/league-data";
 
-const DIVISION_TIER: Record<string, number> = { solar: 1, lunar: 2, gaia: 3 };
+const DIVISION_TIER: Record<string, number> = { gaia: 1, solar: 2, lunar: 3 };
 
 const pickSchema = z.object({
   playerId: z.string().min(1),

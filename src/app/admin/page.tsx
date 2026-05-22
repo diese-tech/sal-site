@@ -17,7 +17,7 @@ export default async function AdminOverviewPage() {
   const completedMatches = matches.filter((m) => m.status === "completed").length;
   const liveMatches = matches.filter((m) => m.status === "live").length;
 
-  const divisionBreakdown = ["solar", "lunar", "gaia"].map((id) => ({
+  const divisionBreakdown = ["gaia", "solar", "lunar"].map((id) => ({
     id,
     orgs: orgs.filter((o) => o.divisionId === id).length,
     players: players.filter((p) => p.divisionId === id).length,
