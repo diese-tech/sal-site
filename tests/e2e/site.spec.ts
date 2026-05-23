@@ -958,7 +958,7 @@ async function hasHorizontalOverflow(page: Page) {
 
 // --- MarkdownBody XSS and link safety ---
 
-describe("MarkdownBody XSS and link safety", () => {
+test.describe("MarkdownBody XSS and link safety", () => {
   async function getPreviewLinkHref(page: Page, markdownLink: string): Promise<string | null> {
     await adminLogin(page);
     await page.goto("/admin/announcements");
