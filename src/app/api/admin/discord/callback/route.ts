@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { adminCookie } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -27,8 +28,13 @@ export async function GET(request: NextRequest) {
     return response;
   };
 
-  // Verify state
-  if (!state || !storedState || state !== storedState) {
+  // Verify state using timing-safe comparison to prevent timing oracle attacks
+  const stateMatch =
+    state &&
+    storedState &&
+    state.length === storedState.length &&
+    timingSafeEqual(Buffer.from(state), Buffer.from(storedState));
+  if (!stateMatch) {
     const response = NextResponse.redirect(new URL("/admin/login?error=invalid_state", siteUrl()));
     return clearStateCookie(response);
   }
