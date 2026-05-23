@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
-import { verifyCaptainToken } from "@/lib/draft-data";
+import { consumeCaptainToken } from "@/lib/draft-data";
 
 const COOKIE_NAME = "sal_captain_session";
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 days — matches token expiry
@@ -40,5 +40,5 @@ export function getCaptainSessionFromRequest(request: NextRequest): CaptainSessi
 
 /** Exchange a one-time captain token for a session. Returns the session or null on invalid/expired token. */
 export async function exchangeToken(token: string): Promise<CaptainSession | null> {
-  return verifyCaptainToken(token);
+  return consumeCaptainToken(token);
 }
