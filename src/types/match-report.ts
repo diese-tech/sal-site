@@ -13,6 +13,7 @@ export interface MatchReport {
   awayScore?: number;
   totalGames?: number;
   screenshotUrls: string[];
+  extractedData?: ExtractedGame[];
   createdAt: string;
   reviewedAt?: string;
   reviewedBy?: string;
