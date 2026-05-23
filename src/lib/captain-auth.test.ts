@@ -4,10 +4,10 @@ import { NextRequest } from "next/server";
 import { getCaptainSessionFromRequest, exchangeToken } from "./captain-auth";
 
 vi.mock("@/lib/draft-data", () => ({
-  verifyCaptainToken: vi.fn(),
+  consumeCaptainToken: vi.fn(),
 }));
 
-import { verifyCaptainToken } from "@/lib/draft-data";
+import { consumeCaptainToken } from "@/lib/draft-data";
 
 const COOKIE = "sal_captain_session";
 const TEST_SECRET = "test-captain-secret";
@@ -26,7 +26,7 @@ function makeRequest(cookieValue?: string): NextRequest {
   return new NextRequest("http://localhost/api/draft/test", { headers });
 }
 
-const mockVerify = vi.mocked(verifyCaptainToken);
+const mockVerify = vi.mocked(consumeCaptainToken);
 
 describe("exchangeToken", () => {
   beforeEach(() => {
@@ -34,24 +34,24 @@ describe("exchangeToken", () => {
     vi.stubEnv("CAPTAIN_SESSION_SECRET", TEST_SECRET);
   });
 
-  it("returns the session when verifyCaptainToken resolves a valid session", async () => {
+  it("returns the session when consumeCaptainToken resolves a valid session", async () => {
     const session = { draftRoomId: "draft-room-1", orgId: "helix-reign" };
     mockVerify.mockResolvedValue(session);
     expect(await exchangeToken("valid-token")).toEqual(session);
     expect(mockVerify).toHaveBeenCalledWith("valid-token");
   });
 
-  it("returns null when verifyCaptainToken returns null (invalid token)", async () => {
+  it("returns null when consumeCaptainToken returns null (invalid token)", async () => {
     mockVerify.mockResolvedValue(null);
     expect(await exchangeToken("bad-token")).toBeNull();
   });
 
-  it("returns null when verifyCaptainToken returns null (expired token)", async () => {
+  it("returns null when consumeCaptainToken returns null (expired token)", async () => {
     mockVerify.mockResolvedValue(null);
     expect(await exchangeToken("expired-token")).toBeNull();
   });
 
-  it("propagates rejection from verifyCaptainToken (unexpected DB error)", async () => {
+  it("propagates rejection from consumeCaptainToken (unexpected DB error)", async () => {
     mockVerify.mockRejectedValue(new Error("db error"));
     await expect(exchangeToken("any-token")).rejects.toThrow("db error");
   });
