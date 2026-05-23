@@ -1,3 +1,4 @@
+import { createHmac } from "crypto";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import { getCaptainSessionFromRequest, exchangeToken } from "./captain-auth";
@@ -9,6 +10,13 @@ vi.mock("@/lib/draft-data", () => ({
 import { verifyCaptainToken } from "@/lib/draft-data";
 
 const COOKIE = "sal_captain_session";
+const TEST_SECRET = "test-captain-secret";
+
+function signedCookie(draftRoomId: string, orgId: string): string {
+  const encoded = Buffer.from(`${draftRoomId}|${orgId}`).toString("base64url");
+  const signature = createHmac("sha256", TEST_SECRET).update(encoded).digest("hex");
+  return `${encoded}.${signature}`;
+}
 
 function makeRequest(cookieValue?: string): NextRequest {
   const headers = new Headers();
@@ -23,6 +31,7 @@ const mockVerify = vi.mocked(verifyCaptainToken);
 describe("exchangeToken", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv("CAPTAIN_SESSION_SECRET", TEST_SECRET);
   });
 
   it("returns the session when verifyCaptainToken resolves a valid session", async () => {
@@ -49,6 +58,10 @@ describe("exchangeToken", () => {
 });
 
 describe("getCaptainSessionFromRequest", () => {
+  beforeEach(() => {
+    vi.stubEnv("CAPTAIN_SESSION_SECRET", TEST_SECRET);
+  });
+
   it("returns null when cookie is absent", () => {
     expect(getCaptainSessionFromRequest(makeRequest())).toBeNull();
   });
@@ -57,39 +70,49 @@ describe("getCaptainSessionFromRequest", () => {
     expect(getCaptainSessionFromRequest(makeRequest(""))).toBeNull();
   });
 
-  it("returns null when cookie has no colon separator", () => {
+  it("returns null when cookie has no dot separator (unsigned plain text)", () => {
     expect(getCaptainSessionFromRequest(makeRequest("nodraftroom"))).toBeNull();
   });
 
-  it("returns null when draftRoomId is empty", () => {
-    // ":orgId" — first segment is empty
-    expect(getCaptainSessionFromRequest(makeRequest(":helix-reign"))).toBeNull();
+  it("returns null when cookie has no dot separator (old colon format)", () => {
+    expect(getCaptainSessionFromRequest(makeRequest("draft-room-1:helix-reign"))).toBeNull();
   });
 
-  it("returns null when orgId is empty", () => {
-    // "draftRoomId:" — second segment is empty
-    expect(getCaptainSessionFromRequest(makeRequest("draft-room-1:"))).toBeNull();
+  it("returns null when draftRoomId is empty in a signed cookie", () => {
+    // signed cookie where payload decodes to "|orgId"
+    expect(getCaptainSessionFromRequest(makeRequest(signedCookie("", "helix-reign")))).toBeNull();
   });
 
-  it("parses a valid draftRoomId:orgId cookie", () => {
-    const session = getCaptainSessionFromRequest(makeRequest("draft-room-1:helix-reign"));
+  it("returns null when orgId is empty in a signed cookie", () => {
+    // signed cookie where payload decodes to "draftRoomId|"
+    expect(getCaptainSessionFromRequest(makeRequest(signedCookie("draft-room-1", "")))).toBeNull();
+  });
+
+  it("parses a valid signed cookie", () => {
+    const session = getCaptainSessionFromRequest(makeRequest(signedCookie("draft-room-1", "helix-reign")));
     expect(session).toEqual({ draftRoomId: "draft-room-1", orgId: "helix-reign" });
   });
 
-  it("uses only the first two colon-separated segments", () => {
-    // Extra colons in the value should not crash or be parsed
-    const session = getCaptainSessionFromRequest(makeRequest("draft-room-1:helix-reign:extra"));
-    expect(session).toEqual({ draftRoomId: "draft-room-1", orgId: "helix-reign" });
+  it("returns null when signature is wrong (tampered cookie)", () => {
+    const valid = signedCookie("draft-room-1", "helix-reign");
+    const [encoded] = valid.split(".");
+    const tampered = `${encoded}.badsignature`;
+    expect(getCaptainSessionFromRequest(makeRequest(tampered))).toBeNull();
   });
 
-  // Security note: the session is unsigned plain text (Bug #54).
-  // Any client can craft an arbitrary draftRoomId:orgId cookie and impersonate a captain.
-  // The tests below document this vulnerability — they pass because the current code
-  // accepts forged values without validation.
-  it("Bug #54: accepts a forged draftRoomId without signature verification", () => {
+  it("returns null when payload is tampered even if format looks right", () => {
+    const valid = signedCookie("draft-room-1", "helix-reign");
+    const [, signature] = valid.split(".");
+    // Change the payload to a different room
+    const tamperedEncoded = Buffer.from("evil-room|evil-org").toString("base64url");
+    const tampered = `${tamperedEncoded}.${signature}`;
+    expect(getCaptainSessionFromRequest(makeRequest(tampered))).toBeNull();
+  });
+
+  // Security fix for Bug #54: forged unsigned cookies are now rejected.
+  it("Bug #54 fix: rejects a forged unsigned draftRoomId:orgId cookie", () => {
     const forged = getCaptainSessionFromRequest(makeRequest("any-room:any-org"));
-    // This should ideally return null for an unsigned/unverified token,
-    // but currently it returns the forged values as-is.
-    expect(forged).toEqual({ draftRoomId: "any-room", orgId: "any-org" });
+    // The unsigned/unverified cookie must now return null.
+    expect(forged).toBeNull();
   });
 });
