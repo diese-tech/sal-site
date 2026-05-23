@@ -22,9 +22,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const files = formData.getAll("screenshots") as File[];
   if (files.length === 0) return NextResponse.json({ error: "No screenshots provided." }, { status: 400 });
-  if (files.length > 5) return NextResponse.json({ error: "Maximum 5 screenshots allowed." }, { status: 400 });
 
   const existingUrls = ((report as { screenshot_urls: string[] }).screenshot_urls) ?? [];
+  const totalAfterUpload = existingUrls.length + files.length;
+
+  if (totalAfterUpload > 5) {
+    return NextResponse.json(
+      { error: `Maximum 5 screenshots allowed. This report already has ${existingUrls.length}.` },
+      { status: 400 },
+    );
+  }
   const newUrls: string[] = [];
 
   for (const file of files) {
