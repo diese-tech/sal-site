@@ -29,14 +29,17 @@ const divisionTopRow: Record<DivisionId, string> = {
 
 const inactiveTab = "border-white/10 bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-slate-200";
 
-function StreakDots({ streak }: { streak: ("W" | "L")[] }) {
+function StreakDots({ streak }: { streak: ("W" | "L" | "D")[] }) {
   return (
     <div className="flex items-center gap-0.5">
       {streak.slice(-5).map((r, i) => (
         <span
           key={i}
-          className={cn("h-2 w-2 rounded-full", r === "W" ? "bg-emerald-400" : "bg-red-500/70")}
-          title={r}
+          className={cn(
+            "h-2 w-2 rounded-full",
+            r === "W" ? "bg-emerald-400" : r === "D" ? "bg-yellow-400/80" : "bg-red-500/70",
+          )}
+          title={r === "D" ? "Draw" : r}
         />
       ))}
     </div>

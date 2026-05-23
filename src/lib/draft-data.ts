@@ -203,6 +203,19 @@ export async function verifyCaptainToken(token: string): Promise<{ draftRoomId: 
   return { draftRoomId: data.draft_room_id as string, orgId: data.org_id as string };
 }
 
+/** Verify a captain token AND delete it. Returns null if invalid/expired. */
+export async function consumeCaptainToken(token: string): Promise<{ draftRoomId: string; orgId: string } | null> {
+  const session = await verifyCaptainToken(token);
+  if (!session) return null;
+
+  const supabase = getSupabaseServerClient();
+  if (supabase) {
+    const tokenHash = hashToken(token);
+    await supabase.from("captain_tokens").delete().eq("token_hash", tokenHash);
+  }
+  return session;
+}
+
 // ---- Shortlist -----------------------------------------------------------
 
 export interface ShortlistEntry {
