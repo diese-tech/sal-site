@@ -1,16 +1,16 @@
 import { createBrowserClient } from "@supabase/ssr";
 
-function requirePublicSupabaseEnv(name: "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_ANON_KEY") {
-  const value = process.env[name];
-  if (!value && process.env.NODE_ENV !== "test") {
-    throw new Error(`${name} must be set to initialize the browser Supabase client.`);
-  }
-  return value ?? "";
+export function isPublicSupabaseConfigured() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
 export function getSupabaseBrowserClient() {
+  if (!isPublicSupabaseConfigured()) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set to initialize the browser Supabase client.");
+  }
+
   return createBrowserClient(
-    requirePublicSupabaseEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requirePublicSupabaseEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 }

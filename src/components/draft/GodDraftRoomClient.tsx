@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TURN_SECONDS } from "@/lib/god-draft-format";
 import { canRoleSubmitDraftAction } from "@/lib/god-draft-rules";
-import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { getSupabaseBrowserClient, isPublicSupabaseConfigured } from "@/lib/supabase-browser";
 import type { DraftChatChannel, DraftChatMessage, DraftSelection, GodDraftRoomData, GodDraftSession } from "@/types/god-draft";
 
 type RealtimeStatus = "connecting" | "connected" | "degraded";
@@ -19,7 +19,7 @@ export function GodDraftRoomClient({ initialData }: { initialData: GodDraftRoomD
   const [secondsLeft, setSecondsLeft] = useState(() => calculateSecondsLeft(initialData.session));
   const [busy, setBusy] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>(
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "connecting" : "degraded",
+    isPublicSupabaseConfigured() ? "connecting" : "degraded",
   );
   const router = useRouter();
 
@@ -39,7 +39,7 @@ export function GodDraftRoomClient({ initialData }: { initialData: GodDraftRoomD
   }, [router]);
 
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return;
+    if (!isPublicSupabaseConfigured()) return;
 
     const supabase = getSupabaseBrowserClient();
     const sessionChannel = supabase
