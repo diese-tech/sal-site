@@ -205,15 +205,20 @@ export async function verifyCaptainToken(token: string): Promise<{ draftRoomId: 
 
 /** Verify a captain token AND delete it. Returns null if invalid/expired. */
 export async function consumeCaptainToken(token: string): Promise<{ draftRoomId: string; orgId: string } | null> {
-  const session = await verifyCaptainToken(token);
-  if (!session) return null;
-
   const supabase = getSupabaseServerClient();
-  if (supabase) {
-    const tokenHash = hashToken(token);
-    await supabase.from("captain_tokens").delete().eq("token_hash", tokenHash);
-  }
-  return session;
+  if (!supabase) return null;
+
+  const tokenHash = hashToken(token);
+  const { data, error } = await supabase
+    .from("captain_tokens")
+    .delete()
+    .eq("token_hash", tokenHash)
+    .gt("expires_at", new Date().toISOString())
+    .select("draft_room_id, org_id")
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return { draftRoomId: data.draft_room_id as string, orgId: data.org_id as string };
 }
 
 // ---- Shortlist -----------------------------------------------------------

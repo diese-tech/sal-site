@@ -1,7 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
+import { checkRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const ip = getRateLimitIdentifier(request);
+  const rate = checkRateLimit(`admin-discord-authorize:${ip}`);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Too many authorization attempts. Try again later." },
+      { status: 429, headers: { "Retry-After": retryAfterSeconds(rate.resetAt) } },
+    );
+  }
+
   const clientId = process.env.DISCORD_ADMIN_CLIENT_ID;
   const redirectUri = process.env.DISCORD_ADMIN_REDIRECT_URI;
   if (!clientId || !redirectUri) {

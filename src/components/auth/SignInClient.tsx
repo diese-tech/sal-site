@@ -1,13 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { getSupabaseBrowserClient, isPublicSupabaseConfigured } from "@/lib/supabase-browser";
 
 export function SignInClient({ next }: { next?: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const supabaseConfigured = isPublicSupabaseConfigured();
+
   async function handleSignIn() {
+    if (!supabaseConfigured) {
+      setError("Sign in is not configured yet.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     const supabase = getSupabaseBrowserClient();
@@ -30,11 +37,11 @@ export function SignInClient({ next }: { next?: string }) {
     <div className="rounded-2xl border border-white/10 bg-slate-950/84 p-6 backdrop-blur">
       <button
         onClick={handleSignIn}
-        disabled={loading}
+        disabled={loading || !supabaseConfigured}
         className="flex w-full items-center justify-center gap-3 rounded-xl border border-indigo-400/40 bg-indigo-500/20 px-5 py-3 text-sm font-black uppercase text-indigo-100 transition hover:bg-indigo-500/30 disabled:opacity-60"
       >
         <DiscordIcon />
-        {loading ? "Redirecting…" : "Continue with Discord"}
+        {loading ? "Redirecting…" : supabaseConfigured ? "Continue with Discord" : "Sign in unavailable"}
       </button>
 
       {error && (

@@ -4,25 +4,23 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
-import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { getSupabaseBrowserClient, isPublicSupabaseConfigured } from "@/lib/supabase-browser";
 
 export function AuthButton() {
-  const [user, setUser] = useState<User | null | undefined>(undefined);
+  const supabaseConfigured = isPublicSupabaseConfigured();
+  const [user, setUser] = useState<User | null | undefined>(supabaseConfigured ? undefined : null);
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      setUser(null);
-      return;
-    }
+    if (!supabaseConfigured) return;
     const sb = getSupabaseBrowserClient();
     sb.auth.getUser().then(({ data: { user } }) => setUser(user ?? null));
     const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => {
       setUser(session?.user ?? null);
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [supabaseConfigured]);
 
   async function handleSignOut() {
     setMenuOpen(false);

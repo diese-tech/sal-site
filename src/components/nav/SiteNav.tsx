@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { BRAND_ASSETS } from "@/lib/assets";
 import { cn } from "@/lib/utils";
 import { AuthButton } from "@/components/auth/AuthButton";
@@ -14,7 +14,6 @@ const NAV_LINKS = [
   { href: "/schedule", label: "Schedule" },
   { href: "/teams", label: "Teams" },
   { href: "/players", label: "Players" },
-  { href: "/gods", label: "Gods" },
   { href: "/watch", label: "Watch" },
 ];
 
@@ -22,9 +21,6 @@ export function SiteNav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const isActive = (href: string, exact?: boolean) => exact ? pathname === href : pathname.startsWith(href);
-
-  // Close menu on route change
-  useEffect(() => { setMenuOpen(false); }, [pathname]);
 
   return (
     <>
@@ -49,6 +45,7 @@ export function SiteNav() {
                 <Link
                   key={href}
                   href={href}
+                  onClick={() => setMenuOpen(false)}
                   className={cn(
                     "rounded-xl border px-3 py-1.5 text-xs font-black uppercase transition",
                     active
@@ -67,6 +64,7 @@ export function SiteNav() {
             <AuthButton />
             <Link
               href="/admin"
+              onClick={() => setMenuOpen(false)}
               className={cn(
                 "hidden shrink-0 rounded-xl border px-3 py-1.5 text-xs font-black uppercase transition sm:block",
                 pathname.startsWith("/admin")
@@ -106,6 +104,7 @@ export function SiteNav() {
                 <Link
                   key={href}
                   href={href}
+                  onClick={() => setMenuOpen(false)}
                   className={cn(
                     "rounded-xl border px-4 py-3 text-sm font-black uppercase transition",
                     active
@@ -119,6 +118,7 @@ export function SiteNav() {
             })}
             <Link
               href="/admin"
+              onClick={() => setMenuOpen(false)}
               className={cn(
                 "rounded-xl border px-4 py-3 text-sm font-black uppercase transition",
                 pathname.startsWith("/admin")
