@@ -8,6 +8,8 @@ import { canRoleSubmitDraftAction } from "@/lib/god-draft-rules";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 import type { DraftChatChannel, DraftChatMessage, DraftSelection, GodDraftRoomData, GodDraftSession } from "@/types/god-draft";
 
+type RealtimeStatus = "connecting" | "connected" | "degraded";
+
 export function GodDraftRoomClient({ initialData }: { initialData: GodDraftRoomData }) {
   const [session, setSession] = useState(initialData.session);
   const [messages, setMessages] = useState(initialData.chatMessages);
@@ -16,6 +18,9 @@ export function GodDraftRoomClient({ initialData }: { initialData: GodDraftRoomD
   const [filter, setFilter] = useState<"all" | "available" | "vaulted">("all");
   const [secondsLeft, setSecondsLeft] = useState(() => calculateSecondsLeft(initialData.session));
   const [busy, setBusy] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>(
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "connecting" : "degraded",
+  );
   const router = useRouter();
 
   const post = useCallback(async (url: string, body: Record<string, unknown>) => {
@@ -35,6 +40,7 @@ export function GodDraftRoomClient({ initialData }: { initialData: GodDraftRoomD
 
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return;
+
     const supabase = getSupabaseBrowserClient();
     const sessionChannel = supabase
       .channel(`god-draft-session-${initialData.session.id}`)
@@ -52,11 +58,19 @@ export function GodDraftRoomClient({ initialData }: { initialData: GodDraftRoomD
         { event: "INSERT", schema: "public", table: "draft_chat_messages", filter: `session_id=eq.${initialData.session.id}` },
         (payload) => setMessages((current) => [...current, mapRealtimeMessage(payload.new as Record<string, unknown>)]),
       )
-      .subscribe();
+      .subscribe((status) => {
+        setRealtimeStatus(status === "SUBSCRIBED" ? "connected" : "degraded");
+      });
     return () => {
       supabase.removeChannel(sessionChannel);
     };
   }, [initialData.session.id, router]);
+
+  useEffect(() => {
+    if (realtimeStatus !== "degraded") return;
+    const poll = window.setInterval(() => router.refresh(), 3000);
+    return () => window.clearInterval(poll);
+  }, [realtimeStatus, router]);
 
   useEffect(() => {
     if (!session.turnStartedAt || !session.currentType) return;
@@ -113,7 +127,7 @@ export function GodDraftRoomClient({ initialData }: { initialData: GodDraftRoomD
         <div className="grid gap-5 p-5 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
           <TeamPanel name={initialData.homeOrg.name} tag={initialData.homeOrg.tag} ready={session.homeReady} side="A" />
           <div className="text-center">
-            <p className="text-[0.65rem] font-black uppercase tracking-widest text-cyan-200">God Draft</p>
+            <p className="text-[0.65rem] font-black uppercase tracking-widest text-cyan-200">Smite 2 Draft</p>
             <h1 className="mt-1 text-2xl font-black text-white">Game {session.gameNumber}</h1>
             <p className="mt-1 text-xs font-bold uppercase text-slate-500">Status: {session.status}</p>
             {session.currentType && (
@@ -127,6 +141,13 @@ export function GodDraftRoomClient({ initialData }: { initialData: GodDraftRoomD
           </div>
           <TeamPanel name={initialData.awayOrg.name} tag={initialData.awayOrg.tag} ready={session.awayReady} side="B" alignRight />
         </div>
+        {realtimeStatus !== "connected" && (
+          <div className="border-t border-amber-300/20 bg-amber-400/10 px-4 py-3 text-xs font-bold text-amber-100">
+            {realtimeStatus === "connecting"
+              ? "Connecting to live draft updates…"
+              : "Live updates are reconnecting. The board will refresh automatically every few seconds."}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2 border-t border-white/8 p-4">
           {canRequestReset && (
             <>

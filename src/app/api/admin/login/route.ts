@@ -1,23 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { adminCookie } from "@/lib/admin-auth";
-import { checkRateLimit, clearRateLimit } from "@/lib/rate-limit";
-
-function clientIp(request: NextRequest): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
-    request.headers.get("x-real-ip") ??
-    "unknown"
-  );
-}
+import { checkRateLimit, clearRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
-  const ip = clientIp(request);
+  const ip = getRateLimitIdentifier(request);
   const rate = checkRateLimit(`admin-login:${ip}`);
   if (!rate.allowed) {
     return NextResponse.json(
       { error: "Too many login attempts. Try again later." },
-      { status: 429, headers: { "Retry-After": String(Math.ceil((rate.resetAt - Date.now()) / 1000)) } },
+      { status: 429, headers: { "Retry-After": retryAfterSeconds(rate.resetAt) } },
     );
   }
 

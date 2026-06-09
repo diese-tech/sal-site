@@ -22,6 +22,7 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
   const [captainOrgId, setCaptainOrgId] = useState<string | null>(initialCaptainOrgId);
   const [picking, setPicking] = useState(false);
   const [pickMessage, setPickMessage] = useState("");
+  const [tokenExchangeMessage, setTokenExchangeMessage] = useState("");
   const [connected, setConnected] = useState(true);
   const [shortlist, setShortlist] = useState<ShortlistEntry[]>([]);
   const [shortlistBusy, setShortlistBusy] = useState<string | null>(null); // playerId being acted on
@@ -37,16 +38,22 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: tokenToExchange }),
     }).then(async (res) => {
-      if (res.ok) {
-        const data = await res.json() as { orgId: string };
-        setCaptainOrgId(data.orgId);
-        if (typeof window !== "undefined") {
-          const url = new URL(window.location.href);
-          url.searchParams.delete("token");
-          window.history.replaceState({}, "", url.toString());
-        }
+      if (!res.ok) {
+        setTokenExchangeMessage("This captain link is invalid or expired. Request a new link from an admin.");
+        return;
       }
-    }).catch(() => {});
+
+      const data = await res.json() as { orgId: string };
+      setCaptainOrgId(data.orgId);
+      setTokenExchangeMessage("Joined as captain. You can make picks for your team when you are on the clock.");
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.delete("token");
+        window.history.replaceState({}, "", url.toString());
+      }
+    }).catch(() => {
+      setTokenExchangeMessage("Unable to verify this captain link. Check your connection or request a new link from an admin.");
+    });
   }, [tokenToExchange, captainOrgId, draftId]);
 
   // Polling
@@ -169,13 +176,26 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
           </div>
           <div className="flex items-center gap-3">
             {!connected && <span className="text-xs font-semibold text-orange-300">Reconnecting…</span>}
-            {captainOrgId && <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-3 py-1 text-xs font-black text-emerald-100">Captain: {getOrg(captainOrgId)?.name}</span>}
+            {captainOrgId ? (
+              <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-3 py-1 text-xs font-black text-emerald-100">Captain: {getOrg(captainOrgId)?.name}</span>
+            ) : (
+              <span className="rounded-full border border-slate-600/60 bg-white/[0.03] px-3 py-1 text-xs font-black text-slate-300">Spectator mode</span>
+            )}
             <span className="text-xs font-semibold text-slate-500">Pick {Math.min(room.currentPickIndex + 1, totalPicks)} / {totalPicks}</span>
           </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+        {tokenExchangeMessage && (
+          <div className={cn(
+            "mb-6 rounded-2xl border p-4 text-sm font-semibold",
+            captainOrgId ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100" : "border-orange-300/30 bg-orange-300/10 text-orange-100",
+          )}>
+            {tokenExchangeMessage}
+          </div>
+        )}
+
         {/* On-the-clock banner */}
         {room.status === "active" && currentOrgId && (
           <div className={cn("mb-6 rounded-2xl border p-4 text-center", isMyTurn ? "border-orange-300/40 bg-orange-300/10" : "border-white/10 bg-white/[0.02]")}>

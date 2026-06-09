@@ -2,12 +2,22 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { createRegistration, getRegistrationByDiscordId } from "@/lib/league-data";
 import { getAuthUser, getDiscordId, getDiscordUsername, getDiscordDisplayName } from "@/lib/supabase-auth-server";
+import { checkRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
 
 const schema = z.object({
   formData: z.record(z.string(), z.string()),
 });
 
 export async function POST(request: NextRequest) {
+  const ip = getRateLimitIdentifier(request);
+  const rate = checkRateLimit(`auth-register:${ip}`);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Too many registration attempts. Try again later." },
+      { status: 429, headers: { "Retry-After": retryAfterSeconds(rate.resetAt) } },
+    );
+  }
+
   const user = await getAuthUser();
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 

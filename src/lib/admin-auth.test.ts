@@ -127,22 +127,14 @@ describe("admin-auth", () => {
     expect(result?.role).toBe("admin");
   });
 
-  // 11. Secret fallback: ADMIN_PASSWORD is used when ADMIN_SESSION_SECRET is unset
-  it("secret fallback: uses ADMIN_PASSWORD when ADMIN_SESSION_SECRET is not set", () => {
-    const fallbackSecret = "fallback-admin-password";
-
-    // Use ADMIN_PASSWORD as the secret for creating the token
-    vi.stubEnv("ADMIN_SESSION_SECRET", fallbackSecret);
+  // 11. Secret fallback: ADMIN_PASSWORD must not be used when ADMIN_SESSION_SECRET is unset
+  it("secret fallback: rejects ADMIN_PASSWORD when ADMIN_SESSION_SECRET is not set", () => {
     const token = makeAdminSession("333333333", "admin");
 
-    // Now unset ADMIN_SESSION_SECRET and set ADMIN_PASSWORD instead
     vi.stubEnv("ADMIN_SESSION_SECRET", "");
-    vi.stubEnv("ADMIN_PASSWORD", fallbackSecret);
+    vi.stubEnv("ADMIN_PASSWORD", TEST_SECRET);
 
-    // The token should still verify because the same secret is used via ADMIN_PASSWORD
-    const result = verifyAdminSession(token);
-    expect(result).not.toBeNull();
-    expect(result?.discordId).toBe("333333333");
-    expect(result?.role).toBe("admin");
+    expect(() => verifyAdminSession(token)).toThrow("ADMIN_SESSION_SECRET must be set");
+    expect(() => makeAdminSession("333333333", "admin")).toThrow("ADMIN_SESSION_SECRET must be set");
   });
 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { adminCookie } from "@/lib/admin-auth";
+import { checkRateLimit, clearRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 type DiscordTokenResponse = { access_token: string; token_type: string };
@@ -11,6 +12,15 @@ function siteUrl() {
 }
 
 export async function GET(request: NextRequest) {
+  const ip = getRateLimitIdentifier(request);
+  const rate = checkRateLimit(`admin-discord-callback:${ip}`);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Too many authorization attempts. Try again later." },
+      { status: 429, headers: { "Retry-After": retryAfterSeconds(rate.resetAt) } },
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const state = searchParams.get("state");
@@ -109,6 +119,7 @@ export async function GET(request: NextRequest) {
 
   // Set admin session cookie and redirect to admin
   const response = NextResponse.redirect(new URL("/admin", siteUrl()));
+  clearRateLimit(`admin-discord-callback:${ip}`);
   const cookie = adminCookie(discordUser.id, role);
   response.cookies.set(cookie.name, cookie.value, cookie.options);
   return clearStateCookie(response);

@@ -13,6 +13,18 @@ const store = new Map<string, Entry>();
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const MAX_ATTEMPTS = 10;
 
+export function getRateLimitIdentifier(request: { headers: Headers }): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+    request.headers.get("x-real-ip") ??
+    "unknown"
+  );
+}
+
+export function retryAfterSeconds(resetAt: number): string {
+  return String(Math.max(1, Math.ceil((resetAt - Date.now()) / 1000)));
+}
+
 export function checkRateLimit(key: string): { allowed: boolean; remaining: number; resetAt: number } {
   const now = Date.now();
   let entry = store.get(key);

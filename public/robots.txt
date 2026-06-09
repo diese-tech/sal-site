@@ -1,7 +1,7 @@
 User-agent: *
 Allow: /
-
-# Keep admin area private
 Disallow: /admin/
+Disallow: /api/
+Disallow: /auth/
 
-Sitemap: /sitemap.xml
+Sitemap: https://sal.gg/sitemap.xml

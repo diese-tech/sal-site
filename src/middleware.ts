@@ -1,13 +1,18 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+function decodeBase64Url(value: string): string {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  return atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "="));
+}
+
 async function verifyAdminSessionEdge(value: string, secret: string): Promise<boolean> {
   const dotIndex = value.lastIndexOf(".");
   if (dotIndex === -1) return false;
   const encoded = value.slice(0, dotIndex);
   const signature = value.slice(dotIndex + 1);
+  if (!encoded || !signature) return false;
 
-  // Import key
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
@@ -16,7 +21,6 @@ async function verifyAdminSessionEdge(value: string, secret: string): Promise<bo
     ["sign"],
   );
 
-  // Recompute expected signature
   const expectedBuffer = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(encoded));
   const expectedHex = Array.from(new Uint8Array(expectedBuffer))
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -24,22 +28,38 @@ async function verifyAdminSessionEdge(value: string, secret: string): Promise<bo
 
   if (expectedHex !== signature) return false;
 
-  // Verify payload
   try {
-    const payload = JSON.parse(atob(encoded.replace(/-/g, "+").replace(/_/g, "/")));
-    return typeof payload.exp === "number" && payload.exp > Date.now();
+    const payload = JSON.parse(decodeBase64Url(encoded)) as { discordId?: unknown; role?: unknown; exp?: unknown };
+    if (typeof payload.exp !== "number" || payload.exp <= Date.now()) return false;
+    if (typeof payload.discordId !== "string") return false;
+    return payload.role === "super_admin" || payload.role === "admin";
   } catch {
     return false;
   }
 }
 
+function isPublicAdminPath(pathname: string) {
+  return (
+    pathname === "/admin/login" ||
+    pathname === "/api/admin/login" ||
+    pathname.startsWith("/api/admin/discord/")
+  );
+}
+
 export async function middleware(request: NextRequest) {
-  // Protect /admin/* routes (except /admin/login itself)
   const pathname = request.nextUrl.pathname;
-  if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
-    const secret = process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_PASSWORD;
+  const protectsAdminPage = pathname.startsWith("/admin") && !isPublicAdminPath(pathname);
+  const protectsAdminApi = pathname.startsWith("/api/admin") && !isPublicAdminPath(pathname);
+
+  if (protectsAdminPage || protectsAdminApi) {
+    const secret = process.env.ADMIN_SESSION_SECRET;
     const cookieValue = request.cookies.get("sal_admin_session")?.value;
-    if (!secret || !cookieValue || !(await verifyAdminSessionEdge(cookieValue, secret))) {
+    const verified = secret && cookieValue ? await verifyAdminSessionEdge(cookieValue, secret) : false;
+
+    if (!verified) {
+      if (protectsAdminApi) {
+        return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+      }
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
   }
