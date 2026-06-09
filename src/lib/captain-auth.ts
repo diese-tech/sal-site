@@ -44,7 +44,18 @@ function verifyCaptainCookie(value: string): CaptainSession | null {
   return { draftRoomId, orgId };
 }
 
-export function setCaptainCookie(response: Response & { cookies: { set: Function } }, session: CaptainSession) {
+type CaptainCookieOptions = {
+  httpOnly: boolean;
+  sameSite: "lax";
+  secure: boolean;
+  path: string;
+  maxAge: number;
+};
+
+export function setCaptainCookie(
+  response: Response & { cookies: { set: (name: string, value: string, options: CaptainCookieOptions) => void } },
+  session: CaptainSession,
+) {
   const value = signCaptainCookie(session.draftRoomId, session.orgId);
   response.cookies.set(COOKIE_NAME, value, {
     httpOnly: true,

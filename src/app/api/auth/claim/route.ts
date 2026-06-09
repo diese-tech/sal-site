@@ -7,10 +7,20 @@ import {
   getRegistrationByDiscordId,
 } from "@/lib/league-data";
 import { getAuthUser, getDiscordId, getDiscordUsername } from "@/lib/supabase-auth-server";
+import { checkRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
 
 const schema = z.object({ playerId: z.string().min(1) });
 
 export async function POST(request: NextRequest) {
+  const ip = getRateLimitIdentifier(request);
+  const rate = checkRateLimit(`auth-claim:${ip}`);
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Too many profile claim attempts. Try again later." },
+      { status: 429, headers: { "Retry-After": retryAfterSeconds(rate.resetAt) } },
+    );
+  }
+
   const user = await getAuthUser();
   if (!user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
