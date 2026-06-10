@@ -4,6 +4,7 @@ import { buildDraftState, finalizeDraftRosters, getDraftPicks, removePlayerFromA
 import { getCaptainSessionFromRequest } from "@/lib/captain-auth";
 import { buildPickSequence } from "@/types/draft";
 import { getLeagueData, writeAuditLog } from "@/lib/league-data";
+import { reportError } from "@/lib/error-monitor";
 
 const DIVISION_TIER: Record<string, number> = { gaia: 1, solar: 2, lunar: 3 };
 
@@ -67,6 +68,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (submitted.conflict) {
       return NextResponse.json({ error: "Another pick was recorded first. Refresh and try again." }, { status: 409 });
     }
+    reportError("draft pick submission failed", new Error(submitted.message), {
+      draftRoomId: id,
+      orgId: session.orgId,
+      playerId,
+      pickNumber,
+    });
     return NextResponse.json({ error: submitted.message }, { status: 500 });
   }
   const isComplete = submitted.isComplete;
