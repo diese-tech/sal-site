@@ -7,6 +7,7 @@ import { HeroVideoLoop } from "./HeroVideoLoop";
 const HERO_CLIPS: string[] = [
   "https://pub-b669f1a9eb0f4e0da6e4159b0152d6c2.r2.dev/inspectorcody%20penta.mp4",
   "https://pub-b669f1a9eb0f4e0da6e4159b0152d6c2.r2.dev/tes%20quadra.mp4",
+  "https://pub-b669f1a9eb0f4e0da6e4159b0152d6c2.r2.dev/worm2v1.mp4",
 ];
 
 export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatchName?: string }) {
