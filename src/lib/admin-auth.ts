@@ -87,7 +87,9 @@ export function adminCookie(discordId: string, role: "super_admin" | "admin") {
     options: {
       httpOnly: true,
       sameSite: "lax" as const,
-      secure: process.env.NODE_ENV === "production",
+      // E2E_TEST_MODE: the Playwright suite runs the production build over plain
+      // http, where Secure cookies are dropped. Never set on real deployments.
+      secure: process.env.NODE_ENV === "production" && process.env.E2E_TEST_MODE !== "1",
       path: "/",
       maxAge: MAX_AGE_SECONDS,
     },
@@ -101,7 +103,9 @@ export function expiredAdminCookie() {
     options: {
       httpOnly: true,
       sameSite: "lax" as const,
-      secure: process.env.NODE_ENV === "production",
+      // E2E_TEST_MODE: the Playwright suite runs the production build over plain
+      // http, where Secure cookies are dropped. Never set on real deployments.
+      secure: process.env.NODE_ENV === "production" && process.env.E2E_TEST_MODE !== "1",
       path: "/",
       maxAge: 0,
     },

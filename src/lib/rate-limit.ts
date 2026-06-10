@@ -26,6 +26,11 @@ export function retryAfterSeconds(resetAt: number): string {
 }
 
 export function checkRateLimit(key: string): { allowed: boolean; remaining: number; resetAt: number } {
+  // The E2E suite drives every request from a single IP; without this bypass
+  // the limiter locks the whole run out. Never set on real deployments.
+  if (process.env.E2E_TEST_MODE === "1") {
+    return { allowed: true, remaining: MAX_ATTEMPTS, resetAt: Date.now() + WINDOW_MS };
+  }
   const now = Date.now();
   let entry = store.get(key);
 

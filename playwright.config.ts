@@ -17,6 +17,10 @@ export default defineConfig({
       ADMIN_SESSION_SECRET: "test-admin-session-secret",
       NEXT_PUBLIC_SUPABASE_URL: "",
       SUPABASE_SERVICE_ROLE_KEY: "",
+      // Test-only relaxations: keeps /lab routes reachable in the production
+      // build, disables the auth rate limiter (every request shares one IP),
+      // and drops the Secure cookie flag (the server runs over plain http).
+      E2E_TEST_MODE: "1",
     },
     url: "http://127.0.0.1:3107/",
     reuseExistingServer: false,
