@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
-import { updateRegistrationStatus } from "@/lib/league-data";
+import { approveRegistrationAndCreatePlayer, updateRegistrationStatus } from "@/lib/league-data";
 
 const schema = z.object({
   status: z.enum(["pending", "approved", "rejected"]),
@@ -21,6 +21,17 @@ export async function PATCH(
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
-  await updateRegistrationStatus(id, parsed.data.status, parsed.data.reviewerNote);
-  return NextResponse.json({ ok: true });
+  try {
+    if (parsed.data.status === "approved") {
+      // Approval also creates (or links) the player record — see issue #63.
+      const playerId = await approveRegistrationAndCreatePlayer(id, parsed.data.reviewerNote);
+      return NextResponse.json({ ok: true, playerId });
+    }
+    await updateRegistrationStatus(id, parsed.data.status, parsed.data.reviewerNote);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error updating registration.";
+    console.error(`PATCH /api/admin/registrations/${id} error:`, err);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

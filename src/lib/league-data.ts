@@ -733,6 +733,80 @@ export async function createRegistration(reg: Omit<Registration, "status" | "cre
   if (error) throw error;
 }
 
+export async function getRegistrationById(id: string): Promise<Registration | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase.from("registrations").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data ? fromDbRegistration(data) : null;
+}
+
+const VALID_ROLES = ["Solo", "Jungle", "Mid", "Carry", "Support", "Flex"] as const;
+
+function parseRole(value: string | undefined): (typeof VALID_ROLES)[number] | null {
+  if (!value) return null;
+  const match = VALID_ROLES.find((r) => r.toLowerCase() === value.trim().toLowerCase());
+  return match ?? null;
+}
+
+/**
+ * Approves a registration and ensures a player record exists for it (#63).
+ * If a player already exists for the registrant's Discord ID it is linked;
+ * otherwise a free-agent player is created from the registration form data.
+ * Returns the linked/created player id.
+ */
+export async function approveRegistrationAndCreatePlayer(id: string, reviewerNote?: string): Promise<string> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+
+  const reg = await getRegistrationById(id);
+  if (!reg) throw new Error("Registration not found.");
+
+  let playerId = reg.playerId ?? null;
+
+  if (!playerId) {
+    // A player may already exist for this Discord account (e.g. via claim flow)
+    const existing = await getPlayerByDiscordId(reg.discordId);
+    if (existing) {
+      playerId = existing.id;
+    } else {
+      const ign = reg.formData.ign?.trim();
+      if (!ign) throw new Error("Registration has no IGN; cannot create a player record.");
+      const primaryRole = parseRole(reg.formData.primary_role) ?? "Flex";
+      const secondaryRole = parseRole(reg.formData.secondary_role);
+      playerId = crypto.randomUUID();
+      await savePlayer({
+        id: playerId,
+        ign,
+        discordUsername: reg.discordUsername,
+        avatarInitials: ign.slice(0, 2).toUpperCase(),
+        avatarGradient: "",
+        primaryRole,
+        secondaryRoles: secondaryRole && secondaryRole !== primaryRole ? [secondaryRole] : [],
+        isStarter: false,
+        isCaptain: false,
+        status: "free-agent",
+      });
+      // Link the verified Discord identity so the player needn't claim separately
+      await claimPlayerProfile(reg.discordId, playerId);
+    }
+  }
+
+  const { error } = await supabase
+    .from("registrations")
+    .update({
+      status: "approved",
+      player_id: playerId,
+      reviewer_note: reviewerNote ?? null,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
+
+  await writeAuditLog("approve_registration", "registration", id, { playerId, reviewerNote });
+  return playerId;
+}
+
 export async function updateRegistrationStatus(
   id: string,
   status: Registration["status"],
