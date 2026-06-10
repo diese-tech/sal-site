@@ -4,6 +4,7 @@ import { z } from "zod";
 import { isAdminRequest, getAdminRequestSession } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { saveMatch, recalculateAndPersistStandings, writeAuditLog, getAdminLeagueData } from "@/lib/league-data";
+import { reportError } from "@/lib/error-monitor";
 
 const playerStatSchema = z.object({
   playerIgn: z.string().min(1),
@@ -147,7 +148,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ ok: true, homeScore: homeWins, awayScore: awayWins, totalGames });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Submit failed.";
-    console.error("match-report submit error:", err);
+    reportError("match-report submit failed", err, { reportId: id });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

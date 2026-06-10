@@ -293,11 +293,12 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
                   </div>
                 )}
               </div>
-              <div className="grid gap-2 sm:grid-cols-2">
+              {/* 2-up on phones (#111): single tall column made time-pressured picks painful */}
+              <div className="grid grid-cols-2 gap-2">
                 {availablePlayers.map((p) => {
                   const inShortlist = shortlistedIds.has(p.id);
                   return (
-                    <div key={p.id} className={cn("flex items-center justify-between gap-3 rounded-xl border bg-slate-950/70 px-4 py-3 transition", isMyTurn && !picking ? "cursor-pointer border-white/10 hover:border-cyan-300/40 hover:bg-white/[0.04]" : "border-white/5")}>
+                    <div key={p.id} className={cn("flex flex-col gap-2 rounded-xl border bg-slate-950/70 px-3 py-2.5 transition sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3", isMyTurn && !picking ? "cursor-pointer border-white/10 hover:border-cyan-300/40 hover:bg-white/[0.04]" : "border-white/5")}>
                       <div className="min-w-0">
                         <p className="truncate font-black text-white">{p.ign}</p>
                         <p className="truncate text-xs text-slate-500">@{p.discordUsername}</p>
