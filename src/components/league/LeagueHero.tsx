@@ -24,8 +24,8 @@ export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatc
       </div>
 
       <section className="relative min-h-[88vh]">
-        {/* Radial atmosphere */}
-        <div className="pointer-events-none absolute inset-0">
+        {/* Radial atmosphere — clipped so the oversized glows can't widen the page */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute right-0 top-0 h-[40rem] w-[40rem] translate-x-1/4 rounded-full bg-cyan-500/[0.16] blur-3xl" />
           <div className="absolute right-1/4 top-1/3 h-80 w-80 translate-x-1/2 rounded-full bg-orange-500/[0.12] blur-3xl" />
           <div className="absolute bottom-0 right-1/3 h-64 w-64 rounded-full bg-fuchsia-600/[0.10] blur-3xl" />

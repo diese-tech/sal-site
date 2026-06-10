@@ -61,7 +61,7 @@ async function PulseSection() {
 
   return (
     <section className="mx-auto grid max-w-7xl gap-6 px-4 py-10 sm:px-6 lg:grid-cols-[1.45fr_0.9fr]">
-      <div>
+      <div className="min-w-0">
         <SectionHeader eyebrow="Right Now" title={liveMatch ? "Live Matches" : "League Pulse"} />
         <LiveMatchFeature
           liveMatch={liveMatch}
@@ -161,7 +161,7 @@ async function MatchesSection() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <div className="grid gap-10 lg:grid-cols-2">
-        <div>
+        <div className="min-w-0">
           <SectionHeader eyebrow="Schedule" title="Upcoming Matches" action={{ label: "Full Schedule →", href: "/schedule" }} />
           <div className="space-y-3">
             {upcomingMatches.map((m) => (
@@ -169,7 +169,7 @@ async function MatchesSection() {
             ))}
           </div>
         </div>
-        <div>
+        <div className="min-w-0">
           <SectionHeader eyebrow="Results" title="Recent Results" action={{ label: "Full Schedule →", href: "/schedule" }} />
           <div className="space-y-3">
             {recentResults.map((m) => (
