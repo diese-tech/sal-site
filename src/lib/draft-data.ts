@@ -159,6 +159,35 @@ export async function updateDraftRoom(id: string, patch: Partial<{
   return fromDbRoom(data as DbDraftRoom);
 }
 
+/**
+ * Atomically records a pick and advances the draft (migration 015): locks the
+ * room row, re-validates that current_pick_index still equals
+ * expectedPickIndex, inserts the pick, and updates index/status/timers in one
+ * transaction. Returns a conflict result if a concurrent pick won the race.
+ */
+export async function submitPickAtomic(
+  draftRoomId: string,
+  orgId: string,
+  playerId: string,
+  expectedPickIndex: number,
+  totalPicks: number,
+): Promise<{ ok: true; isComplete: boolean } | { ok: false; conflict: boolean; message: string }> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const { error } = await supabase.rpc("submit_draft_pick", {
+    p_draft_room_id: draftRoomId,
+    p_org_id: orgId,
+    p_player_id: playerId,
+    p_expected_pick_index: expectedPickIndex,
+    p_total_picks: totalPicks,
+  });
+  if (error) {
+    const conflict = error.message.includes("PICK_CONFLICT") || error.message.includes("duplicate key");
+    return { ok: false, conflict, message: error.message };
+  }
+  return { ok: true, isComplete: expectedPickIndex + 1 >= totalPicks };
+}
+
 export async function recordPick(draftRoomId: string, pickNumber: number, orgId: string, playerId: string): Promise<DraftPick> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
