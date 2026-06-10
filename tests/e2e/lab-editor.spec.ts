@@ -11,7 +11,8 @@ type ControlCase = {
 
 const sliderCases: Array<ControlCase & { value: number }> = [
   { section: "player-card-controls", label: "Card scale", path: "playerCard.cardScale", value: 1.25 },
-  { section: "player-card-controls", label: "Card width", path: "playerCard.cardWidth", value: 420 },
+  // value must differ from the SAL default (420) so the config-change assertion holds
+  { section: "player-card-controls", label: "Card width", path: "playerCard.cardWidth", value: 380 },
   { section: "player-card-controls", label: "Card radius", path: "playerCard.cardRadius", value: 34 },
   { section: "player-card-controls", label: "Card padding", path: "playerCard.cardPadding", value: 30 },
   { section: "player-card-controls", label: "Banner height", path: "playerCard.bannerHeight", value: 160 },
@@ -37,7 +38,8 @@ const sliderCases: Array<ControlCase & { value: number }> = [
   { section: "board-controls", label: "Board scale", path: "board.boardScale", value: 1.12 },
   { section: "board-controls", label: "Inactive card opacity", path: "board.inactiveCardOpacity", value: 52 },
   { section: "board-controls", label: "Active card scale", path: "board.activeCardScale", value: 1.16 },
-  { section: "theme-controls", label: "Global glow opacity", path: "theme.globalGlowOpacity", value: 88 },
+  // value must differ from the SAL default (88) so the config-change assertion holds
+  { section: "theme-controls", label: "Global glow opacity", path: "theme.globalGlowOpacity", value: 64 },
   { section: "theme-controls", label: "Global glow blur", path: "theme.globalGlowBlur", value: 70 },
   { section: "theme-controls", label: "Border opacity", path: "theme.borderOpacity", value: 74 },
   { section: "theme-controls", label: "Background grid opacity", path: "theme.backgroundGridOpacity", value: 18 },
@@ -141,18 +143,22 @@ test("every select applies the intended config value", async ({ page }) => {
 });
 
 test("reset restores config, localStorage, and preview dimensions", async ({ page }) => {
-  await setNumber(page, "player-card-controls", "Card width", 420);
-  await expect.poll(() => configValue(page, "playerCard.cardWidth")).toBe(420);
-  await expect.poll(() => profileCardWidth(page)).toBeGreaterThan(400);
+  // SAL default cardWidth is 420 — change away from it, then reset back.
+  // Rendered width = cardWidth × default cardScale (1.04), so allow rounding.
+  const scaledWidth = (cardWidth: number) => async () =>
+    Math.abs((await profileCardWidth(page)) - cardWidth * 1.04) <= 2;
+  await setNumber(page, "player-card-controls", "Card width", 320);
+  await expect.poll(() => configValue(page, "playerCard.cardWidth")).toBe(320);
+  await expect.poll(scaledWidth(320)).toBe(true);
 
   await page.getByTestId("reset-config").click();
 
-  await expect.poll(() => configValue(page, "playerCard.cardWidth")).toBe(320);
-  await expect.poll(() => profileCardWidth(page)).toBe(320);
+  await expect.poll(() => configValue(page, "playerCard.cardWidth")).toBe(420);
+  await expect.poll(scaledWidth(420)).toBe(true);
   await expect(page.getByText("Reset to SAL defaults.")).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => JSON.parse(window.localStorage.getItem("sal-lab-editor-config") ?? "{}").playerCard?.cardWidth))
-    .toBe(320);
+    .toBe(420);
 });
 
 test("saved localStorage config loads only after the deterministic default render", async ({ page }) => {

@@ -26,9 +26,12 @@ export function retryAfterSeconds(resetAt: number): string {
 }
 
 export function checkRateLimit(key: string): { allowed: boolean; remaining: number; resetAt: number } {
-  // The E2E suite drives every request from a single IP; without this bypass
-  // the limiter locks the whole run out. Never set on real deployments.
-  if (process.env.E2E_TEST_MODE === "1") {
+  // The E2E suite drives every request from one host, so all keys collapse to
+  // the ":unknown" identifier and the limiter would lock the whole run out.
+  // In test mode only that shared identifier is bypassed — tests that exercise
+  // rate limiting send an explicit x-forwarded-for and are still limited.
+  // Never set on real deployments.
+  if (process.env.E2E_TEST_MODE === "1" && key.endsWith(":unknown")) {
     return { allowed: true, remaining: MAX_ATTEMPTS, resetAt: Date.now() + WINDOW_MS };
   }
   const now = Date.now();
