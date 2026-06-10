@@ -80,7 +80,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       game.players.map((p) => {
         const orgId = p.side === "home" ? match.homeOrgId : match.awayOrgId;
         return {
-          match_report_id: id,
           match_id: r.match_id,
           player_id: p.playerId ?? null,
           player_ign: p.playerIgn,
@@ -101,9 +100,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     );
 
     if (statsRows.length > 0) {
-      // Delete existing stats for this report (in case of re-submission)
-      await supabase.from("player_match_stats").delete().eq("match_report_id", id);
-      const { error: statsErr } = await supabase.from("player_match_stats").insert(statsRows);
+      // Atomic delete + insert with a lock on the report row (migration 016)
+      // so concurrent submissions cannot interleave and double the stat rows.
+      const { error: statsErr } = await supabase.rpc("replace_match_report_stats", {
+        p_match_report_id: id,
+        p_rows: statsRows,
+      });
       if (statsErr) throw statsErr;
     }
 
