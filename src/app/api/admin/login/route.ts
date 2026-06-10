@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { adminCookie } from "@/lib/admin-auth";
 import { checkRateLimit, clearRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
+import { reportError } from "@/lib/error-monitor";
 
 export async function POST(request: NextRequest) {
   const ip = getRateLimitIdentifier(request);
@@ -40,9 +41,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid admin password." }, { status: 401 });
   }
 
-  clearRateLimit(`admin-login:${ip}`);
-  const cookie = adminCookie("password-admin", "super_admin");
-  const response = NextResponse.json({ ok: true });
-  response.cookies.set(cookie.name, cookie.value, cookie.options);
-  return response;
+  try {
+    const cookie = adminCookie("password-admin", "super_admin");
+    clearRateLimit(`admin-login:${ip}`);
+    const response = NextResponse.json({ ok: true });
+    response.cookies.set(cookie.name, cookie.value, cookie.options);
+    return response;
+  } catch (err) {
+    // e.g. ADMIN_SESSION_SECRET missing — previously surfaced as a bare 500
+    reportError("admin password login: session cookie creation failed", err);
+    return NextResponse.json({ error: "Admin sessions are not configured. Contact the site administrator." }, { status: 503 });
+  }
 }

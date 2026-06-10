@@ -128,9 +128,16 @@ export async function GET(request: NextRequest) {
   const role = data.role as "super_admin" | "admin";
 
   // Set admin session cookie and redirect to admin
-  const response = NextResponse.redirect(new URL("/admin", siteUrl()));
-  clearRateLimit(`admin-discord-callback:${ip}`);
-  const cookie = adminCookie(discordUser.id, role);
-  response.cookies.set(cookie.name, cookie.value, cookie.options);
-  return clearStateCookie(response);
+  try {
+    const cookie = adminCookie(discordUser.id, role);
+    const response = NextResponse.redirect(new URL("/admin", siteUrl()));
+    clearRateLimit(`admin-discord-callback:${ip}`);
+    response.cookies.set(cookie.name, cookie.value, cookie.options);
+    return clearStateCookie(response);
+  } catch (err) {
+    // e.g. ADMIN_SESSION_SECRET missing — previously surfaced as a bare 500
+    reportError("admin discord login: session cookie creation failed", err, { discordId: discordUser.id });
+    const response = NextResponse.redirect(new URL("/admin/login?error=config", siteUrl()));
+    return clearStateCookie(response);
+  }
 }
