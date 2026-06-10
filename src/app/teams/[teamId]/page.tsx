@@ -129,7 +129,7 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
-        <div>
+        <div className="min-w-0">
           <p className="mb-3 text-[0.68rem] font-black uppercase tracking-normal text-slate-300">Full Roster</p>
           <GlowPanel>
             <div className="p-4">
@@ -138,7 +138,7 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
           </GlowPanel>
         </div>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           {upcoming.length > 0 && (
             <div>
               <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-300">Upcoming Matches</p>

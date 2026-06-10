@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   buildDraftState,
+  finalizeDraftRosters,
   getDraftPicks,
   getShortlist,
   getTopShortlistPick,
-  recordPick,
   removePlayerFromAllShortlists,
+  submitPickAtomic,
   updateDraftRoom,
 } from "@/lib/draft-data";
 import { buildPickSequence } from "@/types/draft";
@@ -38,22 +39,25 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           const existingPicks = await getDraftPicks(id);
           if (!existingPicks.some((p) => p.playerId === topPick)) {
             const pickNumber = state.room.currentPickIndex + 1;
-            await recordPick(id, pickNumber, currentOrgId, topPick);
-            await removePlayerFromAllShortlists(id, topPick);
-            await updateDraftRoom(id, {
-              currentPickIndex: nextIndex,
-              status: isComplete ? "complete" : "active",
-              pickStartedAt: isComplete ? null : now,
-              completedAt: isComplete ? now : null,
-            });
-            await writeAuditLog("draft_auto_pick", "draft_pick", `${id}-${pickNumber}`, {
-              draftRoomId: id,
-              pickNumber,
-              orgId: currentOrgId,
-              playerId: topPick,
-              reason: "shortlist_auto_pick",
-              isComplete,
-            });
+            // Atomic insert + index advance; if a concurrent request already
+            // advanced the draft, just return fresh state without picking.
+            const submitted = await submitPickAtomic(id, currentOrgId, topPick, state.room.currentPickIndex, sequence.length);
+            if (submitted.ok) {
+              await removePlayerFromAllShortlists(id, topPick);
+              if (submitted.isComplete) {
+                // Propagate picks to team rosters now that the draft is complete (#62)
+                const { assigned } = await finalizeDraftRosters(id);
+                await writeAuditLog("draft_finalized", "draft_room", id, { draftRoomId: id, assigned });
+              }
+              await writeAuditLog("draft_auto_pick", "draft_pick", `${id}-${pickNumber}`, {
+                draftRoomId: id,
+                pickNumber,
+                orgId: currentOrgId,
+                playerId: topPick,
+                reason: "shortlist_auto_pick",
+                isComplete,
+              });
+            }
             const updatedState = await buildDraftState(id);
             const shortlist = captainOrgId ? await getShortlist(id, captainOrgId) : undefined;
             return NextResponse.json({ state: updatedState, captainOrgId, shortlist });
@@ -73,6 +77,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         skippedPickIndex: state.room.currentPickIndex,
         reason: "timer_expired_no_shortlist",
       });
+      if (isComplete) {
+        // Propagate picks to team rosters now that the draft is complete (#62)
+        const { assigned } = await finalizeDraftRosters(id);
+        await writeAuditLog("draft_finalized", "draft_room", id, { draftRoomId: id, assigned });
+      }
       const updatedState = await buildDraftState(id);
       const shortlist = captainOrgId ? await getShortlist(id, captainOrgId) : undefined;
       return NextResponse.json({ state: updatedState, captainOrgId, shortlist });

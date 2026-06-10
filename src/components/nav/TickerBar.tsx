@@ -1,4 +1,5 @@
 import { getLeagueData } from "@/lib/league-data";
+import { isMatchLive } from "@/lib/match-live";
 import { cn } from "@/lib/utils";
 
 const DIV_TAG = { solar: "SOL", lunar: "LUN", gaia: "GAI" } as const;
@@ -25,7 +26,7 @@ export async function TickerBar() {
 
   const getOrg = (id: string) => orgs.find((o) => o.id === id);
 
-  const live = matches.filter((m) => m.status === "live");
+  const live = matches.filter((m) => isMatchLive(m));
   const upcoming = matches
     .filter((m) => m.status === "scheduled")
     .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.scheduledTime.localeCompare(b.scheduledTime))

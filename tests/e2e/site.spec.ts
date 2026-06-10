@@ -34,13 +34,20 @@ for (const route of publicRoutes) {
   }
 }
 
-for (const label of ["Home", "Standings", "Schedule", "Teams"]) {
+// The desktop nav no longer has an explicit Home link — the logo is Home.
+for (const label of ["Standings", "Schedule", "Teams"]) {
   test(`top nav ${label} link navigates`, async ({ page }) => {
     await page.goto("/");
     await page.getByRole("navigation").getByRole("link", { name: label, exact: true }).click();
-    await expect(page).toHaveURL(label === "Home" ? "/" : `/${label.toLowerCase()}`);
+    await expect(page).toHaveURL(`/${label.toLowerCase()}`);
   });
 }
+
+test("top nav logo navigates home", async ({ page }) => {
+  await page.goto("/standings");
+  await page.getByRole("banner").getByRole("link", { name: /Serpent Ascension League/i }).click();
+  await expect(page).toHaveURL("/");
+});
 
 test("league logo asset renders in nav and metadata image path is reachable", async ({ page, request }) => {
   await page.goto("/");
@@ -222,7 +229,7 @@ test("admin roster save posts player mutation payload", async ({ page }) => {
   });
   await page.goto("/admin/players");
   await page.getByText("AzraelP-HRX").first().click();
-  await page.getByRole("textbox", { name: "IGN" }).fill("TestIGN");
+  await page.getByRole("textbox", { name: "IGN", exact: true }).fill("TestIGN");
   await page.getByLabel("Primary role").selectOption("Support");
   await page.getByLabel("Team").selectOption("midnight-pact");
   await page.getByLabel("Starter").uncheck();
@@ -239,8 +246,8 @@ test("standings admin includes standings table and match editor", async ({ page 
   await page.goto("/admin/standings");
   await expect(page.getByText("Score-Driven Standings")).toBeVisible();
   await expect(page.getByText("Standings are recalculated from completed match scores.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Solar" })).toBeVisible();
-  await expect(page.getByText("total matches")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Solar" }).first()).toBeVisible();
+  await expect(page.getByText(/active matches/)).toBeVisible();
 });
 
 test("mobile standings preserve readable team names", async ({ page }) => {
@@ -401,8 +408,8 @@ test("admin matches filter by division shows subset of matches", async ({ page }
 test("admin matches filter by week narrows list", async ({ page }) => {
   await adminLogin(page);
   await page.goto("/admin/matches");
-  await page.getByRole("button", { name: "Wk 1" }).click();
-  await expect(page.getByRole("button", { name: "Wk 1" })).toHaveClass(/bg-cyan/);
+  await page.getByRole("button", { name: "Wk 1", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Wk 1", exact: true })).toHaveClass(/bg-cyan/);
 });
 
 test("admin matches completed save shows confirmation dialog", async ({ page }) => {
@@ -448,11 +455,15 @@ test("admin player status field shows auto when player has team", async ({ page 
 });
 
 test("login API returns 429 after too many failed attempts", async ({ request }) => {
+  // A dedicated client IP: E2E_TEST_MODE bypasses the limiter only for the
+  // shared ":unknown" identifier, so an explicit x-forwarded-for is limited
+  // normally and this test cannot lock out the rest of the suite.
+  const headers = { "x-forwarded-for": "203.0.113.99" };
   // Exhaust the rate limit (11 attempts = over the 10 limit)
   for (let i = 0; i < 11; i++) {
-    await request.post("/api/admin/login", { data: { password: "wrong-password" } });
+    await request.post("/api/admin/login", { headers, data: { password: "wrong-password" } });
   }
-  const response = await request.post("/api/admin/login", { data: { password: "wrong-password" } });
+  const response = await request.post("/api/admin/login", { headers, data: { password: "wrong-password" } });
   expect(response.status()).toBe(429);
   const body = await response.json();
   expect(typeof body.error).toBe("string");
@@ -529,7 +540,9 @@ test("register page redirects to sign-in when unauthenticated", async ({ page })
 
 test("auth sign-in page renders discord button", async ({ page }) => {
   await page.goto("/auth/signin");
-  await expect(page.getByRole("button", { name: /Discord/i })).toBeVisible();
+  // With Supabase configured the button reads "Continue with Discord";
+  // without it the same button intentionally reads "Sign in unavailable".
+  await expect(page.getByRole("button", { name: /Discord|Sign in unavailable/i })).toBeVisible();
   await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
 });
 
@@ -798,8 +811,9 @@ test("admin form fields add custom field button is visible and opens form", asyn
   await adminLogin(page);
   await page.goto("/admin/form-fields");
   await page.getByRole("button", { name: "+ Add custom field" }).click();
-  // Should reveal an input for the field label
-  await expect(page.locator("input[placeholder*='label' i], input[placeholder*='field' i]").first()).toBeVisible();
+  // Should reveal the New Field form with a Label input
+  await expect(page.getByText("New Field")).toBeVisible();
+  await expect(page.getByPlaceholder("e.g. Preferred Timezone")).toBeVisible();
 });
 
 // --- API auth coverage for new routes ---
@@ -965,7 +979,9 @@ test.describe("MarkdownBody XSS and link safety", () => {
     await page.goto("/admin/announcements");
     await page.locator("textarea").fill(markdownLink);
     await page.getByRole("button", { name: "Preview" }).click();
-    const anchor = page.locator("a").first();
+    // Target the rendered markdown link by its text — locator("a").first()
+    // matched site-nav links before the preview content.
+    const anchor = page.getByRole("link", { name: "click me" });
     await expect(anchor).toBeVisible();
     return anchor.getAttribute("href");
   }

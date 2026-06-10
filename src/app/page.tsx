@@ -7,6 +7,7 @@ import { StandingsTable } from "@/components/league/StandingsTable";
 import { AnnouncementCard } from "@/components/league/AnnouncementCard";
 import { LiveMatchFeature } from "@/components/league/LiveMatchFeature";
 import { getLeagueData } from "@/lib/league-data";
+import { isMatchLive } from "@/lib/match-live";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ export default async function HomePage() {
 
 async function HeroSection() {
   const { season, orgs, matches } = await getLeagueData();
-  const liveMatches = matches.filter((m) => m.status === "live");
+  const liveMatches = matches.filter((m) => isMatchLive(m));
   const liveMatch = liveMatches[0] ?? null;
   const getOrg = (id: string) => orgs.find((o) => o.id === id)!;
   const liveMatchName = liveMatch
@@ -49,7 +50,7 @@ async function HeroSection() {
 
 async function PulseSection() {
   const { season, divisions, orgs, matches, standings } = await getLeagueData();
-  const liveMatches = matches.filter((m) => m.status === "live");
+  const liveMatches = matches.filter((m) => isMatchLive(m));
   const upcomingMatches = matches
     .filter((m) => m.status === "scheduled")
     .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.scheduledTime.localeCompare(b.scheduledTime))
@@ -60,7 +61,7 @@ async function PulseSection() {
 
   return (
     <section className="mx-auto grid max-w-7xl gap-6 px-4 py-10 sm:px-6 lg:grid-cols-[1.45fr_0.9fr]">
-      <div>
+      <div className="min-w-0">
         <SectionHeader eyebrow="Right Now" title={liveMatch ? "Live Matches" : "League Pulse"} />
         <LiveMatchFeature
           liveMatch={liveMatch}
@@ -160,7 +161,7 @@ async function MatchesSection() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <div className="grid gap-10 lg:grid-cols-2">
-        <div>
+        <div className="min-w-0">
           <SectionHeader eyebrow="Schedule" title="Upcoming Matches" action={{ label: "Full Schedule →", href: "/schedule" }} />
           <div className="space-y-3">
             {upcomingMatches.map((m) => (
@@ -168,7 +169,7 @@ async function MatchesSection() {
             ))}
           </div>
         </div>
-        <div>
+        <div className="min-w-0">
           <SectionHeader eyebrow="Results" title="Recent Results" action={{ label: "Full Schedule →", href: "/schedule" }} />
           <div className="space-y-3">
             {recentResults.map((m) => (

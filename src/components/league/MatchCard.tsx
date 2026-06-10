@@ -2,6 +2,7 @@ import type { Match, Org, DivisionId } from "@/types/league";
 import Link from "next/link";
 import { OrgLogo } from "@/components/card-lab/ui";
 import { formatMatchDate } from "@/lib/date-format";
+import { isMatchLive } from "@/lib/match-live";
 import { cn } from "@/lib/utils";
 
 const divisionHeaderGradient: Record<DivisionId, string> = {
@@ -60,7 +61,9 @@ export function MatchCard({
   awayOrg: Org;
   compact?: boolean;
 }) {
-  const cfg = statusConfig[match.status];
+  // A stale "live" row (e.g. old seed data) renders as scheduled instead of LIVE.
+  const displayStatus = match.status === "live" && !isMatchLive(match) ? "scheduled" : match.status;
+  const cfg = statusConfig[displayStatus];
   const isFinished = match.status === "completed" || match.status === "forfeit";
 
   return (
@@ -72,7 +75,7 @@ export function MatchCard({
     >
       <div className={cn("h-1 w-full bg-gradient-to-r", divisionHeaderGradient[match.divisionId])} />
 
-      {match.status === "live" && (
+      {displayStatus === "live" && (
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(251,146,60,0.08),transparent_60%)]" />
       )}
 

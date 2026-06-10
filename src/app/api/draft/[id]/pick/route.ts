@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { buildDraftState, getDraftPicks, recordPick, removePlayerFromAllShortlists, updateDraftRoom } from "@/lib/draft-data";
+import { buildDraftState, finalizeDraftRosters, getDraftPicks, removePlayerFromAllShortlists, submitPickAtomic } from "@/lib/draft-data";
 import { getCaptainSessionFromRequest } from "@/lib/captain-auth";
 import { buildPickSequence } from "@/types/draft";
 import { getLeagueData, writeAuditLog } from "@/lib/league-data";
@@ -59,19 +59,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Player has already been drafted." }, { status: 400 });
   }
 
+  // Atomic insert + index advance; a concurrent pick for the same slot
+  // fails the in-transaction index re-check and returns 409.
   const pickNumber = room.currentPickIndex + 1;
-  await recordPick(id, pickNumber, session.orgId, playerId);
+  const submitted = await submitPickAtomic(id, session.orgId, playerId, room.currentPickIndex, sequence.length);
+  if (!submitted.ok) {
+    if (submitted.conflict) {
+      return NextResponse.json({ error: "Another pick was recorded first. Refresh and try again." }, { status: 409 });
+    }
+    return NextResponse.json({ error: submitted.message }, { status: 500 });
+  }
+  const isComplete = submitted.isComplete;
   await removePlayerFromAllShortlists(id, playerId);
 
-  const nextIndex = room.currentPickIndex + 1;
-  const isComplete = nextIndex >= sequence.length;
-  const now = new Date().toISOString();
-  await updateDraftRoom(id, {
-    currentPickIndex: nextIndex,
-    status: isComplete ? "complete" : "active",
-    pickStartedAt: isComplete ? null : now,
-    completedAt: isComplete ? now : null,
-  });
+  if (isComplete) {
+    // Propagate picks to team rosters now that the draft is complete (#62)
+    const { assigned } = await finalizeDraftRosters(id);
+    await writeAuditLog("draft_finalized", "draft_room", id, { draftRoomId: id, assigned });
+  }
 
   await writeAuditLog("draft_pick", "draft_pick", `${id}-${pickNumber}`, {
     draftRoomId: id,

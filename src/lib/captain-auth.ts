@@ -60,7 +60,9 @@ export function setCaptainCookie(
   response.cookies.set(COOKIE_NAME, value, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // E2E_TEST_MODE: the Playwright suite runs the production build over plain
+    // http, where Secure cookies are dropped. Never set on real deployments.
+    secure: process.env.NODE_ENV === "production" && process.env.E2E_TEST_MODE !== "1",
     path: "/",
     maxAge: MAX_AGE_SECONDS,
   });

@@ -26,9 +26,30 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
   const [connected, setConnected] = useState(true);
   const [shortlist, setShortlist] = useState<ShortlistEntry[]>([]);
   const [shortlistBusy, setShortlistBusy] = useState<string | null>(null); // playerId being acted on
+  const [skipNotice, setSkipNotice] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { room, picks, pickSequence, currentOrgId, totalPicks, secondsRemaining } = state;
+
+  // A slot before currentPickIndex with no recorded pick was auto-skipped
+  // (timer expired with an empty shortlist).
+  const pickByNumber = new Map(picks.map((p) => [p.pickNumber, p]));
+  const pickLog: ({ kind: "pick"; pick: (typeof picks)[number] } | { kind: "skip"; pickNumber: number; orgId: string })[] = [];
+  for (let n = 1; n <= Math.min(room.currentPickIndex, pickSequence.length); n++) {
+    const pick = pickByNumber.get(n);
+    if (pick) pickLog.push({ kind: "pick", pick });
+    else pickLog.push({ kind: "skip", pickNumber: n, orgId: pickSequence[n - 1]! });
+  }
+
+  // Notify the affected captain when one of their slots gets auto-skipped.
+  const mySkippedCount = captainOrgId
+    ? pickLog.filter((e) => e.kind === "skip" && e.orgId === captainOrgId).length
+    : 0;
+  const prevMySkippedCount = useRef(mySkippedCount);
+  useEffect(() => {
+    if (mySkippedCount > prevMySkippedCount.current) setSkipNotice(true);
+    prevMySkippedCount.current = mySkippedCount;
+  }, [mySkippedCount]);
 
   // Exchange token for captain session on first load
   useEffect(() => {
@@ -224,6 +245,20 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
           </div>
         )}
 
+        {skipNotice && (
+          <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-red-300/40 bg-red-300/10 p-4">
+            <p className="text-sm font-black text-red-100">
+              Your pick timed out and was skipped. Shortlist players to auto-pick if it happens again.
+            </p>
+            <button
+              onClick={() => setSkipNotice(false)}
+              className="shrink-0 rounded-lg border border-white/15 px-2.5 py-1 text-xs font-black uppercase text-slate-300 hover:bg-white/[0.06]"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {pickMessage && <p className="mb-4 text-sm font-semibold text-orange-200">{pickMessage}</p>}
 
         <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -370,18 +405,27 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
             {/* Picks log */}
             <section className="rounded-2xl border border-white/8 bg-slate-950/70 p-4">
               <h2 className="mb-3 text-xs font-black uppercase text-slate-400">Picks ({picks.length})</h2>
-              {picks.length === 0 ? (
+              {pickLog.length === 0 ? (
                 <p className="text-sm text-slate-500">No picks yet.</p>
               ) : (
                 <div className="max-h-64 space-y-1.5 overflow-y-auto">
-                  {[...picks].reverse().map((pick) => (
-                    <div key={pick.id} className="flex items-center gap-2 rounded-lg border border-white/5 bg-black/20 px-3 py-1.5">
-                      <span className="w-6 shrink-0 text-right font-mono text-[0.6rem] text-slate-500">{pick.pickNumber}</span>
-                      <span className="text-xs text-slate-400">{getOrg(pick.orgId)?.tag ?? pick.orgId}</span>
-                      <span className="text-slate-600">→</span>
-                      <span className="min-w-0 truncate font-black text-white">{getPlayer(pick.playerId)?.ign ?? pick.playerId}</span>
-                    </div>
-                  ))}
+                  {[...pickLog].reverse().map((entry) =>
+                    entry.kind === "pick" ? (
+                      <div key={entry.pick.id} className="flex items-center gap-2 rounded-lg border border-white/5 bg-black/20 px-3 py-1.5">
+                        <span className="w-6 shrink-0 text-right font-mono text-[0.6rem] text-slate-500">{entry.pick.pickNumber}</span>
+                        <span className="text-xs text-slate-400">{getOrg(entry.pick.orgId)?.tag ?? entry.pick.orgId}</span>
+                        <span className="text-slate-600">→</span>
+                        <span className="min-w-0 truncate font-black text-white">{getPlayer(entry.pick.playerId)?.ign ?? entry.pick.playerId}</span>
+                      </div>
+                    ) : (
+                      <div key={`skip-${entry.pickNumber}`} className="flex items-center gap-2 rounded-lg border border-red-300/15 bg-red-300/[0.04] px-3 py-1.5">
+                        <span className="w-6 shrink-0 text-right font-mono text-[0.6rem] text-slate-500">{entry.pickNumber}</span>
+                        <span className="text-xs text-slate-400">{getOrg(entry.orgId)?.tag ?? entry.orgId}</span>
+                        <span className="text-slate-600">→</span>
+                        <span className="text-xs font-black uppercase text-red-300/80">Skipped (timed out)</span>
+                      </div>
+                    ),
+                  )}
                 </div>
               )}
             </section>

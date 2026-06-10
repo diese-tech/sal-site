@@ -7,7 +7,9 @@ import { RosterSlotCard } from "@/components/card-lab/RosterSlotCard";
 import { orgRosters, players, rosterSlotStates } from "@/data/mock-card-lab";
 
 export default function CardLabPage() {
-  if (process.env.NODE_ENV === "production") redirect("/");
+  // Dev-only tool. E2E_TEST_MODE keeps it reachable in the production build
+  // the Playwright suite runs against; it is never set on real deployments.
+  if (process.env.NODE_ENV === "production" && process.env.E2E_TEST_MODE !== "1") redirect("/");
   return (
     <main className="relative min-h-screen overflow-hidden px-4 py-8 sm:px-6 lg:px-8">
       <div className="sal-grid pointer-events-none absolute inset-0 opacity-70" />

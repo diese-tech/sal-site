@@ -612,12 +612,12 @@ export async function recalculateAndPersistStandings() {
   if (data === MOCK_LEAGUE_DATA) throw new Error("Cannot recalculate standings: Supabase data unavailable.");
 
   const standings = recalcStandings(data, data.season?.id);
-  const { error } = await supabase.from("standings").upsert(standings.map(toDbStanding));
+  // Atomic replace (migration 017): orphan delete + upsert run in a single
+  // transaction so concurrent reads never see a mix of old and new rows.
+  const { error } = await supabase.rpc("replace_standings", {
+    p_rows: standings.map(toDbStanding),
+  });
   if (error) throw error;
-  const currentOrgIds = standings.map((s) => s.orgId);
-  if (currentOrgIds.length > 0) {
-    await supabase.from("standings").delete().not("org_id", "in", `(${currentOrgIds.map((id) => `"${id}"`).join(",")})`);
-  }
   await writeAuditLog("recalculate_standings", "standings", null, { orgCount: standings.length });
   return standings;
 }
@@ -640,9 +640,19 @@ function fromDbFormField(row: Record<string, unknown>): FormField {
   };
 }
 
+// Mirrors the seed rows in supabase/migrations/004_auth.sql — used when
+// Supabase is not configured (local dev / E2E), like MOCK_LEAGUE_DATA.
+const MOCK_FORM_FIELDS: FormField[] = [
+  { id: "ff-name", key: "name", label: "Name", fieldType: "text", required: true, fieldOrder: 1, locked: true, hidden: false, placeholder: "Your name or preferred name" },
+  { id: "ff-ign", key: "ign", label: "In-Game Name", fieldType: "text", required: true, fieldOrder: 2, locked: true, hidden: false, placeholder: "Your SMITE IGN" },
+  { id: "ff-tracker", key: "tracker_url", label: "Tracker.gg Profile", fieldType: "url", required: true, fieldOrder: 3, locked: true, hidden: false, placeholder: "https://tracker.gg/smite/profile/...", validationHint: "Must be a tracker.gg link" },
+  { id: "ff-primary-role", key: "primary_role", label: "Primary Role", fieldType: "select", required: true, fieldOrder: 4, locked: true, hidden: false, options: ["Solo", "Jungle", "Mid", "Carry", "Support"] },
+  { id: "ff-secondary-role", key: "secondary_role", label: "Secondary Role", fieldType: "select", required: true, fieldOrder: 5, locked: true, hidden: false, options: ["Solo", "Jungle", "Mid", "Carry", "Support"] },
+];
+
 export async function getFormFields(): Promise<FormField[]> {
   const supabase = getSupabaseServerClient();
-  if (!supabase) return [];
+  if (!supabase) return MOCK_FORM_FIELDS;
   const { data, error } = await supabase
     .from("form_fields")
     .select("*")
@@ -731,6 +741,80 @@ export async function createRegistration(reg: Omit<Registration, "status" | "cre
     form_data: reg.formData,
   });
   if (error) throw error;
+}
+
+export async function getRegistrationById(id: string): Promise<Registration | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase.from("registrations").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data ? fromDbRegistration(data) : null;
+}
+
+const VALID_ROLES = ["Solo", "Jungle", "Mid", "Carry", "Support", "Flex"] as const;
+
+function parseRole(value: string | undefined): (typeof VALID_ROLES)[number] | null {
+  if (!value) return null;
+  const match = VALID_ROLES.find((r) => r.toLowerCase() === value.trim().toLowerCase());
+  return match ?? null;
+}
+
+/**
+ * Approves a registration and ensures a player record exists for it (#63).
+ * If a player already exists for the registrant's Discord ID it is linked;
+ * otherwise a free-agent player is created from the registration form data.
+ * Returns the linked/created player id.
+ */
+export async function approveRegistrationAndCreatePlayer(id: string, reviewerNote?: string): Promise<string> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+
+  const reg = await getRegistrationById(id);
+  if (!reg) throw new Error("Registration not found.");
+
+  let playerId = reg.playerId ?? null;
+
+  if (!playerId) {
+    // A player may already exist for this Discord account (e.g. via claim flow)
+    const existing = await getPlayerByDiscordId(reg.discordId);
+    if (existing) {
+      playerId = existing.id;
+    } else {
+      const ign = reg.formData.ign?.trim();
+      if (!ign) throw new Error("Registration has no IGN; cannot create a player record.");
+      const primaryRole = parseRole(reg.formData.primary_role) ?? "Flex";
+      const secondaryRole = parseRole(reg.formData.secondary_role);
+      playerId = crypto.randomUUID();
+      await savePlayer({
+        id: playerId,
+        ign,
+        discordUsername: reg.discordUsername,
+        avatarInitials: ign.slice(0, 2).toUpperCase(),
+        avatarGradient: "",
+        primaryRole,
+        secondaryRoles: secondaryRole && secondaryRole !== primaryRole ? [secondaryRole] : [],
+        isStarter: false,
+        isCaptain: false,
+        status: "free-agent",
+      });
+      // Link the verified Discord identity so the player needn't claim separately
+      await claimPlayerProfile(reg.discordId, playerId);
+    }
+  }
+
+  const { error } = await supabase
+    .from("registrations")
+    .update({
+      status: "approved",
+      player_id: playerId,
+      reviewer_note: reviewerNote ?? null,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw error;
+
+  await writeAuditLog("approve_registration", "registration", id, { playerId, reviewerNote });
+  return playerId;
 }
 
 export async function updateRegistrationStatus(
