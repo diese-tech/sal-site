@@ -3,6 +3,7 @@ import { timingSafeEqual } from "crypto";
 import { adminCookie } from "@/lib/admin-auth";
 import { checkRateLimit, clearRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { reportError } from "@/lib/error-monitor";
 
 type DiscordTokenResponse = { access_token: string; token_type: string };
 type DiscordUser = { id: string; username: string; global_name?: string };
@@ -77,9 +78,13 @@ export async function GET(request: NextRequest) {
         redirect_uri: redirectUri,
       }),
     });
-    if (!tokenRes.ok) throw new Error(`Token exchange failed: ${tokenRes.status}`);
+    if (!tokenRes.ok) {
+      const body = await tokenRes.text().catch(() => "");
+      throw new Error(`Token exchange failed: ${tokenRes.status} ${body.slice(0, 300)}`);
+    }
     tokenData = (await tokenRes.json()) as DiscordTokenResponse;
-  } catch {
+  } catch (err) {
+    reportError("admin discord login: token exchange failed", err);
     const response = NextResponse.redirect(new URL("/admin/login?error=token_exchange", siteUrl()));
     return clearStateCookie(response);
   }
@@ -92,7 +97,8 @@ export async function GET(request: NextRequest) {
     });
     if (!userRes.ok) throw new Error(`User fetch failed: ${userRes.status}`);
     discordUser = (await userRes.json()) as DiscordUser;
-  } catch {
+  } catch (err) {
+    reportError("admin discord login: user fetch failed", err);
     const response = NextResponse.redirect(new URL("/admin/login?error=user_fetch", siteUrl()));
     return clearStateCookie(response);
   }
@@ -111,6 +117,10 @@ export async function GET(request: NextRequest) {
     .single();
 
   if (error || !data) {
+    reportError("admin discord login: no admin access", error ?? new Error("discord_id not in admin_users"), {
+      discordId: discordUser.id,
+      username: discordUser.username,
+    });
     const response = NextResponse.redirect(new URL("/admin/login?error=no_access", siteUrl()));
     return clearStateCookie(response);
   }

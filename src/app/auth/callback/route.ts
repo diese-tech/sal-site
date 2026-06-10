@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { safeRedirectPath } from "@/lib/auth-redirect";
+import { reportError } from "@/lib/error-monitor";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -33,6 +34,8 @@ export async function GET(request: NextRequest) {
 
   const { error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
+    // e.g. Discord rejecting Supabase's provider credentials ("invalid_client")
+    reportError("discord sign-in code exchange failed", error);
     return NextResponse.redirect(
       `${origin}/auth/error?message=${encodeURIComponent(error.message)}`,
     );
