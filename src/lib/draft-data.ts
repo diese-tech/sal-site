@@ -344,28 +344,9 @@ export async function undoLastPick(draftRoomId: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
 
-  const room = await getDraftRoom(draftRoomId);
-  if (!room) throw new Error("Draft room not found.");
-  if (room.currentPickIndex === 0) throw new Error("No picks to undo.");
-  if (room.status !== "active") throw new Error("Draft is not active.");
-
-  // Get last pick
-  const { data: lastPick, error: pickError } = await supabase
-    .from("draft_picks")
-    .select("*")
-    .eq("draft_room_id", draftRoomId)
-    .order("pick_number", { ascending: false })
-    .limit(1)
-    .single();
-  if (pickError || !lastPick) throw new Error("No picks found to undo.");
-
-  // Delete the last pick
-  await supabase.from("draft_picks").delete().eq("id", (lastPick as { id: number }).id);
-
-  // Rewind the pick index and reset timer
-  const prevIndex = room.currentPickIndex - 1;
-  await updateDraftRoom(draftRoomId, {
-    currentPickIndex: prevIndex,
-    pickStartedAt: new Date().toISOString(),
-  });
+  // Atomic: locks the room row, deletes the last pick, and rewinds the index
+  // in a single transaction (migration 014) so a concurrent pick cannot
+  // observe a half-undone state.
+  const { error } = await supabase.rpc("undo_last_pick", { p_draft_room_id: draftRoomId });
+  if (error) throw new Error(error.message);
 }
