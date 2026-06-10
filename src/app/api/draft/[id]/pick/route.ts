@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { buildDraftState, getDraftPicks, removePlayerFromAllShortlists, submitPickAtomic } from "@/lib/draft-data";
+import { buildDraftState, finalizeDraftRosters, getDraftPicks, removePlayerFromAllShortlists, submitPickAtomic } from "@/lib/draft-data";
 import { getCaptainSessionFromRequest } from "@/lib/captain-auth";
 import { buildPickSequence } from "@/types/draft";
 import { getLeagueData, writeAuditLog } from "@/lib/league-data";
@@ -71,6 +71,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   const isComplete = submitted.isComplete;
   await removePlayerFromAllShortlists(id, playerId);
+
+  if (isComplete) {
+    // Propagate picks to team rosters now that the draft is complete (#62)
+    const { assigned } = await finalizeDraftRosters(id);
+    await writeAuditLog("draft_finalized", "draft_room", id, { draftRoomId: id, assigned });
+  }
 
   await writeAuditLog("draft_pick", "draft_pick", `${id}-${pickNumber}`, {
     draftRoomId: id,

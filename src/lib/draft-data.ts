@@ -367,6 +367,40 @@ export async function getTopShortlistPick(draftRoomId: string, orgId: string): P
   return null;
 }
 
+// ---- Finalize ------------------------------------------------------------
+
+/**
+ * Propagates a completed draft's picks to team rosters (#62): every picked
+ * player gets the picking org's id and status 'drafted'. Idempotent — safe
+ * to call again for a draft whose picks were already applied.
+ */
+export async function finalizeDraftRosters(draftRoomId: string): Promise<{ assigned: number }> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+
+  const room = await getDraftRoom(draftRoomId);
+  if (!room) throw new Error("Draft room not found.");
+  if (room.status !== "complete") throw new Error("Draft is not complete.");
+
+  const picks = await getDraftPicks(draftRoomId);
+  const byOrg = new Map<string, string[]>();
+  for (const pick of picks) {
+    const list = byOrg.get(pick.orgId) ?? [];
+    list.push(pick.playerId);
+    byOrg.set(pick.orgId, list);
+  }
+
+  for (const [orgId, playerIds] of byOrg) {
+    const { error } = await supabase
+      .from("players")
+      .update({ org_id: orgId, status: "drafted" })
+      .in("id", playerIds);
+    if (error) throw new Error(error.message);
+  }
+
+  return { assigned: picks.length };
+}
+
 // ---- Undo ----------------------------------------------------------------
 
 export async function undoLastPick(draftRoomId: string): Promise<void> {
