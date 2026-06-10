@@ -6,8 +6,10 @@
 -- concurrent submits for the same report) and performs delete + insert in
 -- a single transaction.
 
+-- match_reports.id / player_match_stats.match_report_id are uuid columns,
+-- so the parameter is uuid (PostgREST coerces the JSON string id).
 CREATE OR REPLACE FUNCTION public.replace_match_report_stats(
-  p_match_report_id text,
+  p_match_report_id uuid,
   p_rows jsonb
 ) RETURNS void
 LANGUAGE plpgsql
@@ -52,6 +54,6 @@ END;
 $$;
 
 -- Server-side only: callable via the service-role key, not by anon/authenticated.
-REVOKE EXECUTE ON FUNCTION public.replace_match_report_stats(text, jsonb) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.replace_match_report_stats(text, jsonb) FROM anon;
-REVOKE EXECUTE ON FUNCTION public.replace_match_report_stats(text, jsonb) FROM authenticated;
+REVOKE EXECUTE ON FUNCTION public.replace_match_report_stats(uuid, jsonb) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.replace_match_report_stats(uuid, jsonb) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.replace_match_report_stats(uuid, jsonb) FROM authenticated;
