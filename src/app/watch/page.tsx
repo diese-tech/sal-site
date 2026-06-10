@@ -1,4 +1,5 @@
 import { getLeagueData } from "@/lib/league-data";
+import { isMatchLive } from "@/lib/match-live";
 import { WatchLiveClient } from "@/components/watch/WatchLiveClient";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +47,7 @@ export default async function WatchPage() {
 
   const getOrg = (id: string) => orgs.find((o) => o.id === id) ?? null;
 
-  const liveMatch = matches.find((m) => m.status === "live") ?? null;
+  const liveMatch = matches.find((m) => isMatchLive(m)) ?? null;
   const nextMatch = matches
     .filter((m) => m.status === "scheduled")
     .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.scheduledTime.localeCompare(b.scheduledTime))[0] ?? null;

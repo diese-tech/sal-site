@@ -7,6 +7,7 @@ import { StandingsTable } from "@/components/league/StandingsTable";
 import { AnnouncementCard } from "@/components/league/AnnouncementCard";
 import { LiveMatchFeature } from "@/components/league/LiveMatchFeature";
 import { getLeagueData } from "@/lib/league-data";
+import { isMatchLive } from "@/lib/match-live";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ export default async function HomePage() {
 
 async function HeroSection() {
   const { season, orgs, matches } = await getLeagueData();
-  const liveMatches = matches.filter((m) => m.status === "live");
+  const liveMatches = matches.filter((m) => isMatchLive(m));
   const liveMatch = liveMatches[0] ?? null;
   const getOrg = (id: string) => orgs.find((o) => o.id === id)!;
   const liveMatchName = liveMatch
@@ -49,7 +50,7 @@ async function HeroSection() {
 
 async function PulseSection() {
   const { season, divisions, orgs, matches, standings } = await getLeagueData();
-  const liveMatches = matches.filter((m) => m.status === "live");
+  const liveMatches = matches.filter((m) => isMatchLive(m));
   const upcomingMatches = matches
     .filter((m) => m.status === "scheduled")
     .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.scheduledTime.localeCompare(b.scheduledTime))
