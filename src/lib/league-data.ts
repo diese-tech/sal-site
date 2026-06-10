@@ -640,9 +640,19 @@ function fromDbFormField(row: Record<string, unknown>): FormField {
   };
 }
 
+// Mirrors the seed rows in supabase/migrations/004_auth.sql — used when
+// Supabase is not configured (local dev / E2E), like MOCK_LEAGUE_DATA.
+const MOCK_FORM_FIELDS: FormField[] = [
+  { id: "ff-name", key: "name", label: "Name", fieldType: "text", required: true, fieldOrder: 1, locked: true, hidden: false, placeholder: "Your name or preferred name" },
+  { id: "ff-ign", key: "ign", label: "In-Game Name", fieldType: "text", required: true, fieldOrder: 2, locked: true, hidden: false, placeholder: "Your SMITE IGN" },
+  { id: "ff-tracker", key: "tracker_url", label: "Tracker.gg Profile", fieldType: "url", required: true, fieldOrder: 3, locked: true, hidden: false, placeholder: "https://tracker.gg/smite/profile/...", validationHint: "Must be a tracker.gg link" },
+  { id: "ff-primary-role", key: "primary_role", label: "Primary Role", fieldType: "select", required: true, fieldOrder: 4, locked: true, hidden: false, options: ["Solo", "Jungle", "Mid", "Carry", "Support"] },
+  { id: "ff-secondary-role", key: "secondary_role", label: "Secondary Role", fieldType: "select", required: true, fieldOrder: 5, locked: true, hidden: false, options: ["Solo", "Jungle", "Mid", "Carry", "Support"] },
+];
+
 export async function getFormFields(): Promise<FormField[]> {
   const supabase = getSupabaseServerClient();
-  if (!supabase) return [];
+  if (!supabase) return MOCK_FORM_FIELDS;
   const { data, error } = await supabase
     .from("form_fields")
     .select("*")
