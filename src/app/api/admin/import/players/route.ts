@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
-import { savePlayer, writeAuditLog } from "@/lib/league-data";
+import { savePlayersBulk, writeAuditLog } from "@/lib/league-data";
+import { reportError } from "@/lib/error-monitor";
 
 const playerSchema = z.object({
   id: z.string().min(1),
@@ -41,19 +42,38 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues.map((i) => i.message).join("; ") }, { status: 400 });
   }
 
-  let imported = 0;
-  const errors: Array<{ ign: string; error: string }> = [];
+  const players = parsed.data.players;
 
-  for (const player of parsed.data.players) {
-    try {
-      await savePlayer(player);
-      imported++;
-    } catch (err) {
-      errors.push({ ign: player.ign, error: err instanceof Error ? err.message : "Unknown error." });
+  // Cross-row deduplication: duplicate IGNs (case-insensitive) or ids within
+  // one upload would silently overwrite each other — reject with row errors.
+  const seenIgns = new Map<string, string>();
+  const dupErrors: Array<{ ign: string; error: string }> = [];
+  for (const player of players) {
+    const key = player.ign.trim().toLowerCase();
+    if (seenIgns.has(key)) {
+      dupErrors.push({ ign: player.ign, error: `Duplicate IGN in upload (also row with IGN "${seenIgns.get(key)}").` });
+    } else {
+      seenIgns.set(key, player.ign);
     }
   }
+  if (dupErrors.length > 0) {
+    return NextResponse.json({ imported: 0, errors: dupErrors }, { status: 400 });
+  }
 
-  if (imported > 0) revalidateTag("league-data", {});
-  await writeAuditLog("players_imported", "player_import", null, { imported, errorCount: errors.length });
-  return NextResponse.json({ imported, errors });
+  // All-or-nothing: one bulk upsert statement — any row failure (e.g. an IGN
+  // unique-index collision with an existing player) rolls back the batch.
+  try {
+    await savePlayersBulk(players);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Import failed.";
+    reportError("player import failed", err, { rowCount: players.length });
+    return NextResponse.json(
+      { imported: 0, errors: [{ ign: "(batch)", error: `Nothing was imported — ${message}` }] },
+      { status: 500 },
+    );
+  }
+
+  revalidateTag("league-data", {});
+  await writeAuditLog("players_imported", "player_import", null, { imported: players.length, errorCount: 0 });
+  return NextResponse.json({ imported: players.length, errors: [] });
 }

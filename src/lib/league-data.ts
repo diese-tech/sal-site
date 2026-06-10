@@ -574,6 +574,19 @@ export async function savePlayer(player: LeaguePlayer) {
   await writeAuditLog("save_player", "player", player.id, { ign: player.ign, orgId: player.orgId, status: player.status });
 }
 
+/**
+ * Bulk upsert for the admin import (#74). A single PostgREST request executes
+ * as one INSERT … ON CONFLICT statement, so the whole batch is atomic: any
+ * row failure (e.g. an IGN unique violation) rolls back every row.
+ */
+export async function savePlayersBulk(players: LeaguePlayer[]): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const { error } = await supabase.from("players").upsert(players.map(toDbPlayer));
+  if (error) throw error;
+  await writeAuditLog("save_players_bulk", "player_import", null, { count: players.length });
+}
+
 export async function saveAnnouncement(a: Announcement) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");

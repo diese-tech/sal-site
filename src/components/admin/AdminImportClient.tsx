@@ -150,6 +150,80 @@ function parseRolesColumn(raw: string): { division?: DivisionId; primaryRole: Pl
   return { division, primaryRole: roles[0] ?? null, secondaryRoles: roles.slice(1) };
 }
 
+// ---- JSON parser (#74): accepts an array of player objects ----
+
+function parseJson(text: string): ParsedRow[] | null {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const list = Array.isArray(data) ? data : null;
+  if (!list) return null;
+
+  return list
+    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+    .map((item) => {
+      const str = (keys: string[]) => {
+        for (const key of keys) {
+          const v = item[key];
+          if (typeof v === "string" && v.trim()) return v.trim();
+        }
+        return "";
+      };
+      const ign = str(["ign", "name", "inGameName", "in_game_name", "nickname"]);
+      const discord = str(["discordUsername", "discord_username", "discord", "username"]);
+      const primaryRole = normalizeRole(str(["primaryRole", "primary_role", "role", "position"]));
+      const rawSecondary = item.secondaryRoles ?? item.secondary_roles ?? str(["secondary", "secondaryRole"]);
+      const secondaryRoles = (Array.isArray(rawSecondary) ? rawSecondary : String(rawSecondary || "").split(","))
+        .map((r) => normalizeRole(String(r)))
+        .filter((r): r is PlayerRole => r !== null);
+      const divisionId = normalizeDivision(str(["divisionId", "division_id", "division", "div"])) ?? undefined;
+      const orgId = str(["orgId", "org_id", "org", "team"]) || undefined;
+
+      const missing: string[] = [];
+      if (!ign) missing.push("IGN");
+      if (!discord) missing.push("Discord");
+      if (!primaryRole) missing.push("Role");
+      const warnings = missing.length > 0 ? [`Missing: ${missing.join(", ")}`] : [];
+
+      return {
+        ign,
+        discordUsername: discord,
+        primaryRole,
+        secondaryRoles,
+        divisionId,
+        orgId,
+        confidence: (missing.length > 0 ? "red" : "green") as "green" | "yellow" | "red",
+        warnings,
+      };
+    })
+    .filter((r) => r.ign || r.discordUsername);
+}
+
+// Flag duplicate IGNs within one upload — the server rejects them outright.
+function markDuplicateIgns(rows: ParsedRow[]): ParsedRow[] {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = row.ign.trim().toLowerCase();
+    if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return rows.map((row) => {
+    const key = row.ign.trim().toLowerCase();
+    if (key && (counts.get(key) ?? 0) > 1) {
+      return { ...row, confidence: "red" as const, warnings: ["Duplicate IGN in upload", ...row.warnings] };
+    }
+    return row;
+  });
+}
+
+function parseInput(text: string): ParsedRow[] {
+  const trimmed = text.trim();
+  const rows = trimmed.startsWith("[") ? parseJson(trimmed) ?? parseText(text) : parseText(text);
+  return markDuplicateIgns(rows);
+}
+
 function parseText(text: string): ParsedRow[] {
   const rawLines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (rawLines.length < 2) return [];
@@ -247,7 +321,7 @@ export function AdminImportClient() {
 
   function handleTextChange(value: string) {
     setText(value);
-    setRows(parseText(value));
+    setRows(parseInput(value));
     setResult(null);
     setMessage("");
   }
@@ -259,7 +333,7 @@ export function AdminImportClient() {
     reader.onload = (ev) => {
       const content = ev.target?.result as string;
       setText(content);
-      setRows(parseText(content));
+      setRows(parseInput(content));
       setResult(null);
       setMessage("");
     };
@@ -299,7 +373,7 @@ export function AdminImportClient() {
       <div className="mb-6">
         <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">Admin</p>
         <h1 className="text-2xl font-black text-white">Player Import</h1>
-        <p className="mt-1 text-sm text-slate-400">Paste CSV, TSV, or Google Sheets data — or upload a file. Existing players are updated (upserted) by IGN.</p>
+        <p className="mt-1 text-sm text-slate-400">Paste CSV, TSV, Google Sheets data, or a JSON array — or upload a file. Imports are all-or-nothing; existing players are updated (upserted) by IGN.</p>
       </div>
 
       <div className="mb-4 rounded-xl border border-white/8 bg-white/[0.025] p-4">
@@ -307,7 +381,7 @@ export function AdminImportClient() {
         <ul className="list-inside list-disc space-y-1 text-xs text-slate-400">
           <li><span className="font-semibold text-slate-300">CSV / Google Sheets paste</span> — any headers with IGN, Discord, Role columns</li>
           <li><span className="font-semibold text-slate-300">Discord bot export</span> — <code className="rounded bg-white/[0.06] px-1">Username</code>, <code className="rounded bg-white/[0.06] px-1">Nickname</code> (= IGN), <code className="rounded bg-white/[0.06] px-1">Roles</code> (comma-separated: division + roles)</li>
-          <li><span className="font-semibold text-slate-300">File upload</span> — .csv or .tsv files</li>
+          <li><span className="font-semibold text-slate-300">File upload</span> — .csv, .tsv, or .json files</li>
         </ul>
       </div>
 
@@ -322,7 +396,7 @@ export function AdminImportClient() {
             >
               Upload File
             </button>
-            <input ref={fileRef} type="file" accept=".csv,.tsv" className="hidden" onChange={handleFile} />
+            <input ref={fileRef} type="file" accept=".csv,.tsv,.json" className="hidden" onChange={handleFile} />
           </div>
           <textarea
             rows={18}
