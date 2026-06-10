@@ -612,12 +612,12 @@ export async function recalculateAndPersistStandings() {
   if (data === MOCK_LEAGUE_DATA) throw new Error("Cannot recalculate standings: Supabase data unavailable.");
 
   const standings = recalcStandings(data, data.season?.id);
-  const { error } = await supabase.from("standings").upsert(standings.map(toDbStanding));
+  // Atomic replace (migration 017): orphan delete + upsert run in a single
+  // transaction so concurrent reads never see a mix of old and new rows.
+  const { error } = await supabase.rpc("replace_standings", {
+    p_rows: standings.map(toDbStanding),
+  });
   if (error) throw error;
-  const currentOrgIds = standings.map((s) => s.orgId);
-  if (currentOrgIds.length > 0) {
-    await supabase.from("standings").delete().not("org_id", "in", `(${currentOrgIds.map((id) => `"${id}"`).join(",")})`);
-  }
   await writeAuditLog("recalculate_standings", "standings", null, { orgCount: standings.length });
   return standings;
 }
