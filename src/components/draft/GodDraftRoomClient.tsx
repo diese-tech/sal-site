@@ -16,6 +16,8 @@ export function GodDraftRoomClient({ initialData }: { initialData: GodDraftRoomD
   const [channel, setChannel] = useState<DraftChatChannel>(initialData.canChatTeam ? "team" : "spectator");
   const [message, setMessage] = useState("");
   const [filter, setFilter] = useState<"all" | "available" | "vaulted">("all");
+  const [chatOpen, setChatOpen] = useState(false); // mobile chat drawer
+  const [seenMessageCount, setSeenMessageCount] = useState(initialData.chatMessages.length);
   const [secondsLeft, setSecondsLeft] = useState(() => calculateSecondsLeft(initialData.session));
   const [busy, setBusy] = useState(false);
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>(
@@ -114,11 +116,50 @@ export function GodDraftRoomClient({ initialData }: { initialData: GodDraftRoomD
   const canRequestReset = canToggleReady || initialData.role === "admin";
   const currentChat = messages.filter((m) => m.channel === channel);
 
+  // Unread badge for the mobile chat drawer; seen count is updated when the
+  // drawer is opened or closed, so the badge only counts messages that
+  // arrived while it was shut.
+  const unreadCount = chatOpen ? 0 : Math.max(0, messages.length - seenMessageCount);
+  const toggleChat = (open: boolean) => {
+    setSeenMessageCount(messages.length);
+    setChatOpen(open);
+  };
+
   async function sendMessage() {
     if (!message.trim()) return;
     await post("/api/draft/god/chat", { sessionId: session.id, channel, body: message });
     setMessage("");
   }
+
+  // Shared between the desktop sidebar and the mobile drawer.
+  const chatPanel = (
+    <>
+      <div className="mb-3 flex gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1">
+        {initialData.canChatTeam && <ChatTab label="Team" value="team" channel={channel} setChannel={setChannel} />}
+        {initialData.canChatSpectator && <ChatTab label="Spectator" value="spectator" channel={channel} setChannel={setChannel} />}
+      </div>
+      {initialData.canChatTeam || initialData.canChatSpectator ? (
+        <>
+          <div className="h-72 space-y-2 overflow-y-auto rounded-xl border border-white/8 bg-black/20 p-3">
+            {currentChat.length === 0 ? <p className="text-xs font-semibold text-slate-500">No messages yet.</p> : currentChat.map((m) => (
+              <div key={m.id}>
+                <p className="text-[0.65rem] font-black uppercase text-cyan-300">{m.senderName}</p>
+                <p className="text-sm text-slate-200">{m.body}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <input value={message} onChange={(e) => setMessage(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/50" />
+            <button onClick={sendMessage} disabled={busy} className="rounded-lg border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-xs font-black uppercase text-cyan-100">Send</button>
+          </div>
+        </>
+      ) : (
+        <div className="rounded-xl border border-white/8 bg-black/20 p-6 text-center text-sm font-semibold text-slate-500">
+          Sign in to chat. Unauthenticated viewers can watch the board only.
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className="space-y-6">
@@ -185,13 +226,13 @@ export function GodDraftRoomClient({ initialData }: { initialData: GodDraftRoomD
                 ))}
               </div>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
               {godList.map((god) => {
                 const disabled = busy || !canAct || usedIds.has(god.id) || (session.currentType === "pick" && vaultedIds.has(god.id));
                 return (
-                  <button key={god.id} disabled={disabled || !session.currentType} onClick={() => post("/api/draft/god/action", { sessionId: session.id, godId: god.id })} className="min-h-20 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-left transition hover:border-cyan-300/40 disabled:cursor-not-allowed disabled:opacity-45">
-                    <span className="block font-black text-white">{god.name}</span>
-                    <span className="text-xs font-semibold text-slate-500">{god.class ?? "Unknown"} {god.damageType ? `- ${god.damageType}` : ""}</span>
+                  <button key={god.id} disabled={disabled || !session.currentType} onClick={() => post("/api/draft/god/action", { sessionId: session.id, godId: god.id })} className="min-h-20 min-w-0 rounded-xl border border-white/10 bg-white/[0.04] p-2.5 text-left transition hover:border-cyan-300/40 disabled:cursor-not-allowed disabled:opacity-45 sm:p-3">
+                    <span className="block truncate font-black text-white">{god.name}</span>
+                    <span className="block truncate text-xs font-semibold text-slate-500">{god.class ?? "Unknown"} {god.damageType ? `- ${god.damageType}` : ""}</span>
                     {vaultedIds.has(god.id) && <span className="mt-2 block text-[0.65rem] font-black uppercase text-amber-300">Vaulted</span>}
                   </button>
                 );
@@ -200,33 +241,37 @@ export function GodDraftRoomClient({ initialData }: { initialData: GodDraftRoomD
           </div>
         </div>
 
-        <aside className="rounded-2xl border border-white/10 bg-slate-950/78 p-4">
-          <div className="mb-3 flex gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1">
-            {initialData.canChatTeam && <ChatTab label="Team" value="team" channel={channel} setChannel={setChannel} />}
-            {initialData.canChatSpectator && <ChatTab label="Spectator" value="spectator" channel={channel} setChannel={setChannel} />}
-          </div>
-          {initialData.canChatTeam || initialData.canChatSpectator ? (
-            <>
-              <div className="h-72 space-y-2 overflow-y-auto rounded-xl border border-white/8 bg-black/20 p-3">
-                {currentChat.length === 0 ? <p className="text-xs font-semibold text-slate-500">No messages yet.</p> : currentChat.map((m) => (
-                  <div key={m.id}>
-                    <p className="text-[0.65rem] font-black uppercase text-cyan-300">{m.senderName}</p>
-                    <p className="text-sm text-slate-200">{m.body}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 flex gap-2">
-                <input value={message} onChange={(e) => setMessage(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/50" />
-                <button onClick={sendMessage} disabled={busy} className="rounded-lg border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-xs font-black uppercase text-cyan-100">Send</button>
-              </div>
-            </>
-          ) : (
-            <div className="rounded-xl border border-white/8 bg-black/20 p-6 text-center text-sm font-semibold text-slate-500">
-              Sign in to chat. Unauthenticated viewers can watch the board only.
-            </div>
-          )}
+        {/* Desktop: chat sidebar. On mobile it becomes the drawer below (#111). */}
+        <aside className="hidden rounded-2xl border border-white/10 bg-slate-950/78 p-4 lg:block">
+          {chatPanel}
         </aside>
       </section>
+
+      {/* Mobile chat drawer (#111): full-width board, chat toggled from a bottom sheet */}
+      <div className="lg:hidden">
+        {chatOpen && (
+          <div className="fixed inset-x-0 bottom-0 z-40 max-h-[60vh] overflow-y-auto rounded-t-2xl border border-white/15 bg-slate-950/97 p-4 pb-6 shadow-2xl shadow-black/60 backdrop-blur">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-black uppercase text-slate-400">Draft Chat</p>
+              <button onClick={() => toggleChat(false)} className="rounded-lg border border-white/15 px-2.5 py-1 text-xs font-black uppercase text-slate-300">
+                Close
+              </button>
+            </div>
+            {chatPanel}
+          </div>
+        )}
+        {!chatOpen && (
+          <button
+            onClick={() => toggleChat(true)}
+            className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full border border-cyan-300/40 bg-slate-950/95 px-4 py-3 text-xs font-black uppercase text-cyan-100 shadow-xl shadow-black/50 backdrop-blur"
+          >
+            💬 Chat
+            {unreadCount > 0 && (
+              <span className="rounded-full bg-orange-400 px-1.5 py-0.5 text-[0.6rem] font-black text-slate-950">{unreadCount}</span>
+            )}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -246,8 +291,8 @@ function DraftStrip({ title, items }: { title: string; items: DraftSelection[] }
   return (
     <div className="rounded-2xl border border-white/10 bg-slate-950/78 p-4">
       <h2 className="mb-3 text-sm font-black uppercase tracking-widest text-slate-400">{title}</h2>
-      <div className="grid gap-2 sm:grid-cols-5">
-        {items.length === 0 ? <p className="text-sm font-semibold text-slate-600">No {title.toLowerCase()} yet.</p> : items.map((item, index) => (
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {items.length === 0 ? <p className="col-span-full text-sm font-semibold text-slate-600">No {title.toLowerCase()} yet.</p> : items.map((item, index) => (
           <div key={`${item.godId}-${index}`} className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
             <p className="text-[0.65rem] font-black uppercase text-slate-500">Side {item.side}</p>
             <p className="font-black text-white">{item.godName}</p>
