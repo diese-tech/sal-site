@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
-import { saveMatch } from "@/lib/league-data";
+import { getAllSeasons, saveMatch } from "@/lib/league-data";
 import { errorMessage } from "@/lib/error-monitor";
 
 const matchSchema = z.object({
@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
     awayScore: body.awayScore !== undefined && body.awayScore !== null ? Number(body.awayScore) : undefined,
     streamUrl: body.streamUrl || undefined,
     vodUrl: body.vodUrl || undefined,
+    seasonId: body.seasonId || undefined,
   };
 
   const result = matchSchema.safeParse(coerced);
@@ -68,7 +69,16 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await saveMatch(result.data);
+    // Matches without an explicit season belong to the active season —
+    // standings only count season-scoped matches, so a NULL season would
+    // silently exclude the match from the table.
+    let match = result.data;
+    if (!match.seasonId) {
+      const seasons = await getAllSeasons();
+      const active = seasons.find((s) => s.status === "active") ?? seasons[0];
+      if (active) match = { ...match, seasonId: active.id };
+    }
+    await saveMatch(match);
     revalidateTag("league-data", {});
     return NextResponse.json({ ok: true });
   } catch (err) {

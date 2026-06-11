@@ -160,7 +160,7 @@ function fromDbMatch(row: DbMatch): Match {
     vodUrl: row.vod_url ?? undefined,
     archivedAt: row.archived_at ?? undefined,
     deletionScheduledAt: row.deletion_scheduled_at ?? undefined,
-    seasonId: row.season_id as string | undefined,
+    seasonId: row.season_id ?? undefined,
   };
 }
 
@@ -708,7 +708,7 @@ function fromDbRegistration(row: Record<string, unknown>): Registration {
     discordId: row.discord_id as string,
     discordUsername: row.discord_username as string,
     discordDisplayName: row.discord_display_name as string | undefined,
-    seasonId: row.season_id as string | undefined,
+    seasonId: (row.season_id as string | null) ?? undefined,
     playerId: row.player_id as string | undefined,
     formData: (row.form_data as Record<string, string>) ?? {},
     status: row.status as Registration["status"],
