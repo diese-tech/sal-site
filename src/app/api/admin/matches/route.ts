@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
 import { saveMatch } from "@/lib/league-data";
+import { errorMessage } from "@/lib/error-monitor";
 
 const matchSchema = z.object({
   id: z.string().min(1),
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
     revalidateTag("league-data", {});
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error saving match.";
+    const message = errorMessage(err, "Unknown error saving match.");
     console.error("POST /api/admin/matches error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }

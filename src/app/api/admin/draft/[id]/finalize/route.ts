@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { isAdminRequest, getAdminRequestSession } from "@/lib/admin-auth";
 import { finalizeDraftRosters } from "@/lib/draft-data";
 import { writeAuditLog } from "@/lib/league-data";
+import { errorMessage } from "@/lib/error-monitor";
 
 // Manual roster propagation for a completed draft (#62). New drafts finalize
 // automatically when the last pick lands; this covers drafts completed before
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     revalidateTag("league-data", {});
     return NextResponse.json({ ok: true, assigned });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to finalize draft.";
+    const message = errorMessage(err, "Failed to finalize draft.");
     console.error("POST /api/admin/draft/[id]/finalize:", err);
     const status = message === "Draft room not found." ? 404 : message === "Draft is not complete." ? 400 : 500;
     return NextResponse.json({ error: message }, { status });

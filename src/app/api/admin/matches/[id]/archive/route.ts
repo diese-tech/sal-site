@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { isSuperAdminRequest } from "@/lib/admin-auth";
 import { archiveRecord, unarchiveRecord } from "@/lib/league-data";
+import { errorMessage } from "@/lib/error-monitor";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isSuperAdminRequest(request)) {
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     revalidateTag("league-data", {});
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error archiving match.";
+    const message = errorMessage(err, "Unknown error archiving match.");
     console.error(`POST /api/admin/matches/${id}/archive error:`, err);
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
 import { updateDraftRoom } from "@/lib/draft-data";
+import { errorMessage } from "@/lib/error-monitor";
 
 const patchSchema = z.object({
   baseOrder: z.array(z.string().min(1)).min(1).optional(),
@@ -19,7 +20,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const room = await updateDraftRoom(id, result.data);
     return NextResponse.json({ room });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to update draft room.";
+    const message = errorMessage(err, "Failed to update draft room.");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

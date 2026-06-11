@@ -3,6 +3,7 @@ import { isAdminRequest } from "@/lib/admin-auth";
 import { buildDraftState, updateDraftRoom } from "@/lib/draft-data";
 import { writeAuditLog } from "@/lib/league-data";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { errorMessage } from "@/lib/error-monitor";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isAdminRequest(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await writeAuditLog("draft_started", "draft_room", id, { divisionId: state.room.divisionId });
     return NextResponse.json({ room });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to start draft.";
+    const message = errorMessage(err, "Failed to start draft.");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

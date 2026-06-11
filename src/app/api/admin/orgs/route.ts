@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isSuperAdminRequest } from "@/lib/admin-auth";
 import { saveOrg } from "@/lib/league-data";
+import { errorMessage } from "@/lib/error-monitor";
 
 const orgSchema = z.object({
   id: z.string().min(1),
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     revalidateTag("league-data", {});
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error saving org.";
+    const message = errorMessage(err, "Unknown error saving org.");
     console.error("POST /api/admin/orgs error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
