@@ -3,6 +3,7 @@ import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
 import { createDraftRoom, getDraftRooms } from "@/lib/draft-data";
 import { writeAuditLog } from "@/lib/league-data";
+import { errorMessage } from "@/lib/error-monitor";
 
 const createSchema = z.object({
   id: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, "id must be lowercase alphanumeric with hyphens"),
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
     await writeAuditLog("draft_room_created", "draft_room", result.data.id, { divisionId: result.data.divisionId, rounds: result.data.rounds });
     return NextResponse.json({ room }, { status: 201 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to create draft room.";
+    const message = errorMessage(err, "Failed to create draft room.");
     console.error("POST /api/admin/draft:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }

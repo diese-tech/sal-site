@@ -9,6 +9,7 @@ import {
   reorderShortlist,
 } from "@/lib/draft-data";
 import { getCaptainSessionFromRequest } from "@/lib/captain-auth";
+import { errorMessage } from "@/lib/error-monitor";
 
 function unauthorized() {
   return NextResponse.json({ error: "Captain session required." }, { status: 401 });
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await addToShortlist(id, session.orgId, playerId);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to add to shortlist.";
+    const message = errorMessage(err, "Failed to add to shortlist.");
     // Unique constraint = already in shortlist
     if (message.includes("unique") || message.includes("duplicate")) {
       return NextResponse.json({ error: "Player is already on your shortlist." }, { status: 409 });

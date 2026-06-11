@@ -712,15 +712,23 @@ test("admin import valid CSV shows green preview rows", async ({ page }) => {
   await expect(page.locator("text=MysticX").first()).toBeVisible();
 });
 
-test("admin import CSV with no role shows red row", async ({ page }) => {
+test("admin import CSV with no role is importable with a Flex default", async ({ page }) => {
   await adminLogin(page);
   await page.goto("/admin/import");
   await page.locator("textarea").fill("IGN,Discord\nNoRoleGuy,noroleguy#0001");
   await expect(page.locator("text=NoRoleGuy").first()).toBeVisible();
-  // Row is flagged — Import button should not count it as importable
+  // Partial importing: missing role is a warning (defaults to Flex), not a blocker
   const importBtn = page.getByRole("button", { name: /Import/ });
-  // Button text says "Import 0 Players" since no green/yellow rows
-  await expect(importBtn).toContainText("0");
+  await expect(importBtn).toContainText("1");
+});
+
+test("admin import CSV missing IGN is skipped, others import", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/import");
+  await page.locator("textarea").fill("IGN,Discord,Role\nGoodGuy,good#1,Mid\n,orphan#2,Solo");
+  await expect(page.locator("text=GoodGuy").first()).toBeVisible();
+  // Only the row with an IGN counts
+  await expect(page.getByRole("button", { name: /Import/ })).toContainText("1");
 });
 
 test("admin import sends batch to API and shows imported count", async ({ page }) => {

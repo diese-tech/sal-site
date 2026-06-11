@@ -3,6 +3,7 @@ import { isAdminRequest } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getAdminLeagueData } from "@/lib/league-data";
 import type { ExtractedGame } from "@/types/match-report";
+import { errorMessage } from "@/lib/error-monitor";
 
 const SMITE_ROLES = ["Solo", "Jungle", "Mid", "Carry", "Support"] as const;
 
@@ -214,7 +215,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   } catch (err) {
     // Reset to pending on failure so admin can retry
     await supabase.from("match_reports").update({ status: "pending" }).eq("id", id);
-    const message = err instanceof Error ? err.message : "Extraction failed.";
+    const message = errorMessage(err, "Extraction failed.");
     console.error("extract route error:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isSuperAdminRequest } from "@/lib/admin-auth";
 import { advanceWeek, getAllSeasons, saveSeason } from "@/lib/league-data";
+import { errorMessage } from "@/lib/error-monitor";
 
 const patchSchema = z.object({
   action: z.enum(["advanceWeek", "update"]).optional(),
@@ -77,7 +78,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     revalidateTag("league-data", {});
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error updating season.";
+    const message = errorMessage(err, "Unknown error updating season.");
     console.error(`PATCH /api/admin/seasons/${id} error:`, err);
     return NextResponse.json({ error: message }, { status: 500 });
   }

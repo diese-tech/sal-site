@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAdminRequest, getAdminRequestSession } from "@/lib/admin-auth";
 import { buildDraftState, getDraftPicks, undoLastPick } from "@/lib/draft-data";
 import { writeAuditLog } from "@/lib/league-data";
+import { errorMessage } from "@/lib/error-monitor";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isAdminRequest(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const updatedState = await buildDraftState(id);
     return NextResponse.json({ ok: true, state: updatedState });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to undo pick.";
+    const message = errorMessage(err, "Failed to undo pick.");
     console.error("POST /api/admin/draft/[id]/undo:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }

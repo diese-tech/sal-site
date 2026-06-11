@@ -3,6 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
 import { saveAnnouncement } from "@/lib/league-data";
+import { errorMessage } from "@/lib/error-monitor";
 
 const announcementSchema = z.object({
   id: z.string().min(1),
@@ -31,6 +32,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("POST /api/admin/announcements error:", err);
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error." }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(err, "Unknown error.") }, { status: 500 });
   }
 }

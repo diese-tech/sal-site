@@ -182,11 +182,10 @@ function parseJson(text: string): ParsedRow[] | null {
       const divisionId = normalizeDivision(str(["divisionId", "division_id", "division", "div"])) ?? undefined;
       const orgId = str(["orgId", "org_id", "org", "team"]) || undefined;
 
-      const missing: string[] = [];
-      if (!ign) missing.push("IGN");
-      if (!discord) missing.push("Discord");
-      if (!primaryRole) missing.push("Role");
-      const warnings = missing.length > 0 ? [`Missing: ${missing.join(", ")}`] : [];
+      const warnings: string[] = [];
+      if (!discord) warnings.push("No Discord username — imported without one");
+      if (!primaryRole) warnings.push("No role — defaulting to Flex");
+      if (!ign) warnings.unshift("Missing: IGN");
 
       return {
         ign,
@@ -195,7 +194,7 @@ function parseJson(text: string): ParsedRow[] | null {
         secondaryRoles,
         divisionId,
         orgId,
-        confidence: (missing.length > 0 ? "red" : "green") as "green" | "yellow" | "red",
+        confidence: (!ign ? "red" : warnings.length > 0 ? "yellow" : "green") as "green" | "yellow" | "red",
         warnings,
       };
     })
@@ -243,12 +242,17 @@ function parseText(text: string): ParsedRow[] {
     const ign = get(colMap.ign);
     const discord = get(colMap.discord);
 
-    // Discord bot "Roles" column takes precedence for role/division detection
+    // Discord bot "Roles" column takes precedence for role detection, but an
+    // explicit Division column still applies when the Roles cell has none.
     if (colMap.roles !== undefined) {
       const parsed = parseRolesColumn(get(colMap.roles));
       primaryRole = parsed.primaryRole;
       secondaryRoles = parsed.secondaryRoles;
       divisionId = parsed.division;
+      if (!divisionId) {
+        const rawDiv = get(colMap.division);
+        if (rawDiv) divisionId = normalizeDivision(rawDiv) ?? undefined;
+      }
     } else {
       const rawRole = get(colMap.role);
       if (rawRole) {
@@ -273,10 +277,11 @@ function parseText(text: string): ParsedRow[] {
 
     const orgId = get(colMap.org) || undefined;
 
+    // Only IGN is strictly required; missing Discord/role import with defaults.
     const missing: string[] = [];
     if (!ign) missing.push("IGN");
-    if (!discord) missing.push("Discord");
-    if (!primaryRole) missing.push("Role");
+    if (!discord) warnings.push("No Discord username — imported without one");
+    if (!primaryRole) warnings.push("No role — defaulting to Flex");
 
     let confidence: "green" | "yellow" | "red" = "green";
     if (missing.length > 0) confidence = "red";
@@ -289,14 +294,14 @@ function parseText(text: string): ParsedRow[] {
 }
 
 function rowToPlayer(row: ParsedRow): ImportedPlayer | null {
-  if (!row.ign || !row.discordUsername || !row.primaryRole) return null;
+  if (!row.ign) return null;
   const slug = slugify(row.ign);
   const hash = hashCode(row.ign).toString(16).slice(0, 6);
   return {
     id: `player-${slug}-${hash}`,
     ign: row.ign,
     discordUsername: row.discordUsername,
-    primaryRole: row.primaryRole,
+    primaryRole: row.primaryRole ?? "Flex",
     secondaryRoles: row.secondaryRoles,
     divisionId: row.divisionId,
     orgId: row.orgId,
@@ -316,7 +321,7 @@ export function AdminImportClient() {
   const [text, setText] = useState("");
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{ imported: number; errors: Array<{ ign: string; error: string }> } | null>(null);
+  const [result, setResult] = useState<{ imported: number; errors: Array<{ ign: string; error: string }>; warnings: Array<{ ign: string; warning: string }> } | null>(null);
   const [message, setMessage] = useState("");
 
   function handleTextChange(value: string) {
@@ -355,12 +360,12 @@ export function AdminImportClient() {
       body: JSON.stringify({ players }),
     });
     setImporting(false);
-    const data = await res.json().catch(() => null) as { imported?: number; errors?: Array<{ ign: string; error: string }>; error?: string } | null;
+    const data = await res.json().catch(() => null) as { imported?: number; errors?: Array<{ ign: string; error: string }>; warnings?: Array<{ ign: string; warning: string }>; error?: string } | null;
     if (!res.ok) {
       setMessage(data?.error ? `Import failed: ${data.error}` : "Import failed.");
       return;
     }
-    setResult({ imported: data?.imported ?? 0, errors: data?.errors ?? [] });
+    setResult({ imported: data?.imported ?? 0, errors: data?.errors ?? [], warnings: data?.warnings ?? [] });
     router.refresh();
   }
 
@@ -373,7 +378,7 @@ export function AdminImportClient() {
       <div className="mb-6">
         <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">Admin</p>
         <h1 className="text-2xl font-black text-white">Player Import</h1>
-        <p className="mt-1 text-sm text-slate-400">Paste CSV, TSV, Google Sheets data, or a JSON array — or upload a file. Imports are all-or-nothing; existing players are updated (upserted) by IGN.</p>
+        <p className="mt-1 text-sm text-slate-400">Paste CSV, TSV, Google Sheets data, or a JSON array — or upload a file. Only IGN is required; rows that fail import individually without blocking the rest. Existing players are updated (upserted) by IGN.</p>
       </div>
 
       <div className="mb-4 rounded-xl border border-white/8 bg-white/[0.025] p-4">
@@ -425,6 +430,13 @@ export function AdminImportClient() {
                 <ul className="mt-2 space-y-0.5 text-xs text-red-400">
                   {result.errors.map((e, i) => (
                     <li key={i}>{e.ign}: {e.error}</li>
+                  ))}
+                </ul>
+              )}
+              {result.warnings.length > 0 && (
+                <ul className="mt-2 space-y-0.5 text-xs text-amber-300">
+                  {result.warnings.map((w, i) => (
+                    <li key={i}>{w.ign}: {w.warning}</li>
                   ))}
                 </ul>
               )}

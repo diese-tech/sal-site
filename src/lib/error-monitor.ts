@@ -47,3 +47,17 @@ export function reportError(context: string, error: unknown, extra?: Record<stri
     })
     .finally(() => clearTimeout(timer));
 }
+
+/**
+ * Extracts a human-readable message from any thrown value — including
+ * Supabase PostgrestError objects, which carry .message without reliably
+ * passing `instanceof Error`.
+ */
+export function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    const m = (err as { message: unknown }).message;
+    if (typeof m === "string" && m) return m;
+  }
+  return fallback;
+}

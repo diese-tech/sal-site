@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
 import { approveRegistrationAndCreatePlayer, updateRegistrationStatus } from "@/lib/league-data";
+import { errorMessage } from "@/lib/error-monitor";
 
 const schema = z.object({
   status: z.enum(["pending", "approved", "rejected"]),
@@ -30,7 +31,7 @@ export async function PATCH(
     await updateRegistrationStatus(id, parsed.data.status, parsed.data.reviewerNote);
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error updating registration.";
+    const message = errorMessage(err, "Unknown error updating registration.");
     console.error(`PATCH /api/admin/registrations/${id} error:`, err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
