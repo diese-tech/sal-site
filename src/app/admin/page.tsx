@@ -1,6 +1,8 @@
 import { AdminStatCard } from "@/components/league/AdminStatCard";
 import { requireAdmin } from "@/lib/admin-auth";
+import { formatAuditEntry } from "@/lib/audit-format";
 import { getAuditLog, getLeagueData } from "@/lib/league-data";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 
 export const metadata = { title: "Admin - SAL" };
@@ -83,17 +85,34 @@ export default async function AdminOverviewPage() {
           {auditLog.length === 0 && (
             <p className="px-4 py-6 text-center text-sm font-semibold text-slate-500">No activity recorded yet.</p>
           )}
-          {auditLog.map((entry) => (
-            <div key={entry.id} className="flex items-start gap-3 border-b border-white/5 px-4 py-3 last:border-0">
-              <span className="mt-0.5 shrink-0 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[0.6rem] font-black uppercase text-cyan-200">
-                {entry.action.replace(/_/g, " ")}
-              </span>
-              <div className="min-w-0 flex-1">
-                {entry.entityId && <span className="text-xs font-semibold text-white/60">{entry.entityId}</span>}
-                <span className="ml-2 text-[0.65rem] text-slate-500">{new Date(entry.createdAt).toLocaleString()}</span>
-              </div>
-            </div>
-          ))}
+          {auditLog.map((entry) => {
+            const f = formatAuditEntry(entry);
+            const dot = {
+              emerald: "bg-emerald-400",
+              cyan: "bg-cyan-400",
+              violet: "bg-violet-400",
+              amber: "bg-amber-400",
+              red: "bg-red-400",
+              slate: "bg-slate-500",
+            }[f.tone];
+            return (
+              <Link
+                key={entry.id}
+                href={f.href}
+                className="flex items-center gap-3 border-b border-white/5 px-4 py-3 transition last:border-0 hover:bg-white/[0.04]"
+              >
+                <span className={cn("h-2 w-2 shrink-0 rounded-full", dot)} />
+                <span className="w-28 shrink-0 text-[0.6rem] font-black uppercase tracking-wider text-slate-500">
+                  {f.category}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-200">{f.text}</span>
+                <span className="shrink-0 text-[0.65rem] font-semibold text-slate-500" title={f.absoluteTime}>
+                  {f.relativeTime}
+                </span>
+                <span className="shrink-0 text-slate-600">›</span>
+              </Link>
+            );
+          })}
         </div>
       </div>
     </main>
