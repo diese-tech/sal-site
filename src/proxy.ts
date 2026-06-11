@@ -46,7 +46,7 @@ function isPublicAdminPath(pathname: string) {
   );
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const protectsAdminPage = pathname.startsWith("/admin") && !isPublicAdminPath(pathname);
   const protectsAdminApi = pathname.startsWith("/api/admin") && !isPublicAdminPath(pathname);
