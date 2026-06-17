@@ -9,7 +9,11 @@ interface HeroVideoLoopProps {
 }
 
 export function HeroVideoLoop({ clips, poster, className }: HeroVideoLoopProps) {
-  const [reducedMotion, setReducedMotion] = useState(false);
+  // Lazy initializer reads the preference once at mount without a synchronous
+  // setState call inside the effect body (avoids react-hooks/set-state-in-effect).
+  const [reducedMotion, setReducedMotion] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
   const [activeSlot, setActiveSlot] = useState<"a" | "b">("a");
   const [indexA, setIndexA] = useState(0);
   const [indexB, setIndexB] = useState(1 % Math.max(clips.length, 1));
@@ -17,10 +21,9 @@ export function HeroVideoLoop({ clips, poster, className }: HeroVideoLoopProps) 
   const videoA = useRef<HTMLVideoElement>(null);
   const videoB = useRef<HTMLVideoElement>(null);
 
-  // Detect reduced-motion preference on mount
+  // Subscribe to preference changes after mount
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReducedMotion(mq.matches);
     const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
@@ -59,13 +62,17 @@ export function HeroVideoLoop({ clips, poster, className }: HeroVideoLoopProps) 
     }
   }
 
-  // On clip end: advance index for the slot that just finished, flip active slot
+  // On clip end: flip to the other slot and queue the slot-after-next for this
+  // slot. Advancing by 1 caused the bug where each clip played twice: slot A
+  // would set indexA=1, then when A became active again it played clip 1 a
+  // second time instead of clip 2. Advancing by 2 means when this slot is next
+  // activated it plays the clip after the one currently queued in the other slot.
   function handleEnded(slot: "a" | "b") {
     if (slot !== activeSlot) return;
     const currentIndex = slot === "a" ? indexA : indexB;
-    const nextIndex = (currentIndex + 1) % clips.length;
-    if (slot === "a") setIndexA(nextIndex);
-    else setIndexB(nextIndex);
+    const skipToIndex = (currentIndex + 2) % clips.length;
+    if (slot === "a") setIndexA(skipToIndex);
+    else setIndexB(skipToIndex);
     setActiveSlot(slot === "a" ? "b" : "a");
   }
 

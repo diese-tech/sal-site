@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import type { Match, Org } from "@/types/league";
 import { OrgLogo } from "@/components/card-lab/ui";
@@ -31,11 +31,10 @@ export function WatchLiveClient({
   nextHomeOrg,
   nextAwayOrg,
 }: Props) {
-  const [hostname, setHostname] = useState<string>("");
-
-  useEffect(() => {
-    setHostname(window.location.hostname);
-  }, []);
+  // Lazy initializer avoids a synchronous setState call inside an effect body.
+  const [hostname] = useState<string>(
+    () => typeof window !== "undefined" ? window.location.hostname : "",
+  );
 
   const playerSrc = hostname
     ? `https://player.twitch.tv/?channel=${channel}&parent=${hostname}&autoplay=true`
