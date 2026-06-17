@@ -11,9 +11,9 @@
  *   concurrent schedule data access (50 concurrent):    p95 < 1500ms
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { recalcStandings } from "../../src/lib/standings";
-import type { LeagueData, Match, Org, OrgStanding } from "../../src/types/league";
+import type { Match, Org, OrgStanding } from "../../src/types/league";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -43,13 +43,10 @@ function makeOrgs(count: number): Org[] {
     name: `Team ${i}`,
     tag: `T${i}`,
     divisionId: DIVISIONS[i % 3],
-    logoUrl: undefined,
-    accentColor: "#fff",
-    players: [],
-    wins: 0,
-    losses: 0,
-    primaryColor: "#000",
-    secondaryColor: "#fff",
+    logoInitials: `T${i}`,
+    logoGradient: "from-cyan-500 to-blue-600",
+    primaryColor: "#0ff",
+    accentGradient: "from-cyan-500/20 to-blue-600/20",
   }));
 }
 

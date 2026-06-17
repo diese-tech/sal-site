@@ -9,7 +9,11 @@ interface HeroVideoLoopProps {
 }
 
 export function HeroVideoLoop({ clips, poster, className }: HeroVideoLoopProps) {
-  const [reducedMotion, setReducedMotion] = useState(false);
+  // Lazy initializer reads the preference once at mount without a synchronous
+  // setState call inside the effect body (avoids react-hooks/set-state-in-effect).
+  const [reducedMotion, setReducedMotion] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
   const [activeSlot, setActiveSlot] = useState<"a" | "b">("a");
   const [indexA, setIndexA] = useState(0);
   const [indexB, setIndexB] = useState(1 % Math.max(clips.length, 1));
@@ -17,10 +21,9 @@ export function HeroVideoLoop({ clips, poster, className }: HeroVideoLoopProps) 
   const videoA = useRef<HTMLVideoElement>(null);
   const videoB = useRef<HTMLVideoElement>(null);
 
-  // Detect reduced-motion preference on mount
+  // Subscribe to preference changes after mount
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReducedMotion(mq.matches);
     const handler = (e: MediaQueryListEvent) => setReducedMotion(e.matches);
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
