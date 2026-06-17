@@ -80,6 +80,7 @@ export interface Match {
   scheduledTime: string;
   status: MatchStatus;
   week: number;
+  seasonId: string;
   homeScore?: number;
   awayScore?: number;
   streamUrl?: string;
@@ -88,7 +89,6 @@ export interface Match {
   archivedAt?: string;
   /** ISO timestamp — set means queued for hard delete by a superadmin. */
   deletionScheduledAt?: string;
-  seasonId?: string;
 }
 
 export interface OrgStanding {

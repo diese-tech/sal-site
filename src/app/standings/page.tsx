@@ -1,5 +1,6 @@
 import { StandingsTable } from "@/components/league/StandingsTable";
-import { getLeagueData } from "@/lib/league-data";
+import { SeasonSelector } from "@/components/league/SeasonSelector";
+import { getLeagueData, getAllSeasons } from "@/lib/league-data";
 
 export const metadata = {
   title: "Standings - Serpent Ascension League",
@@ -7,8 +8,14 @@ export const metadata = {
 
 export const revalidate = 30;
 
-export default async function StandingsPage() {
-  const { divisions, standings, orgs, season } = await getLeagueData();
+export default async function StandingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ season?: string }>;
+}) {
+  const { season: seasonId } = await searchParams;
+  const { divisions, standings, orgs, season } = await getLeagueData(seasonId);
+  const allSeasons = await getAllSeasons();
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
@@ -22,6 +29,9 @@ export default async function StandingsPage() {
           <p className="mt-1.5 max-w-2xl text-sm font-semibold text-slate-400">
             Win%, games back, and form across Solar, Lunar, and Gaia divisions. Click any team to view their roster.
           </p>
+          {allSeasons.length > 1 && (
+            <SeasonSelector seasons={allSeasons} currentSeasonId={season.id} />
+          )}
         </div>
       </div>
 

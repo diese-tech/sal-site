@@ -36,6 +36,7 @@ function makeMatch(
     scheduledTime: "18:00",
     status,
     week: 1,
+    seasonId: "s1",
     homeScore,
     awayScore,
   };

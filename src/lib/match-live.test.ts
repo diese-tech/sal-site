@@ -12,6 +12,7 @@ function makeMatch(overrides: Partial<Match> = {}): Match {
     scheduledTime: "19:00",
     status: "live",
     week: 1,
+    seasonId: "s1",
     ...overrides,
   };
 }

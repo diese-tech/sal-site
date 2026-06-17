@@ -220,39 +220,39 @@ const ALL_PLAYERS: LeaguePlayer[] = [
 
 const MATCHES: Match[] = [
   // Solar — completed
-  { id: "s-m1", divisionId: "solar", homeOrgId: "helix-reign", awayOrgId: "obsidian-order", scheduledDate: "2025-04-28", scheduledTime: "20:00", status: "completed", week: 1, homeScore: 2, awayScore: 0 },
-  { id: "s-m2", divisionId: "solar", homeOrgId: "venom-strike", awayOrgId: "solstice-edge", scheduledDate: "2025-04-28", scheduledTime: "22:00", status: "completed", week: 1, homeScore: 1, awayScore: 2 },
-  { id: "s-m3", divisionId: "solar", homeOrgId: "obsidian-order", awayOrgId: "venom-strike", scheduledDate: "2025-05-05", scheduledTime: "20:00", status: "completed", week: 2, homeScore: 2, awayScore: 1 },
-  { id: "s-m4", divisionId: "solar", homeOrgId: "helix-reign", awayOrgId: "solstice-edge", scheduledDate: "2025-05-05", scheduledTime: "22:00", status: "completed", week: 2, homeScore: 2, awayScore: 0 },
+  { id: "s-m1", divisionId: "solar", homeOrgId: "helix-reign", awayOrgId: "obsidian-order", scheduledDate: "2025-04-28", scheduledTime: "20:00", seasonId: "s1", status: "completed", week: 1, homeScore: 2, awayScore: 0 },
+  { id: "s-m2", divisionId: "solar", homeOrgId: "venom-strike", awayOrgId: "solstice-edge", scheduledDate: "2025-04-28", scheduledTime: "22:00", seasonId: "s1", status: "completed", week: 1, homeScore: 1, awayScore: 2 },
+  { id: "s-m3", divisionId: "solar", homeOrgId: "obsidian-order", awayOrgId: "venom-strike", scheduledDate: "2025-05-05", scheduledTime: "20:00", seasonId: "s1", status: "completed", week: 2, homeScore: 2, awayScore: 1 },
+  { id: "s-m4", divisionId: "solar", homeOrgId: "helix-reign", awayOrgId: "solstice-edge", scheduledDate: "2025-05-05", scheduledTime: "22:00", seasonId: "s1", status: "completed", week: 2, homeScore: 2, awayScore: 0 },
   // Solar — live / this week
-  { id: "s-m5", divisionId: "solar", homeOrgId: "helix-reign", awayOrgId: "venom-strike", scheduledDate: "2025-05-18", scheduledTime: "20:00", status: "live", week: 3, streamUrl: "#" },
-  { id: "s-m6", divisionId: "solar", homeOrgId: "obsidian-order", awayOrgId: "solstice-edge", scheduledDate: "2025-05-18", scheduledTime: "22:00", status: "scheduled", week: 3 },
+  { id: "s-m5", divisionId: "solar", homeOrgId: "helix-reign", awayOrgId: "venom-strike", scheduledDate: "2025-05-18", scheduledTime: "20:00", seasonId: "s1", status: "live", week: 3, streamUrl: "#" },
+  { id: "s-m6", divisionId: "solar", homeOrgId: "obsidian-order", awayOrgId: "solstice-edge", scheduledDate: "2025-05-18", scheduledTime: "22:00", seasonId: "s1", status: "scheduled", week: 3 },
   // Solar — upcoming
-  { id: "s-m7", divisionId: "solar", homeOrgId: "solstice-edge", awayOrgId: "helix-reign", scheduledDate: "2025-05-25", scheduledTime: "20:00", status: "scheduled", week: 4 },
-  { id: "s-m8", divisionId: "solar", homeOrgId: "venom-strike", awayOrgId: "obsidian-order", scheduledDate: "2025-05-25", scheduledTime: "22:00", status: "scheduled", week: 4 },
+  { id: "s-m7", divisionId: "solar", homeOrgId: "solstice-edge", awayOrgId: "helix-reign", scheduledDate: "2025-05-25", scheduledTime: "20:00", seasonId: "s1", status: "scheduled", week: 4 },
+  { id: "s-m8", divisionId: "solar", homeOrgId: "venom-strike", awayOrgId: "obsidian-order", scheduledDate: "2025-05-25", scheduledTime: "22:00", seasonId: "s1", status: "scheduled", week: 4 },
 
   // Lunar — completed
-  { id: "l-m1", divisionId: "lunar", homeOrgId: "midnight-pact", awayOrgId: "frost-sigil", scheduledDate: "2025-04-29", scheduledTime: "19:00", status: "completed", week: 1, homeScore: 2, awayScore: 1 },
-  { id: "l-m2", divisionId: "lunar", homeOrgId: "nova-circuit", awayOrgId: "null-vector", scheduledDate: "2025-04-29", scheduledTime: "21:00", status: "completed", week: 1, homeScore: 0, awayScore: 2 },
-  { id: "l-m3", divisionId: "lunar", homeOrgId: "frost-sigil", awayOrgId: "nova-circuit", scheduledDate: "2025-05-06", scheduledTime: "19:00", status: "completed", week: 2, homeScore: 2, awayScore: 0 },
-  { id: "l-m4", divisionId: "lunar", homeOrgId: "midnight-pact", awayOrgId: "null-vector", scheduledDate: "2025-05-06", scheduledTime: "21:00", status: "completed", week: 2, homeScore: 2, awayScore: 1 },
+  { id: "l-m1", divisionId: "lunar", homeOrgId: "midnight-pact", awayOrgId: "frost-sigil", scheduledDate: "2025-04-29", scheduledTime: "19:00", seasonId: "s1", status: "completed", week: 1, homeScore: 2, awayScore: 1 },
+  { id: "l-m2", divisionId: "lunar", homeOrgId: "nova-circuit", awayOrgId: "null-vector", scheduledDate: "2025-04-29", scheduledTime: "21:00", seasonId: "s1", status: "completed", week: 1, homeScore: 0, awayScore: 2 },
+  { id: "l-m3", divisionId: "lunar", homeOrgId: "frost-sigil", awayOrgId: "nova-circuit", scheduledDate: "2025-05-06", scheduledTime: "19:00", seasonId: "s1", status: "completed", week: 2, homeScore: 2, awayScore: 0 },
+  { id: "l-m4", divisionId: "lunar", homeOrgId: "midnight-pact", awayOrgId: "null-vector", scheduledDate: "2025-05-06", scheduledTime: "21:00", seasonId: "s1", status: "completed", week: 2, homeScore: 2, awayScore: 1 },
   // Lunar — this week
-  { id: "l-m5", divisionId: "lunar", homeOrgId: "null-vector", awayOrgId: "midnight-pact", scheduledDate: "2025-05-19", scheduledTime: "19:00", status: "scheduled", week: 3 },
-  { id: "l-m6", divisionId: "lunar", homeOrgId: "nova-circuit", awayOrgId: "frost-sigil", scheduledDate: "2025-05-19", scheduledTime: "21:00", status: "scheduled", week: 3 },
+  { id: "l-m5", divisionId: "lunar", homeOrgId: "null-vector", awayOrgId: "midnight-pact", scheduledDate: "2025-05-19", scheduledTime: "19:00", seasonId: "s1", status: "scheduled", week: 3 },
+  { id: "l-m6", divisionId: "lunar", homeOrgId: "nova-circuit", awayOrgId: "frost-sigil", scheduledDate: "2025-05-19", scheduledTime: "21:00", seasonId: "s1", status: "scheduled", week: 3 },
   // Lunar — upcoming
-  { id: "l-m7", divisionId: "lunar", homeOrgId: "midnight-pact", awayOrgId: "nova-circuit", scheduledDate: "2025-05-26", scheduledTime: "19:00", status: "scheduled", week: 4 },
-  { id: "l-m8", divisionId: "lunar", homeOrgId: "frost-sigil", awayOrgId: "null-vector", scheduledDate: "2025-05-26", scheduledTime: "21:00", status: "scheduled", week: 4 },
+  { id: "l-m7", divisionId: "lunar", homeOrgId: "midnight-pact", awayOrgId: "nova-circuit", scheduledDate: "2025-05-26", scheduledTime: "19:00", seasonId: "s1", status: "scheduled", week: 4 },
+  { id: "l-m8", divisionId: "lunar", homeOrgId: "frost-sigil", awayOrgId: "null-vector", scheduledDate: "2025-05-26", scheduledTime: "21:00", seasonId: "s1", status: "scheduled", week: 4 },
 
   // Gaia — completed
-  { id: "g-m1", divisionId: "gaia", homeOrgId: "root-warden", awayOrgId: "serpent-bloom", scheduledDate: "2025-04-30", scheduledTime: "19:00", status: "completed", week: 1, homeScore: 2, awayScore: 0 },
-  { id: "g-m2", divisionId: "gaia", homeOrgId: "terra-flux", awayOrgId: "iron-canopy", scheduledDate: "2025-04-30", scheduledTime: "21:00", status: "completed", week: 1, homeScore: 1, awayScore: 2 },
-  { id: "g-m3", divisionId: "gaia", homeOrgId: "serpent-bloom", awayOrgId: "terra-flux", scheduledDate: "2025-05-07", scheduledTime: "19:00", status: "completed", week: 2, homeScore: 2, awayScore: 2, vodUrl: "#" },
-  { id: "g-m4", divisionId: "gaia", homeOrgId: "root-warden", awayOrgId: "iron-canopy", scheduledDate: "2025-05-07", scheduledTime: "21:00", status: "completed", week: 2, homeScore: 2, awayScore: 0 },
+  { id: "g-m1", divisionId: "gaia", homeOrgId: "root-warden", awayOrgId: "serpent-bloom", scheduledDate: "2025-04-30", scheduledTime: "19:00", seasonId: "s1", status: "completed", week: 1, homeScore: 2, awayScore: 0 },
+  { id: "g-m2", divisionId: "gaia", homeOrgId: "terra-flux", awayOrgId: "iron-canopy", scheduledDate: "2025-04-30", scheduledTime: "21:00", seasonId: "s1", status: "completed", week: 1, homeScore: 1, awayScore: 2 },
+  { id: "g-m3", divisionId: "gaia", homeOrgId: "serpent-bloom", awayOrgId: "terra-flux", scheduledDate: "2025-05-07", scheduledTime: "19:00", seasonId: "s1", status: "completed", week: 2, homeScore: 2, awayScore: 2, vodUrl: "#" },
+  { id: "g-m4", divisionId: "gaia", homeOrgId: "root-warden", awayOrgId: "iron-canopy", scheduledDate: "2025-05-07", scheduledTime: "21:00", seasonId: "s1", status: "completed", week: 2, homeScore: 2, awayScore: 0 },
   // Gaia — postponed + scheduled
-  { id: "g-m5", divisionId: "gaia", homeOrgId: "iron-canopy", awayOrgId: "root-warden", scheduledDate: "2025-05-17", scheduledTime: "19:00", status: "postponed", week: 3 },
-  { id: "g-m6", divisionId: "gaia", homeOrgId: "terra-flux", awayOrgId: "serpent-bloom", scheduledDate: "2025-05-20", scheduledTime: "21:00", status: "scheduled", week: 3 },
-  { id: "g-m7", divisionId: "gaia", homeOrgId: "root-warden", awayOrgId: "terra-flux", scheduledDate: "2025-05-28", scheduledTime: "19:00", status: "scheduled", week: 4 },
-  { id: "g-m8", divisionId: "gaia", homeOrgId: "serpent-bloom", awayOrgId: "iron-canopy", scheduledDate: "2025-05-28", scheduledTime: "21:00", status: "scheduled", week: 4 },
+  { id: "g-m5", divisionId: "gaia", homeOrgId: "iron-canopy", awayOrgId: "root-warden", scheduledDate: "2025-05-17", scheduledTime: "19:00", seasonId: "s1", status: "postponed", week: 3 },
+  { id: "g-m6", divisionId: "gaia", homeOrgId: "terra-flux", awayOrgId: "serpent-bloom", scheduledDate: "2025-05-20", scheduledTime: "21:00", seasonId: "s1", status: "scheduled", week: 3 },
+  { id: "g-m7", divisionId: "gaia", homeOrgId: "root-warden", awayOrgId: "terra-flux", scheduledDate: "2025-05-28", scheduledTime: "19:00", seasonId: "s1", status: "scheduled", week: 4 },
+  { id: "g-m8", divisionId: "gaia", homeOrgId: "serpent-bloom", awayOrgId: "iron-canopy", scheduledDate: "2025-05-28", scheduledTime: "21:00", seasonId: "s1", status: "scheduled", week: 4 },
 ];
 
 function calcStandings(): OrgStanding[] {
