@@ -19,6 +19,7 @@ function emptyMatch(data: LeagueData): Match {
     scheduledTime: "20:00",
     status: "scheduled",
     week: data.season.currentWeek,
+    seasonId: data.season.id,
   };
 }
 

@@ -1,10 +1,17 @@
 import { SchedulePageClient } from "@/components/league/SchedulePageClient";
-import { getLeagueData } from "@/lib/league-data";
+import { SeasonSelector } from "@/components/league/SeasonSelector";
+import { getLeagueData, getAllSeasons } from "@/lib/league-data";
 
 export const revalidate = 30;
 
-export default async function SchedulePage() {
-  const data = await getLeagueData();
+export default async function SchedulePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ season?: string }>;
+}) {
+  const { season: seasonId } = await searchParams;
+  const data = await getLeagueData(seasonId);
+  const allSeasons = await getAllSeasons();
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
@@ -16,6 +23,9 @@ export default async function SchedulePage() {
           <p className="mt-1.5 text-sm font-semibold text-slate-400">
             Filter by division, week, or status. Live matches broadcast on the SAL Twitch channel.
           </p>
+          {allSeasons.length > 1 && (
+            <SeasonSelector seasons={allSeasons} currentSeasonId={data.season.id} />
+          )}
         </div>
       </div>
       <SchedulePageClient data={data} />

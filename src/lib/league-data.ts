@@ -40,13 +40,13 @@ type DbMatch = Omit<Match, "divisionId" | "homeOrgId" | "awayOrgId" | "scheduled
   away_org_id: string;
   scheduled_date: string;
   scheduled_time: string;
+  season_id: string;
   home_score?: number | null;
   away_score?: number | null;
   stream_url?: string | null;
   vod_url?: string | null;
   archived_at?: string | null;
   deletion_scheduled_at?: string | null;
-  season_id?: string | null;
 };
 
 type DbStanding = Omit<OrgStanding, "orgId" | "divisionId" | "matchesPlayed" | "pointsFor" | "pointsAgainst" | "gamesBack"> & {
@@ -154,13 +154,13 @@ function fromDbMatch(row: DbMatch): Match {
     scheduledTime: row.scheduled_time.slice(0, 5),
     status: row.status,
     week: row.week,
+    seasonId: row.season_id,
     homeScore: row.home_score ?? undefined,
     awayScore: row.away_score ?? undefined,
     streamUrl: row.stream_url ?? undefined,
     vodUrl: row.vod_url ?? undefined,
     archivedAt: row.archived_at ?? undefined,
     deletionScheduledAt: row.deletion_scheduled_at ?? undefined,
-    seasonId: row.season_id ?? undefined,
   };
 }
 
@@ -174,11 +174,11 @@ function toDbMatch(match: Match): DbMatch {
     scheduled_time: match.scheduledTime,
     status: match.status,
     week: match.week,
+    season_id: match.seasonId,
     home_score: match.homeScore ?? null,
     away_score: match.awayScore ?? null,
     stream_url: match.streamUrl ?? null,
     vod_url: match.vodUrl ?? null,
-    season_id: match.seasonId ?? null,
   };
 }
 
@@ -221,22 +221,27 @@ function fromDbAnnouncement(row: DbAnnouncement): Announcement {
   };
 }
 
-async function fetchLeagueData(): Promise<LeagueData> {
+async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return MOCK_LEAGUE_DATA;
 
   try {
-    const [seasonRes, divisionRes, orgRes, playerRes, matchRes, standingRes, announcementRes] = await Promise.all([
-      supabase.from("seasons").select("*").order("start_date", { ascending: false }).limit(1).maybeSingle(),
+    // Fetch the season: use provided seasonId, or fall back to active/most recent.
+    let seasonQuery = supabase.from("seasons").select("*").order("start_date", { ascending: false });
+    if (seasonId) {
+      seasonQuery = seasonQuery.eq("id", seasonId);
+    }
+    const seasonRes = await seasonQuery.limit(1).maybeSingle();
+
+    const [divisionRes, orgRes, playerRes, standingRes, announcementRes] = await Promise.all([
       supabase.from("divisions").select("*").order("tier"),
       supabase.from("orgs").select("*").is("archived_at", null).order("name"),
       supabase.from("players").select("*").is("archived_at", null).order("ign"),
-      supabase.from("matches").select("*").is("archived_at", null).order("scheduled_date").order("scheduled_time"),
       supabase.from("standings").select("*"),
       supabase.from("announcements").select("*").order("pinned", { ascending: false }).order("created_at", { ascending: false }),
     ]);
 
-    const queryError = seasonRes.error ?? divisionRes.error ?? orgRes.error ?? playerRes.error ?? matchRes.error ?? standingRes.error ?? announcementRes.error;
+    const queryError = seasonRes.error ?? divisionRes.error ?? orgRes.error ?? playerRes.error ?? standingRes.error ?? announcementRes.error;
     if (queryError) {
       console.error("getLeagueData: Supabase query error, using mock data:", queryError.message);
       return MOCK_LEAGUE_DATA;
@@ -248,6 +253,22 @@ async function fetchLeagueData(): Promise<LeagueData> {
       return MOCK_LEAGUE_DATA;
     }
 
+    // Fetch matches scoped to the selected season.
+    let matchQuery = supabase.from("matches").select("*").is("archived_at", null).order("scheduled_date").order("scheduled_time");
+    if (seasonRow) {
+      matchQuery = matchQuery.eq("season_id", seasonRow.id);
+    }
+    const matchRes = await matchQuery;
+    const matches = (matchRes.data as DbMatch[]).map(fromDbMatch);
+
+    // For historical seasons, the global standings table only contains the
+    // current season's data. Compute standings from the scoped matches instead
+    // so that past-season pages show correct historical results.
+    const orgs = (orgRes.data as DbOrg[]).map(fromDbOrg);
+    const standings = seasonId
+      ? recalcStandings({ orgs, matches }, seasonRow.id)
+      : (standingRes.data as DbStanding[]).map(fromDbStanding);
+
     return {
       season: {
         id: seasonRow.id,
@@ -258,10 +279,10 @@ async function fetchLeagueData(): Promise<LeagueData> {
         currentWeek: seasonRow.current_week ?? seasonRow.currentWeek,
       },
       divisions: (divisionRes.data as DbDivision[]).map(fromDbDivision),
-      orgs: (orgRes.data as DbOrg[]).map(fromDbOrg),
+      orgs,
       players: (playerRes.data as DbPlayer[]).map(fromDbPlayer),
-      matches: (matchRes.data as DbMatch[]).map(fromDbMatch),
-      standings: (standingRes.data as DbStanding[]).map(fromDbStanding),
+      matches,
+      standings,
       announcements: (announcementRes.data as DbAnnouncement[]).map(fromDbAnnouncement),
       lastUpdated: new Date().toISOString(),
     };
@@ -280,22 +301,27 @@ export const getLeagueData = unstable_cache(fetchLeagueData, ["league-data"], {
 
 // Admin version: bypasses cache and includes archived records so the admin panel
 // can show / manage them. Never used by public-facing pages.
-export async function getAdminLeagueData(): Promise<LeagueData> {
+export async function getAdminLeagueData(seasonId?: string): Promise<LeagueData> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return MOCK_LEAGUE_DATA;
 
   try {
-    const [seasonRes, divisionRes, orgRes, playerRes, matchRes, standingRes, announcementRes] = await Promise.all([
-      supabase.from("seasons").select("*").order("start_date", { ascending: false }).limit(1).maybeSingle(),
+    // Fetch the season: use provided seasonId, or fall back to active/most recent.
+    let seasonQuery = supabase.from("seasons").select("*").order("start_date", { ascending: false });
+    if (seasonId) {
+      seasonQuery = seasonQuery.eq("id", seasonId);
+    }
+    const seasonRes = await seasonQuery.limit(1).maybeSingle();
+
+    const [divisionRes, orgRes, playerRes, standingRes, announcementRes] = await Promise.all([
       supabase.from("divisions").select("*").order("tier"),
       supabase.from("orgs").select("*").order("name"),
       supabase.from("players").select("*").order("ign"),
-      supabase.from("matches").select("*").order("scheduled_date").order("scheduled_time"),
       supabase.from("standings").select("*"),
       supabase.from("announcements").select("*").order("pinned", { ascending: false }).order("created_at", { ascending: false }),
     ]);
 
-    const queryError = seasonRes.error ?? divisionRes.error ?? orgRes.error ?? playerRes.error ?? matchRes.error ?? standingRes.error ?? announcementRes.error;
+    const queryError = seasonRes.error ?? divisionRes.error ?? orgRes.error ?? playerRes.error ?? standingRes.error ?? announcementRes.error;
     if (queryError) {
       console.error("getAdminLeagueData: Supabase error, using mock data:", queryError.message);
       return MOCK_LEAGUE_DATA;
@@ -306,6 +332,13 @@ export async function getAdminLeagueData(): Promise<LeagueData> {
       console.error("getAdminLeagueData: Missing critical Supabase data, using mock data.");
       return MOCK_LEAGUE_DATA;
     }
+
+    // Fetch matches scoped to the selected season.
+    let matchQuery = supabase.from("matches").select("*").order("scheduled_date").order("scheduled_time");
+    if (seasonRow) {
+      matchQuery = matchQuery.eq("season_id", seasonRow.id);
+    }
+    const matchRes = await matchQuery;
 
     return {
       season: {

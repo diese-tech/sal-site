@@ -69,16 +69,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Matches without an explicit season belong to the active season —
-    // standings only count season-scoped matches, so a NULL season would
-    // silently exclude the match from the table.
     let match = result.data;
     if (!match.seasonId) {
       const seasons = await getAllSeasons();
       const active = seasons.find((s) => s.status === "active") ?? seasons[0];
-      if (active) match = { ...match, seasonId: active.id };
+      if (!active) {
+        return NextResponse.json({ error: "No active season found. Create a season before saving matches." }, { status: 400 });
+      }
+      match = { ...match, seasonId: active.id };
     }
-    await saveMatch(match);
+    // seasonId is now guaranteed to be set
+    await saveMatch(match as typeof match & { seasonId: string });
     revalidateTag("league-data", {});
     return NextResponse.json({ ok: true });
   } catch (err) {
