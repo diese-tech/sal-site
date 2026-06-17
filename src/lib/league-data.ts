@@ -869,11 +869,14 @@ export async function claimPlayerByDiscordUsername(
   const supabase = getSupabaseServerClient();
   if (!supabase) return { ok: false, reason: "not_found" };
 
-  // Find the player row whose username matches (case-insensitive in lower())
+  // Escape SQL LIKE metacharacters before passing to ilike — Discord usernames
+  // can contain underscores which would otherwise act as single-char wildcards,
+  // letting e.g. "jo_n" match "john" (Codex P1 review comment).
+  const safeUsername = discordUsername.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
   const { data: rows, error } = await supabase
     .from("players")
     .select("id, discord_id, profile_claimed")
-    .ilike("discord_username", discordUsername)
+    .ilike("discord_username", safeUsername)
     .limit(1);
   if (error) throw error;
   const player = rows?.[0];
@@ -919,8 +922,13 @@ export async function getPlayerClaimInfo(playerId: string): Promise<{
 export async function checkIsAdminDataMock(): Promise<boolean> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return true;
-  const { count } = await supabase.from("seasons").select("id", { count: "exact", head: true });
-  return (count ?? 0) === 0;
+  // Mirror the exact fallback condition in getAdminLeagueData(): mock is
+  // returned when there is no season OR no divisions — not just no season.
+  const [seasonRes, divisionRes] = await Promise.all([
+    supabase.from("seasons").select("id", { count: "exact", head: true }),
+    supabase.from("divisions").select("id", { count: "exact", head: true }),
+  ]);
+  return (seasonRes.count ?? 0) === 0 || (divisionRes.count ?? 0) === 0;
 }
 
 export async function getPlayerByDiscordId(discordId: string): Promise<LeaguePlayer | null> {
