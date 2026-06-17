@@ -41,7 +41,7 @@ vi.mock("@/lib/league-data", () => ({
 }));
 
 vi.mock("@/lib/rate-limit", () => ({
-  checkRateLimit: vi.fn().mockReturnValue({ allowed: true, resetAt: Date.now() + 60_000 }),
+  checkRateLimit: vi.fn().mockReturnValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60_000 }),
   getRateLimitIdentifier: vi.fn().mockReturnValue("127.0.0.1"),
   retryAfterSeconds: vi.fn().mockReturnValue("60"),
 }));
@@ -98,7 +98,7 @@ function claimRequest(): NextRequest {
 // Seed the default happy-path auth mocks before each test
 beforeEach(() => {
   vi.clearAllMocks();
-  mockCheckRateLimit.mockReturnValue({ allowed: true, resetAt: Date.now() + 60_000 });
+  mockCheckRateLimit.mockReturnValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60_000 });
   mockGetAuthUser.mockResolvedValue(FAKE_USER);
   mockGetDiscordId.mockReturnValue(DISCORD_ID);
   mockGetDiscordUsername.mockReturnValue(DISCORD_USERNAME);
@@ -127,7 +127,7 @@ describe("POST /api/auth/register — Flow A", () => {
   });
 
   it("returns 429 when rate-limited", async () => {
-    mockCheckRateLimit.mockReturnValueOnce({ allowed: false, resetAt: Date.now() + 30_000 });
+    mockCheckRateLimit.mockReturnValueOnce({ allowed: false, remaining: 0, resetAt: Date.now() + 30_000 });
 
     const { POST } = await import("@/app/api/auth/register/route");
     const res = await POST(registerRequest());
@@ -278,7 +278,7 @@ describe("POST /api/auth/claim — Flow B", () => {
   });
 
   it("rate-limits: returns 429 when too many attempts", async () => {
-    mockCheckRateLimit.mockReturnValueOnce({ allowed: false, resetAt: Date.now() + 30_000 });
+    mockCheckRateLimit.mockReturnValueOnce({ allowed: false, remaining: 0, resetAt: Date.now() + 30_000 });
 
     const { POST } = await import("@/app/api/auth/claim/route");
     const res = await POST(claimRequest());
