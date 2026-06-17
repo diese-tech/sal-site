@@ -477,9 +477,19 @@ export function AdminImportClient() {
                         row.confidence === "green" && "bg-emerald-400",
                         row.confidence === "yellow" && "bg-amber-400",
                         row.confidence === "red" && "bg-red-400",
-                      )} title={row.warnings.join("; ")} />
+                      )} />
                     </td>
-                    <td className="py-1.5 pr-3 font-semibold text-white">{row.ign || <span className="text-red-400">—</span>}</td>
+                    <td className="py-1.5 pr-3">
+                      <div className="font-semibold text-white">{row.ign || <span className="text-red-400">—</span>}</div>
+                      {row.warnings[0] && (
+                        <div className={cn(
+                          "text-[0.6rem] font-semibold leading-tight",
+                          row.confidence === "red" ? "text-red-400" : "text-amber-400",
+                        )}>
+                          {row.warnings[0]}
+                        </div>
+                      )}
+                    </td>
                     <td className="py-1.5 pr-3 text-slate-400">{row.discordUsername || <span className="text-red-400">—</span>}</td>
                     <td className="py-1.5 pr-3 text-slate-300">
                       {row.primaryRole ?? <span className="text-red-400">—</span>}

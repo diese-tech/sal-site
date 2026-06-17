@@ -109,7 +109,7 @@ export function RegisterClient({
                 const res = await fetch("/api/auth/claim", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ playerId: matchedByUsername.id }),
+                  body: JSON.stringify({}),
                 });
                 const data = await res.json();
                 if (!res.ok) setClaimError(data.error);

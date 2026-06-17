@@ -27,10 +27,13 @@ export function recalcStandings(data: Pick<LeagueData, "orgs" | "matches">, seas
 
     home.matchesPlayed++;
     away.matchesPlayed++;
-    home.pointsFor += match.homeScore;
-    home.pointsAgainst += match.awayScore;
-    away.pointsFor += match.awayScore;
-    away.pointsAgainst += match.homeScore;
+    // Forfeit scores are not meaningful — exclude them from points averages.
+    if (match.status !== "forfeit") {
+      home.pointsFor += match.homeScore;
+      home.pointsAgainst += match.awayScore;
+      away.pointsFor += match.awayScore;
+      away.pointsAgainst += match.homeScore;
+    }
 
     if (match.homeScore > match.awayScore) {
       home.wins++;
