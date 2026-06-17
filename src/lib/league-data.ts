@@ -856,6 +856,46 @@ export async function claimPlayerProfile(discordId: string, playerId: string): P
   await writeAuditLog("claim_player_profile", "player", playerId, { discordId });
 }
 
+/**
+ * Server-side claim: looks up the player whose discord_username matches the
+ * authenticated user's Discord handle, then claims it. The caller must never
+ * accept a client-supplied playerId — matching is done entirely server-side to
+ * prevent cross-profile identity theft (issue #57).
+ */
+export async function claimPlayerByDiscordUsername(
+  discordId: string,
+  discordUsername: string,
+): Promise<{ ok: true; playerId: string } | { ok: false; reason: "not_found" | "already_claimed" | "discord_taken" }> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return { ok: false, reason: "not_found" };
+
+  // Find the player row whose username matches (case-insensitive in lower())
+  const { data: rows, error } = await supabase
+    .from("players")
+    .select("id, discord_id, profile_claimed")
+    .ilike("discord_username", discordUsername)
+    .limit(1);
+  if (error) throw error;
+  const player = rows?.[0];
+  if (!player) return { ok: false, reason: "not_found" };
+
+  if ((player.profile_claimed as boolean) && player.discord_id !== discordId) {
+    return { ok: false, reason: "already_claimed" };
+  }
+
+  // Guard: this Discord account is already linked to a different player
+  const { data: existing } = await supabase
+    .from("players")
+    .select("id")
+    .eq("discord_id", discordId)
+    .neq("id", player.id as string)
+    .limit(1);
+  if (existing?.length) return { ok: false, reason: "discord_taken" };
+
+  await claimPlayerProfile(discordId, player.id as string);
+  return { ok: true, playerId: player.id as string };
+}
+
 export async function getPlayerClaimInfo(playerId: string): Promise<{
   discordUsername: string;
   discordId: string | null;
@@ -874,6 +914,13 @@ export async function getPlayerClaimInfo(playerId: string): Promise<{
     discordId: (data.discord_id as string | null) ?? null,
     profileClaimed: (data.profile_claimed as boolean) ?? false,
   };
+}
+
+export async function checkIsAdminDataMock(): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return true;
+  const { count } = await supabase.from("seasons").select("id", { count: "exact", head: true });
+  return (count ?? 0) === 0;
 }
 
 export async function getPlayerByDiscordId(discordId: string): Promise<LeaguePlayer | null> {

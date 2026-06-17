@@ -1,15 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { z } from "zod";
 import {
-  claimPlayerProfile,
+  claimPlayerByDiscordUsername,
   getPlayerByDiscordId,
-  getPlayerClaimInfo,
   getRegistrationByDiscordId,
 } from "@/lib/league-data";
 import { getAuthUser, getDiscordId, getDiscordUsername } from "@/lib/supabase-auth-server";
 import { checkRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
-
-const schema = z.object({ playerId: z.string().min(1) });
 
 export async function POST(request: NextRequest) {
   const ip = getRateLimitIdentifier(request);
@@ -27,9 +23,8 @@ export async function POST(request: NextRequest) {
   const discordId = getDiscordId(user);
   if (!discordId) return NextResponse.json({ error: "Discord ID not found in session." }, { status: 400 });
 
-  const body = await request.json().catch(() => null);
-  const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+  const discordUsername = getDiscordUsername(user);
+  if (!discordUsername) return NextResponse.json({ error: "Discord username not found in session." }, { status: 400 });
 
   // Prevent double-claiming
   const alreadyClaimed = await getPlayerByDiscordId(discordId);
@@ -37,26 +32,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "This Discord account is already linked to a player profile." }, { status: 409 });
   }
 
-  // Verify the target player profile exists and matches the authenticated user's identity
-  const playerInfo = await getPlayerClaimInfo(parsed.data.playerId);
-  if (!playerInfo) {
-    return NextResponse.json({ error: "Player profile not found." }, { status: 404 });
+  // Match entirely server-side by discord_username — no client-supplied playerId
+  // accepted, which prevents cross-profile identity theft (issue #57).
+  const result = await claimPlayerByDiscordUsername(discordId, discordUsername);
+  if (!result.ok) {
+    const msgs: Record<string, string> = {
+      not_found: "No player profile found matching your Discord username. Contact an admin if you believe this is incorrect.",
+      already_claimed: "This player profile is already claimed by another account.",
+      discord_taken: "This Discord account is already linked to a different player profile.",
+    };
+    return NextResponse.json({ error: msgs[result.reason] ?? "Claim failed." }, { status: 409 });
   }
-  if (playerInfo.profileClaimed && playerInfo.discordId !== discordId) {
-    return NextResponse.json({ error: "This player profile is already claimed by another account." }, { status: 409 });
-  }
-  // Identity check: the player record must have a matching discord username
-  if (playerInfo.discordUsername) {
-    const authUsername = getDiscordUsername(user);
-    if (playerInfo.discordUsername.toLowerCase() !== authUsername.toLowerCase()) {
-      return NextResponse.json(
-        { error: "This player profile does not match your Discord identity. Contact an admin if you believe this is incorrect." },
-        { status: 403 },
-      );
-    }
-  }
-
-  await claimPlayerProfile(discordId, parsed.data.playerId);
 
   // If a Flow B registration exists for this discord, mark it approved/linked
   const reg = await getRegistrationByDiscordId(discordId);
