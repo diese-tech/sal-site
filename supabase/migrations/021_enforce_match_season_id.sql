@@ -1,7 +1,15 @@
 -- Enforce NOT NULL on matches.season_id — all matches must belong to a season.
--- The application auto-assigns matches to the active season if not provided,
--- so this constraint should not break existing workflows. Any pre-existing
--- NULL rows must be backfilled before this migration runs.
+-- Backfill any legacy NULL rows to the most recent season before setting the
+-- constraint, so the migration is safe on databases that already have matches
+-- from before this enforcement was introduced.
+
+UPDATE matches
+SET season_id = (
+  SELECT id FROM seasons
+  ORDER BY start_date DESC
+  LIMIT 1
+)
+WHERE season_id IS NULL;
 
 ALTER TABLE matches
   ALTER COLUMN season_id SET NOT NULL;

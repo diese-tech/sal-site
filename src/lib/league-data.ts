@@ -259,6 +259,15 @@ async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
       matchQuery = matchQuery.eq("season_id", seasonRow.id);
     }
     const matchRes = await matchQuery;
+    const matches = (matchRes.data as DbMatch[]).map(fromDbMatch);
+
+    // For historical seasons, the global standings table only contains the
+    // current season's data. Compute standings from the scoped matches instead
+    // so that past-season pages show correct historical results.
+    const orgs = (orgRes.data as DbOrg[]).map(fromDbOrg);
+    const standings = seasonId
+      ? recalcStandings({ orgs, matches }, seasonRow.id)
+      : (standingRes.data as DbStanding[]).map(fromDbStanding);
 
     return {
       season: {
@@ -270,10 +279,10 @@ async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
         currentWeek: seasonRow.current_week ?? seasonRow.currentWeek,
       },
       divisions: (divisionRes.data as DbDivision[]).map(fromDbDivision),
-      orgs: (orgRes.data as DbOrg[]).map(fromDbOrg),
+      orgs,
       players: (playerRes.data as DbPlayer[]).map(fromDbPlayer),
-      matches: (matchRes.data as DbMatch[]).map(fromDbMatch),
-      standings: (standingRes.data as DbStanding[]).map(fromDbStanding),
+      matches,
+      standings,
       announcements: (announcementRes.data as DbAnnouncement[]).map(fromDbAnnouncement),
       lastUpdated: new Date().toISOString(),
     };
