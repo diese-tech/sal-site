@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  advancePickOnTimeout,
   buildDraftState,
   finalizeDraftRosters,
   getDraftPicks,
@@ -7,7 +8,6 @@ import {
   getTopShortlistPick,
   removePlayerFromAllShortlists,
   submitPickAtomic,
-  updateDraftRoom,
 } from "@/lib/draft-data";
 import { buildPickSequence } from "@/types/draft";
 import { getCaptainSessionFromRequest } from "@/lib/captain-auth";
@@ -29,7 +29,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const currentOrgId = sequence[state.room.currentPickIndex];
       const nextIndex = state.room.currentPickIndex + 1;
       const isComplete = nextIndex >= sequence.length;
-      const now = new Date().toISOString();
 
       // Try auto-pick from shortlist before skipping
       if (currentOrgId) {
@@ -65,22 +64,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         }
       }
 
-      // No shortlist pick available — skip
-      await updateDraftRoom(id, {
-        currentPickIndex: nextIndex,
-        status: isComplete ? "complete" : "active",
-        pickStartedAt: isComplete ? null : now,
-        completedAt: isComplete ? now : null,
-      });
-      await writeAuditLog("draft_auto_skip", "draft_room", id, {
-        draftRoomId: id,
-        skippedPickIndex: state.room.currentPickIndex,
-        reason: "timer_expired_no_shortlist",
-      });
-      if (isComplete) {
-        // Propagate picks to team rosters now that the draft is complete (#62)
-        const { assigned } = await finalizeDraftRosters(id);
-        await writeAuditLog("draft_finalized", "draft_room", id, { draftRoomId: id, assigned });
+      // No shortlist pick available — skip atomically (issue #129).
+      // advance_pick_on_timeout locks the room row and re-validates index +
+      // timer under the lock; concurrent racers receive false and no-op.
+      const advanced = await advancePickOnTimeout(id, state.room.currentPickIndex, sequence.length);
+      if (advanced) {
+        await writeAuditLog("draft_auto_skip", "draft_room", id, {
+          draftRoomId: id,
+          skippedPickIndex: state.room.currentPickIndex,
+          reason: "timer_expired_no_shortlist",
+        });
+        if (isComplete) {
+          // Propagate picks to team rosters now that the draft is complete (#62)
+          const { assigned } = await finalizeDraftRosters(id);
+          await writeAuditLog("draft_finalized", "draft_room", id, { draftRoomId: id, assigned });
+        }
       }
       const updatedState = await buildDraftState(id);
       const shortlist = captainOrgId ? await getShortlist(id, captainOrgId) : undefined;
