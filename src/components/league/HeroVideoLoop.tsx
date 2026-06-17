@@ -62,13 +62,17 @@ export function HeroVideoLoop({ clips, poster, className }: HeroVideoLoopProps) 
     }
   }
 
-  // On clip end: advance index for the slot that just finished, flip active slot
+  // On clip end: flip to the other slot and queue the slot-after-next for this
+  // slot. Advancing by 1 caused the bug where each clip played twice: slot A
+  // would set indexA=1, then when A became active again it played clip 1 a
+  // second time instead of clip 2. Advancing by 2 means when this slot is next
+  // activated it plays the clip after the one currently queued in the other slot.
   function handleEnded(slot: "a" | "b") {
     if (slot !== activeSlot) return;
     const currentIndex = slot === "a" ? indexA : indexB;
-    const nextIndex = (currentIndex + 1) % clips.length;
-    if (slot === "a") setIndexA(nextIndex);
-    else setIndexB(nextIndex);
+    const skipToIndex = (currentIndex + 2) % clips.length;
+    if (slot === "a") setIndexA(skipToIndex);
+    else setIndexB(skipToIndex);
     setActiveSlot(slot === "a" ? "b" : "a");
   }
 
