@@ -21,8 +21,11 @@ Highlights:
 | `017_atomic_standings_replace.sql` | `replace_standings` RPC — atomic standings replace |
 | `018_seed_divisions.sql` | Seeds the fixed division rows (`solar`, `lunar`, `terra`) |
 
-The shared database also carries SALbot's migrations (see below) — a fresh project
-needs those applied too, from the `lab-salbot` repo's `database/migrations/`.
+The shared database also carries SALbot's migrations — a fresh project needs those
+applied too, from the `lab-salbot` repo's `database/migrations/`. **Ordering
+matters:** site migration `008_player_stats_read.sql` creates policies on
+`player_stats` and `gods`, and `player_stats` only exists once SALbot's initial
+migration has run — apply SALbot's migrations before 008 on a fresh project.
 
 After the schema is applied, seed the database with Season 1 data:
 
@@ -69,16 +72,20 @@ Every mutation is logged to `admin_audit_log` with the action type, entity type,
 
 ## Standings Recalculation
 
-Standings are recalculated in exactly two places:
+Standings are recalculated in exactly one place: on demand from Admin → Standings
+(`POST /api/admin/recalculate-standings`).
 
-1. The admin match-report submit flow (`POST /api/admin/match-reports/[id]/submit`)
-2. On demand from Admin → Standings (`POST /api/admin/recalculate-standings`)
+No match-completion path recalculates automatically:
 
-`POST /api/admin/matches` (the Admin → Matches editor) saves the match but does
-**not** recalculate standings, despite the editor's confirmation copy — recalculate
-manually after editing a completed score. SALbot's Discord approval flow also
-completes matches without touching standings, so after approving results in Discord
-an admin must recalculate from Admin → Standings.
+- `POST /api/admin/matches` (the Admin → Matches editor) saves the match but does
+  **not** recalculate, despite the editor's confirmation copy.
+- `POST /api/admin/match-reports/[id]/submit` imports
+  `recalculateAndPersistStandings` but never calls it, so submitting a match report
+  does not recalculate either.
+- SALbot's Discord approval flow completes matches without touching standings.
+
+After completing a match through **any** flow, recalculate from Admin → Standings or
+the public standings stay stale.
 
 The recalculation fetches match and org data directly from Supabase (bypassing the mock fallback), then atomically replaces the standings rows via the `replace_standings` RPC. This is safe to run multiple times.
 
@@ -101,11 +108,16 @@ with the service role key. Full details live in `lab-salbot/docs/database/schema
 the contract summary from the site's perspective:
 
 **Bot-owned tables** — the site never reads or writes these: `pending_actions`
-(Discord approval queue), `audit_logs`, `pending_stat_records`, `player_stats`,
+(Discord approval queue), `audit_logs`, `pending_stat_records`,
 `division_role_mappings`. The bot's migrations in `lab-salbot/database/migrations/`
 create them and add columns to `matches` (`winner_org_id`, `score`,
 `proof_thread_id`, `proof_thread_url`, `screenshot_count`, `screenshot_expected`)
 plus `players.display_alias`.
+
+**`player_stats` is bot-written but site-read.** Only the bot's approval handler
+writes rows, but `src/lib/stats-data.ts` reads them for the public player, team, and
+gods pages, served under the anon `player_stats_public_read` policy from migration
+008. Schema or RLS changes to this table affect the public site directly.
 
 **Match completion has two writers.** SALbot approval sets `matches.status`,
 `winner_org_id`, `home_score`, `away_score`, and `score`; the site's admin flows set
@@ -114,11 +126,13 @@ NULL. Neither writer updates `standings` (see Standings Recalculation above). Si
 upserts to `matches` send only the site-owned columns, so PostgREST leaves the
 bot-owned columns intact.
 
-**Player stats have two pipelines.** The player pages render the `players.stats`
-JSONB aggregate, which is recomputed **only** by SALbot's stat pipeline
-(`pending_stat_records` → `player_stats` → aggregate). The site's admin match-report
-flow writes `match_reports` + `player_match_stats`, which do not feed `players.stats`
-and are not currently rendered anywhere public.
+**Player stats have two pipelines.** SALbot's pipeline
+(`pending_stat_records` → `player_stats` → recomputed `players.stats` aggregate)
+feeds everything stat-related the public site shows: headline numbers come from the
+`players.stats` aggregate and match history / team / god breakdowns come from
+`player_stats` directly. The site's admin match-report flow writes `match_reports`
++ `player_match_stats`, which do not feed `players.stats` and are not currently
+rendered anywhere public.
 
 **Identity linking.** Both systems match players by `players.discord_id`: the site
 sets it via the Discord OAuth claim flow, the bot via `/division-sync` CSV apply.
