@@ -1,5 +1,11 @@
 # Terra Division Supabase Migration
 
+> **Status: executed 2026-07-13** against the production project as tracked migration
+> `terra_division_rename`. FK discovery found one table beyond the list below —
+> `pending_actions.division_id` — which was included in the transaction. All
+> verification queries returned zero `gaia` rows. This document is retained as a
+> record and as a template for future identifier migrations.
+
 Goal: rename the live division identifier from `gaia` to `terra` so production Supabase data matches the app code and SALBot roster sync.
 
 Code has already been updated to use:
@@ -110,6 +116,7 @@ update players set division_id = 'terra' where division_id = 'gaia';
 update matches set division_id = 'terra' where division_id = 'gaia';
 update standings set division_id = 'terra' where division_id = 'gaia';
 update draft_rooms set division_id = 'terra' where division_id = 'gaia';
+update pending_actions set division_id = 'terra' where division_id = 'gaia';
 update match_reports set division_id = 'terra' where division_id = 'gaia';
 update player_match_stats set division_id = 'terra' where division_id = 'gaia';
 
