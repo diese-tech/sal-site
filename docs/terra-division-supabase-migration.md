@@ -48,7 +48,19 @@ where tc.constraint_type = 'FOREIGN KEY'
 order by tc.table_schema, tc.table_name, kcu.column_name;
 ```
 
-Check known current references:
+Confirm the CHECK constraint on `divisions.id`. Databases created from the pre-rename schema
+constrain it to `('solar', 'lunar', 'gaia')`, which would reject the `terra` insert below:
+
+```sql
+select conname, pg_get_constraintdef(oid)
+from pg_constraint
+where conrelid = 'divisions'::regclass
+  and contype = 'c';
+```
+
+Check known current references. Note that `match_reports` and `player_match_stats` carry a
+denormalized `division_id` with no foreign key, so the FK discovery query above will NOT
+find them — they must be backfilled explicitly:
 
 ```sql
 select 'divisions' as table_name, count(*) as gaia_rows from divisions where id = 'gaia'
@@ -56,7 +68,9 @@ union all select 'orgs', count(*) from orgs where division_id = 'gaia'
 union all select 'players', count(*) from players where division_id = 'gaia'
 union all select 'matches', count(*) from matches where division_id = 'gaia'
 union all select 'standings', count(*) from standings where division_id = 'gaia'
-union all select 'draft_rooms', count(*) from draft_rooms where division_id = 'gaia';
+union all select 'draft_rooms', count(*) from draft_rooms where division_id = 'gaia'
+union all select 'match_reports', count(*) from match_reports where division_id = 'gaia'
+union all select 'player_match_stats', count(*) from player_match_stats where division_id = 'gaia';
 ```
 
 If the FK discovery query finds additional tables with `division_id`, include them in the update transaction below.
@@ -65,8 +79,15 @@ If the FK discovery query finds additional tables with `division_id`, include th
 
 Use this insert-update-delete pattern rather than updating the primary key directly, because the live FK constraints may not be `ON UPDATE CASCADE`.
 
+The CHECK constraint on `divisions.id` is dropped first (the old one rejects `terra`) and
+recreated last (the new strict one would reject the still-present `gaia` row if added any
+earlier). Use the constraint name found in the preflight query if it differs from
+`divisions_id_check`.
+
 ```sql
 begin;
+
+alter table divisions drop constraint if exists divisions_id_check;
 
 insert into divisions (id, name, description, tier, accent_color)
 select
@@ -89,8 +110,13 @@ update players set division_id = 'terra' where division_id = 'gaia';
 update matches set division_id = 'terra' where division_id = 'gaia';
 update standings set division_id = 'terra' where division_id = 'gaia';
 update draft_rooms set division_id = 'terra' where division_id = 'gaia';
+update match_reports set division_id = 'terra' where division_id = 'gaia';
+update player_match_stats set division_id = 'terra' where division_id = 'gaia';
 
 delete from divisions where id = 'gaia';
+
+alter table divisions
+  add constraint divisions_id_check check (id in ('solar', 'lunar', 'terra'));
 
 commit;
 ```
@@ -111,7 +137,9 @@ union all select 'orgs', count(*) from orgs where division_id = 'gaia'
 union all select 'players', count(*) from players where division_id = 'gaia'
 union all select 'matches', count(*) from matches where division_id = 'gaia'
 union all select 'standings', count(*) from standings where division_id = 'gaia'
-union all select 'draft_rooms', count(*) from draft_rooms where division_id = 'gaia';
+union all select 'draft_rooms', count(*) from draft_rooms where division_id = 'gaia'
+union all select 'match_reports', count(*) from match_reports where division_id = 'gaia'
+union all select 'player_match_stats', count(*) from player_match_stats where division_id = 'gaia';
 ```
 
 Expected result: every `gaia_rows` value is `0`, and `divisions` contains `terra`.
@@ -123,7 +151,9 @@ select 'orgs' as table_name, count(*) as terra_rows from orgs where division_id 
 union all select 'players', count(*) from players where division_id = 'terra'
 union all select 'matches', count(*) from matches where division_id = 'terra'
 union all select 'standings', count(*) from standings where division_id = 'terra'
-union all select 'draft_rooms', count(*) from draft_rooms where division_id = 'terra';
+union all select 'draft_rooms', count(*) from draft_rooms where division_id = 'terra'
+union all select 'match_reports', count(*) from match_reports where division_id = 'terra'
+union all select 'player_match_stats', count(*) from player_match_stats where division_id = 'terra';
 ```
 
 ## 4. App follow-up
