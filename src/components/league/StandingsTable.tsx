@@ -15,16 +15,16 @@ const divisionTab: Record<DivisionId, { active: string; label: string }> = {
     active: "border-cyan-300/40 bg-cyan-300/15 text-cyan-100",
     label: "Lunar",
   },
-  gaia: {
+  terra: {
     active: "border-emerald-300/40 bg-emerald-300/15 text-emerald-100",
-    label: "Gaia",
+    label: "Terra",
   },
 };
 
 const divisionTopRow: Record<DivisionId, string> = {
   solar: "bg-orange-500/8",
   lunar: "bg-cyan-500/8",
-  gaia: "bg-emerald-500/8",
+  terra: "bg-emerald-500/8",
 };
 
 const inactiveTab = "border-white/10 bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-slate-200";

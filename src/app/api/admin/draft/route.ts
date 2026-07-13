@@ -8,7 +8,7 @@ import { errorMessage } from "@/lib/error-monitor";
 const createSchema = z.object({
   id: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, "id must be lowercase alphanumeric with hyphens"),
   seasonId: z.string().min(1),
-  divisionId: z.enum(["solar", "lunar", "gaia"]),
+  divisionId: z.enum(["solar", "lunar", "terra"]),
   rounds: z.number().int().min(1).max(10).optional(),
   pickTimerSeconds: z.number().int().min(30).max(600).optional(),
 });

@@ -64,7 +64,7 @@ npm run test:load     # Load tests (Vitest in-process)
 The SAL website is the public hub for the league. It covers:
 
 - **Home** — live match status, upcoming matches, recent results, division standings, and league announcements
-- **Standings** — win/loss records, games back, and streak per division (Solar, Lunar, Gaia)
+- **Standings** — win/loss records, games back, and streak per division (Solar, Lunar, Terra)
 - **Schedule** — full season schedule, filterable by division, week, and match status
 - **Teams** — all orgs with their rosters, division, and social links
 - **Players** — searchable player directory with role/division filters and individual player profiles
@@ -154,7 +154,7 @@ Announcements support Markdown. From **Admin → Announcements** you can write p
 ## Season Structure
 
 - The league runs in seasons. Season 1 is currently active.
-- Each season has three divisions: **Solar**, **Lunar**, and **Gaia**
+- Each season has three divisions: **Solar**, **Lunar**, and **Terra**
 - Rosters are 6–8 players per org, including a captain
 - Captains are selected by the league, represent their org, and are not draftable
 - Player identities (IGN, stats, history) persist across seasons

@@ -30,11 +30,11 @@ const divisionAccent: Record<DivisionId, { badge: string; bar: string; header: s
     header: "from-cyan-500/20 via-blue-500/8 to-transparent",
     name: "Lunar Division",
   },
-  gaia: {
+  terra: {
     badge: "border-emerald-300/40 bg-emerald-400/15 text-emerald-100",
     bar: "bg-gradient-to-r from-emerald-400 to-teal-500",
     header: "from-emerald-500/20 via-teal-400/8 to-transparent",
-    name: "Gaia Division",
+    name: "Terra Division",
   },
 };
 
@@ -83,8 +83,8 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
   ]);
 
   const brandDisplayName = org.name
-    .replace(/\s+(Solar|Lunar|Gaia)\s+Division$/i, "")
-    .replace(/\s+(Solar|Lunar|Gaia)$/i, "")
+    .replace(/\s+(Solar|Lunar|Terra)\s+Division$/i, "")
+    .replace(/\s+(Solar|Lunar|Terra)$/i, "")
     .trim();
 
   return (

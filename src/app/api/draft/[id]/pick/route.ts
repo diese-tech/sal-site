@@ -6,7 +6,7 @@ import { buildPickSequence } from "@/types/draft";
 import { getLeagueData, writeAuditLog } from "@/lib/league-data";
 import { reportError } from "@/lib/error-monitor";
 
-const DIVISION_TIER: Record<string, number> = { gaia: 1, solar: 2, lunar: 3 };
+const DIVISION_TIER: Record<string, number> = { terra: 1, solar: 2, lunar: 3 };
 
 const pickSchema = z.object({
   playerId: z.string().min(1),

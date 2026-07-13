@@ -170,7 +170,7 @@ body {
     0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(34, 211, 238, 0.22),
     0 0 6px rgba(124, 58, 237, 0.25);
 }
-.glow-gaia {
+.glow-terra {
   box-shadow:
     0 0 var(--sal-glow-blur, 28px) rgba(52, 211, 153, var(--sal-glow-opacity, 0.5)),
     0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(52, 211, 153, 0.22),
@@ -190,7 +190,7 @@ body {
     0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(34, 211, 238, 0.45),
     0 0 8px rgba(124, 58, 237, 0.50);
 }
-.glow-gaia-live {
+.glow-terra-live {
   box-shadow:
     0 0 var(--sal-glow-blur, 28px) rgba(52, 211, 153, var(--sal-glow-opacity-live, 0.88)),
     0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(52, 211, 153, 0.45),
@@ -207,7 +207,7 @@ body {
     0 0 var(--sal-glow-blur, 28px) rgba(34, 211, 238, var(--sal-glow-opacity, 0.5)),
     0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(34, 211, 238, 0.22);
 }
-.hover\:glow-gaia:hover {
+.hover\:glow-terra:hover {
   box-shadow:
     0 0 var(--sal-glow-blur, 28px) rgba(52, 211, 153, var(--sal-glow-opacity, 0.5)),
     0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(52, 211, 153, 0.22);
@@ -217,7 +217,7 @@ body {
 /* Default (chrome) at 0.25; pass var(--sal-border-opacity-accent) for division accents */
 .border-solar { border-color: rgba(249, 115, 22,  var(--sal-border-opacity, 0.25)); }
 .border-lunar  { border-color: rgba(34,  211, 238, var(--sal-border-opacity, 0.25)); }
-.border-gaia   { border-color: rgba(52,  211, 153, var(--sal-border-opacity, 0.25)); }
+.border-terra   { border-color: rgba(52,  211, 153, var(--sal-border-opacity, 0.25)); }
 
 /* --- Live pulse animation --- */
 .live-pulse {
@@ -262,7 +262,7 @@ body {
   background-size: 1200px 100%;
   animation: skeleton-shimmer 1.8s ease-in-out infinite;
 }
-.skeleton-shimmer-gaia {
+.skeleton-shimmer-terra {
   background: linear-gradient(
     90deg,
     rgba(52, 211, 153, 0.04) 0%,

@@ -27,7 +27,7 @@ export default async function StandingsPage({
             {season.name} · Week {season.currentWeek}
           </h1>
           <p className="mt-1.5 max-w-2xl text-sm font-semibold text-slate-400">
-            Win%, games back, and form across Solar, Lunar, and Gaia divisions. Click any team to view their roster.
+            Win%, games back, and form across Solar, Lunar, and Terra divisions. Click any team to view their roster.
           </p>
           {allSeasons.length > 1 && (
             <SeasonSelector seasons={allSeasons} currentSeasonId={season.id} />

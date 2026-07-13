@@ -22,7 +22,7 @@ const divisionAccent = {
     text: "text-cyan-100",
     sub: "text-cyan-200/60",
   },
-  gaia: {
+  terra: {
     border: "border-emerald-500/25 hover:border-emerald-500/45",
     badge: "border-emerald-300/35 bg-emerald-400/10 text-emerald-100",
     bar: "bg-gradient-to-r from-emerald-400 to-teal-500",

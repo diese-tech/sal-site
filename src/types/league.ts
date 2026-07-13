@@ -1,6 +1,6 @@
 export type { PlayerRole, PlayerStatus } from "@/types/card-lab";
 
-export type DivisionId = "solar" | "lunar" | "gaia";
+export type DivisionId = "solar" | "lunar" | "terra";
 export type MatchStatus = "scheduled" | "live" | "completed" | "postponed" | "forfeit";
 export type SeasonStatus = "pre-season" | "active" | "post-season" | "offseason";
 export type AnnouncementCategory = "general" | "rules" | "draft" | "results" | "admin";

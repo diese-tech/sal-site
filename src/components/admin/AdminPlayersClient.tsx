@@ -240,7 +240,7 @@ export function AdminPlayersClient({
           className="rounded-xl border border-white/10 bg-black/45 px-3 py-1.5 text-sm font-semibold text-white placeholder-slate-500 outline-none focus:border-cyan-300/50"
         />
         <span className="w-px self-stretch bg-white/10" />
-        {(["all", "gaia", "solar", "lunar"] as const).map((d) => (
+        {(["all", "terra", "solar", "lunar"] as const).map((d) => (
           <FilterChip key={d} active={divFilter === d} onClick={() => setDivFilter(d)}>
             {d === "all" ? "All Divisions" : d.charAt(0).toUpperCase() + d.slice(1)}
           </FilterChip>

@@ -13,7 +13,7 @@ const playerSchema = z.object({
   secondaryRoles: z.array(z.enum(["Solo", "Jungle", "Mid", "Carry", "Support", "Flex"])).optional(),
   status: z.enum(["free-agent", "org-affiliated", "drafted", "queued-ghost", "active"]),
   orgId: z.string().min(1).optional(),
-  divisionId: z.enum(["solar", "lunar", "gaia"]).optional(),
+  divisionId: z.enum(["solar", "lunar", "terra"]).optional(),
   avatarInitials: z.string().max(4).optional().default(""),
   avatarGradient: z.string().optional().default(""),
   isStarter: z.boolean().optional().default(false),

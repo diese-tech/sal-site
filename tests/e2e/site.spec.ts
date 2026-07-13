@@ -73,13 +73,13 @@ for (const cta of [
 ]) {
   test(`homepage CTA ${cta.name} is wired`, async ({ page }) => {
     await page.goto("/");
-    const link = page.getByRole("link", { name: new RegExp(cta.name) }).filter({ hasNotText: /Solar|Lunar|Gaia/ }).last();
+    const link = page.getByRole("link", { name: new RegExp(cta.name) }).filter({ hasNotText: /Solar|Lunar|Terra/ }).last();
     await expect(link).toBeVisible();
     await expect(link).toHaveAttribute("href", cta.href);
   });
 }
 
-for (const division of ["Solar", "Lunar", "Gaia"]) {
+for (const division of ["Solar", "Lunar", "Terra"]) {
   test(`standings division tab ${division} switches table`, async ({ page }) => {
     await page.goto("/standings");
     await page.getByRole("button", { name: division }).click();
@@ -88,7 +88,7 @@ for (const division of ["Solar", "Lunar", "Gaia"]) {
   });
 }
 
-for (const filter of ["Solar", "Lunar", "Gaia", "Live", "Scheduled", "Completed", "Postponed", "Wk 1", "Wk 2", "Wk 3"]) {
+for (const filter of ["Solar", "Lunar", "Terra", "Live", "Scheduled", "Completed", "Postponed", "Wk 1", "Wk 2", "Wk 3"]) {
   test(`schedule filter ${filter} is selectable`, async ({ page }) => {
     await page.goto("/schedule");
     await page.getByRole("button", { name: filter }).click();
@@ -97,7 +97,7 @@ for (const filter of ["Solar", "Lunar", "Gaia", "Live", "Scheduled", "Completed"
   });
 }
 
-for (const filter of ["All", "Solar", "Lunar", "Gaia"]) {
+for (const filter of ["All", "Solar", "Lunar", "Terra"]) {
   test(`teams division filter ${filter} is selectable`, async ({ page }) => {
     await page.goto("/teams");
     await page.getByRole("button", { name: filter }).click();
@@ -768,10 +768,10 @@ test("admin draft create form has division select", async ({ page }) => {
   await page.goto("/admin/draft");
   const divisionSelect = page.locator("select").first();
   await expect(divisionSelect).toBeVisible();
-  // Should have solar/lunar/gaia options
+  // Should have solar/lunar/terra options
   await expect(divisionSelect.locator("option[value='solar']")).toHaveCount(1);
   await expect(divisionSelect.locator("option[value='lunar']")).toHaveCount(1);
-  await expect(divisionSelect.locator("option[value='gaia']")).toHaveCount(1);
+  await expect(divisionSelect.locator("option[value='terra']")).toHaveCount(1);
 });
 
 test("admin draft unknown room ID returns 404", async ({ page }) => {

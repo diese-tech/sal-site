@@ -23,19 +23,19 @@ function fmtN(n: number) {
 const divisionShort: Record<DivisionId, string> = {
   solar: "Sol",
   lunar: "Lun",
-  gaia: "Gaia",
+  terra: "Terra",
 };
 
 const divisionBadge: Record<DivisionId, string> = {
   solar: "border-orange-300/40 bg-orange-400/15 text-orange-100",
   lunar: "border-cyan-300/40 bg-cyan-400/15 text-cyan-100",
-  gaia: "border-emerald-300/40 bg-emerald-400/15 text-emerald-100",
+  terra: "border-emerald-300/40 bg-emerald-400/15 text-emerald-100",
 };
 
 const divisionName: Record<DivisionId, string> = {
   solar: "Solar Division",
   lunar: "Lunar Division",
-  gaia: "Gaia Division",
+  terra: "Terra Division",
 };
 
 const statusStyle: Record<string, string> = {

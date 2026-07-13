@@ -80,7 +80,7 @@ vi.mock("@/lib/supabase-server", () => ({
 
 const homeMatch = {
   scheduled_date: "2026-05-01",
-  division_id: "gaia",
+  division_id: "terra",
   season_id: "season-1",
   home_org_id: "org-a",
   away_org_id: "org-b",
@@ -215,7 +215,7 @@ describe("player match and god stats", () => {
   it("includes unfiltered god stats from both divisions", async () => {
     client = makeClient(() => ({
       data: [
-        statRow({ matches: { ...homeMatch, division_id: "gaia" }, god_played: "Terra" }),
+        statRow({ matches: { ...homeMatch, division_id: "terra" }, god_played: "Terra" }),
         statRow({ matches: { ...awayMatch, division_id: "solar" }, god_played: "Ra" }),
       ],
       error: null,
@@ -245,7 +245,7 @@ describe("player match and god stats", () => {
 describe("season, roster, and org god aggregations", () => {
   it("returns two season summary rows when a player subs into a higher division", async () => {
     const rows = [
-      statRow({ matches: { ...homeMatch, season_id: "season-1", division_id: "gaia" } }),
+      statRow({ matches: { ...homeMatch, season_id: "season-1", division_id: "terra" } }),
       statRow({ matches: { ...awayMatch, season_id: "season-1", division_id: "solar" } }),
     ];
     client = makeClient((query) => {
@@ -256,7 +256,7 @@ describe("season, roster, and org god aggregations", () => {
     const summaries = await getPlayerSeasonSummaries("player-1");
 
     expect(summaries).toHaveLength(2);
-    expect(summaries.map((row) => row.divisionId).sort()).toEqual(["gaia", "solar"]);
+    expect(summaries.map((row) => row.divisionId).sort()).toEqual(["solar", "terra"]);
   });
 
   it("computes team roster per-game averages by games played", async () => {
@@ -294,13 +294,13 @@ describe("season, roster, and org god aggregations", () => {
 
   it("only returns org tendency cards for orgs with stat rows", async () => {
     const orgs: Org[] = [
-      { id: "org-a", name: "Alpha", tag: "ALP", divisionId: "gaia", logoInitials: "A", logoGradient: "", primaryColor: "", accentGradient: "" },
+      { id: "org-a", name: "Alpha", tag: "ALP", divisionId: "terra", logoInitials: "A", logoGradient: "", primaryColor: "", accentGradient: "" },
       { id: "org-empty", name: "Empty", tag: "EMP", divisionId: "solar", logoInitials: "E", logoGradient: "", primaryColor: "", accentGradient: "" },
     ];
     client = makeClient((query) => {
       if (query.table === "player_stats") {
         return {
-          data: [{ god_played: "Athena", kills: 1, deaths: 1, assists: 1, damage_dealt: 1, damage_mitigated: null, won: true, matches: { season_id: "season-1", division_id: "gaia" }, player: { org_id: "org-a" } }],
+          data: [{ god_played: "Athena", kills: 1, deaths: 1, assists: 1, damage_dealt: 1, damage_mitigated: null, won: true, matches: { season_id: "season-1", division_id: "terra" }, player: { org_id: "org-a" } }],
           error: null,
         };
       }

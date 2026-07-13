@@ -16,7 +16,7 @@ const divisionAccent: Record<DivisionId, { border: string; badge: string; bar: s
     bar: "bg-gradient-to-r from-cyan-400 to-violet-500",
     headerGlow: "from-cyan-500/25 via-blue-500/10 to-transparent",
   },
-  gaia: {
+  terra: {
     border: "border-emerald-500/20 hover:border-emerald-500/45",
     badge: "border-emerald-300/35 bg-emerald-400/10 text-emerald-100",
     bar: "bg-gradient-to-r from-emerald-400 to-teal-500",

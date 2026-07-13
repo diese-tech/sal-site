@@ -9,13 +9,13 @@ export const metadata = {
 
 export const revalidate = 30;
 
-const divisions: DivisionId[] = ["solar", "lunar", "gaia"];
+const divisions: DivisionId[] = ["solar", "lunar", "terra"];
 
 export default async function GodsPage() {
   const data = await getLeagueData();
   const seasonId = data.season.id;
 
-  const [allStats, allTendencies, solarStats, solarTendencies, lunarStats, lunarTendencies, gaiaStats, gaiaTendencies] =
+  const [allStats, allTendencies, solarStats, solarTendencies, lunarStats, lunarTendencies, terraStats, terraTendencies] =
     await Promise.all([
       getLeagueGodStats(seasonId),
       getOrgGodTendencies(data.orgs, seasonId),
@@ -23,22 +23,22 @@ export default async function GodsPage() {
       getOrgGodTendencies(data.orgs, seasonId, "solar"),
       getLeagueGodStats(seasonId, "lunar"),
       getOrgGodTendencies(data.orgs, seasonId, "lunar"),
-      getLeagueGodStats(seasonId, "gaia"),
-      getOrgGodTendencies(data.orgs, seasonId, "gaia"),
+      getLeagueGodStats(seasonId, "terra"),
+      getOrgGodTendencies(data.orgs, seasonId, "terra"),
     ]);
 
   const statsByDivision: Record<DivisionId | "all", PlayerGodStats[]> = {
     all: allStats,
     solar: solarStats,
     lunar: lunarStats,
-    gaia: gaiaStats,
+    terra: terraStats,
   };
 
   const tendenciesByDivision: Record<DivisionId | "all", OrgGodTendency[]> = {
     all: allTendencies,
     solar: solarTendencies,
     lunar: lunarTendencies,
-    gaia: gaiaTendencies,
+    terra: terraTendencies,
   };
 
   const trackedGames = allStats.reduce((sum, stat) => sum + stat.gamesPlayed, 0);

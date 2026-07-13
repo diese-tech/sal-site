@@ -2,16 +2,16 @@ import { getLeagueData } from "@/lib/league-data";
 import { isMatchLive } from "@/lib/match-live";
 import { cn } from "@/lib/utils";
 
-const DIV_TAG = { solar: "SOL", lunar: "LUN", gaia: "GAI" } as const;
+const DIV_TAG = { solar: "SOL", lunar: "LUN", terra: "TER" } as const;
 const DIV_COLOR = {
   solar: "text-orange-300",
   lunar: "text-cyan-300",
-  gaia: "text-emerald-300",
+  terra: "text-emerald-300",
 } as const;
 const DIV_SEP_COLOR = {
   solar: "text-orange-500/50",
   lunar: "text-cyan-500/50",
-  gaia: "text-emerald-500/50",
+  terra: "text-emerald-500/50",
 } as const;
 
 function shortTime(date: string, time: string) {

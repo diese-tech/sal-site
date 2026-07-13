@@ -9,7 +9,7 @@ const orgSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(64),
   tag: z.string().min(1).max(8),
-  divisionId: z.enum(["solar", "lunar", "gaia"]),
+  divisionId: z.enum(["solar", "lunar", "terra"]),
   logoInitials: z.string().max(4).optional().default(""),
   logoGradient: z.string().optional().default(""),
   primaryColor: z.string().optional().default(""),

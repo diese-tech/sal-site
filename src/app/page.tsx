@@ -262,18 +262,18 @@ function SkeletonBlock({
   variant = "default",
 }: {
   className?: string;
-  variant?: "default" | "solar" | "gaia";
+  variant?: "default" | "solar" | "terra";
 }) {
   const shimmerClass =
     variant === "solar"
       ? "skeleton-shimmer-solar"
-      : variant === "gaia"
-        ? "skeleton-shimmer-gaia"
+      : variant === "terra"
+        ? "skeleton-shimmer-terra"
         : "skeleton-shimmer";
   return <div className={cn("rounded-[var(--sal-card-radius)]", shimmerClass, className)} />;
 }
 
-function SkeletonHeader({ eyebrow, variant = "default" }: { eyebrow: string; variant?: "default" | "solar" | "gaia" }) {
+function SkeletonHeader({ eyebrow, variant = "default" }: { eyebrow: string; variant?: "default" | "solar" | "terra" }) {
   return (
     <div className="mb-5 space-y-2">
       <p className="font-mono text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400/60">{eyebrow}</p>
@@ -320,7 +320,7 @@ function DivisionsSectionSkeleton() {
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <SkeletonBlock className="h-40" variant="solar" />
         <SkeletonBlock className="h-40" />
-        <SkeletonBlock className="h-40" variant="gaia" />
+        <SkeletonBlock className="h-40" variant="terra" />
       </div>
     </section>
   );

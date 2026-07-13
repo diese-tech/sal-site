@@ -584,7 +584,7 @@ export async function getOrgGodTendencies(orgs: Org[], seasonId?: string, divisi
       const groupedOrgs = org.brandId ? orgs.filter((candidate) => candidate.brandId === org.brandId) : [org];
       groupMeta.set(groupId, {
         orgId: org.id,
-        orgName: org.brandId ? org.name.replace(/\s+(Solar|Lunar|Gaia)$/i, '') : org.name,
+        orgName: org.brandId ? org.name.replace(/\s+(Solar|Lunar|Terra)$/i, '') : org.name,
         orgTag: org.tag,
         brandId: org.brandId,
         divisionIds: Array.from(new Set(groupedOrgs.map((candidate) => candidate.divisionId))),
