@@ -8,7 +8,7 @@ create table if not exists seasons (
 );
 
 create table if not exists divisions (
-  id text primary key check (id in ('solar', 'lunar', 'gaia')),
+  id text primary key check (id in ('solar', 'lunar', 'terra')),
   name text not null,
   description text not null,
   tier integer not null,

@@ -14,13 +14,13 @@ const DIVISION_FILTERS: { id: DivisionFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "solar", label: "Solar" },
   { id: "lunar", label: "Lunar" },
-  { id: "gaia", label: "Gaia" },
+  { id: "terra", label: "Terra" },
 ];
 
 const divisionActive: Record<DivisionId, string> = {
   solar: "border-orange-300/40 bg-orange-300/15 text-orange-100",
   lunar: "border-cyan-300/40 bg-cyan-300/15 text-cyan-100",
-  gaia: "border-emerald-300/40 bg-emerald-300/15 text-emerald-100",
+  terra: "border-emerald-300/40 bg-emerald-300/15 text-emerald-100",
 };
 
 const inactiveBtn = "border-white/10 bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-slate-200";

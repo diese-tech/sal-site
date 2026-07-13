@@ -24,13 +24,13 @@ type Step = "select" | "upload" | "extracting" | "review" | "confirming" | "done
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const DIV_COLOR: Record<string, string> = {
-  gaia: "text-emerald-400",
+  terra: "text-emerald-400",
   solar: "text-orange-400",
   lunar: "text-cyan-400",
 };
 
 const DIV_DOT: Record<string, string> = {
-  gaia: "bg-emerald-400",
+  terra: "bg-emerald-400",
   solar: "bg-orange-400",
   lunar: "bg-cyan-400",
 };
@@ -188,8 +188,8 @@ export function MatchReportClient({
     (m) => !m.archivedAt && (m.status === "scheduled" || m.status === "live") && !reportedMatchIds.has(m.id),
   );
 
-  // Group by division (Gaia → Solar → Lunar)
-  const divOrder = ["gaia", "solar", "lunar"];
+  // Group by division (Terra → Solar → Lunar)
+  const divOrder = ["terra", "solar", "lunar"];
   const matchesByDiv = divOrder.map((divId) => ({
     divId,
     matches: openMatches.filter((m) => m.divisionId === divId && (

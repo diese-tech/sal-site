@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 const divisionAccentText: Record<DivisionId, string> = {
   solar: "text-orange-100",
   lunar: "text-cyan-100",
-  gaia: "text-emerald-100",
+  terra: "text-emerald-100",
 };
 
 function PlayerRow({ player, divisionId }: { player: LeaguePlayer; divisionId: DivisionId }) {

@@ -35,7 +35,7 @@ async function runConcurrent(count: number, fn: () => Promise<unknown>) {
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
-const DIVISIONS = ["solar", "lunar", "gaia"] as const;
+const DIVISIONS = ["solar", "lunar", "terra"] as const;
 
 function makeOrgs(count: number): Org[] {
   return Array.from({ length: count }, (_, i) => ({

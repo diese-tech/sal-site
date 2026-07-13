@@ -7,7 +7,7 @@ import { errorMessage } from "@/lib/error-monitor";
 
 const matchSchema = z.object({
   id: z.string().min(1),
-  divisionId: z.enum(["solar", "lunar", "gaia"]),
+  divisionId: z.enum(["solar", "lunar", "terra"]),
   homeOrgId: z.string().min(1),
   awayOrgId: z.string().min(1),
   scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "scheduledDate must be YYYY-MM-DD"),

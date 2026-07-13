@@ -102,11 +102,11 @@ function FeaturedLiveCard({
   const divColor = {
     solar: "border-orange-300/30 bg-orange-400/8",
     lunar: "border-cyan-300/30 bg-cyan-400/8",
-    gaia: "border-emerald-300/30 bg-emerald-400/8",
+    terra: "border-emerald-300/30 bg-emerald-400/8",
   }[match.divisionId];
 
-  const divLabel = { solar: "Solar Division", lunar: "Lunar Division", gaia: "Gaia Division" }[match.divisionId];
-  const divText = { solar: "text-orange-200", lunar: "text-cyan-200", gaia: "text-emerald-200" }[match.divisionId];
+  const divLabel = { solar: "Solar Division", lunar: "Lunar Division", terra: "Terra Division" }[match.divisionId];
+  const divText = { solar: "text-orange-200", lunar: "text-cyan-200", terra: "text-emerald-200" }[match.divisionId];
 
   return (
     <article className={cn("relative overflow-hidden rounded-2xl border backdrop-blur", divColor)}>

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 const DIVISIONS: { id: DivisionId | "all"; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "gaia", label: "Gaia" },
+  { id: "terra", label: "Terra" },
   { id: "solar", label: "Solar" },
   { id: "lunar", label: "Lunar" },
 ];
@@ -21,7 +21,7 @@ const STATUSES: { id: MatchStatus | "all"; label: string }[] = [
 const divisionActive: Record<DivisionId, string> = {
   solar: "border-orange-300/40 bg-orange-300/15 text-orange-100",
   lunar: "border-cyan-300/40 bg-cyan-300/15 text-cyan-100",
-  gaia: "border-emerald-300/40 bg-emerald-300/15 text-emerald-100",
+  terra: "border-emerald-300/40 bg-emerald-300/15 text-emerald-100",
 };
 
 const allActive = "border-white/25 bg-white/10 text-white";

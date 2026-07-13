@@ -8,13 +8,13 @@ import { cn } from "@/lib/utils";
 const divisionHeaderGradient: Record<DivisionId, string> = {
   solar: "from-orange-500/30 via-amber-400/10 to-transparent",
   lunar: "from-cyan-500/30 via-blue-500/10 to-transparent",
-  gaia: "from-emerald-500/30 via-teal-400/10 to-transparent",
+  terra: "from-emerald-500/30 via-teal-400/10 to-transparent",
 };
 
 const divisionBorder: Record<DivisionId, string> = {
   solar: "border-orange-500/35 hover:border-orange-500/55",
   lunar: "border-cyan-500/35 hover:border-cyan-500/55",
-  gaia: "border-emerald-500/35 hover:border-emerald-500/55",
+  terra: "border-emerald-500/35 hover:border-emerald-500/55",
 };
 
 const statusConfig = {

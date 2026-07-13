@@ -33,7 +33,7 @@ type ImportedPlayer = {
 };
 
 const VALID_ROLES: PlayerRole[] = ["Solo", "Jungle", "Mid", "Carry", "Support", "Flex"];
-const VALID_DIVISIONS: DivisionId[] = ["gaia", "solar", "lunar"];
+const VALID_DIVISIONS: DivisionId[] = ["terra", "solar", "lunar"];
 
 const ROLE_ALIASES: Record<string, PlayerRole> = {
   solo: "Solo", top: "Solo",
@@ -47,7 +47,7 @@ const ROLE_ALIASES: Record<string, PlayerRole> = {
 const DIVISION_ALIASES: Record<string, DivisionId> = {
   solar: "solar", sol: "solar",
   lunar: "lunar", lun: "lunar",
-  gaia: "gaia",
+  terra: "terra",
 };
 
 const AVATAR_GRADIENTS = [
@@ -503,7 +503,7 @@ export function AdminImportClient() {
                           "rounded px-1 py-0.5 font-black uppercase",
                           row.divisionId === "solar" && "text-orange-400",
                           row.divisionId === "lunar" && "text-cyan-400",
-                          row.divisionId === "gaia" && "text-emerald-400",
+                          row.divisionId === "terra" && "text-emerald-400",
                         )}>{row.divisionId.slice(0, 3)}</span>
                       ) : <span className="text-slate-600">—</span>}
                     </td>

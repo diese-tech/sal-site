@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import type { MatchReportWithMatch } from "@/types/match-report";
 
 const DIV_DOT: Record<string, string> = {
-  gaia: "bg-emerald-400",
+  terra: "bg-emerald-400",
   solar: "bg-orange-400",
   lunar: "bg-cyan-400",
 };

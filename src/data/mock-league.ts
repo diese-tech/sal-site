@@ -2,8 +2,8 @@ import type { LeagueData, Division, Org, LeaguePlayer, Match, OrgStanding, Annou
 
 const DIVISIONS: Division[] = [
   {
-    id: "gaia",
-    name: "Gaia Division",
+    id: "terra",
+    name: "Terra Division",
     description: "Top-tier competitive play. The pinnacle where champions are forged.",
     tier: 1,
     accentColor: "emerald",
@@ -128,12 +128,12 @@ const ORGS: Org[] = [
     captainId: "p-nlv-1",
     founded: "2024",
   },
-  // Gaia Division
+  // Terra Division
   {
     id: "root-warden",
     name: "Root Warden",
     tag: "RWD",
-    divisionId: "gaia",
+    divisionId: "terra",
     logoInitials: "RW",
     logoGradient: "from-emerald-400 to-teal-600",
     primaryColor: "#34d399",
@@ -146,7 +146,7 @@ const ORGS: Org[] = [
     id: "serpent-bloom",
     name: "Serpent Bloom",
     tag: "SBL",
-    divisionId: "gaia",
+    divisionId: "terra",
     logoInitials: "SB",
     logoGradient: "from-lime-400 to-green-600",
     primaryColor: "#a3e635",
@@ -158,7 +158,7 @@ const ORGS: Org[] = [
     id: "terra-flux",
     name: "Terra Flux",
     tag: "TFX",
-    divisionId: "gaia",
+    divisionId: "terra",
     logoInitials: "TF",
     logoGradient: "from-teal-400 to-cyan-700",
     primaryColor: "#2dd4bf",
@@ -171,7 +171,7 @@ const ORGS: Org[] = [
     id: "iron-canopy",
     name: "Iron Canopy",
     tag: "ICN",
-    divisionId: "gaia",
+    divisionId: "terra",
     logoInitials: "IC",
     logoGradient: "from-stone-400 to-neutral-600",
     primaryColor: "#a8a29e",
@@ -212,10 +212,10 @@ const ALL_PLAYERS: LeaguePlayer[] = [
   ...makePlayers("frost-sigil", "lunar", "p-fsg"),
   ...makePlayers("nova-circuit", "lunar", "p-nvc"),
   ...makePlayers("null-vector", "lunar", "p-nlv"),
-  ...makePlayers("root-warden", "gaia", "p-rwd"),
-  ...makePlayers("serpent-bloom", "gaia", "p-sbl"),
-  ...makePlayers("terra-flux", "gaia", "p-tfx"),
-  ...makePlayers("iron-canopy", "gaia", "p-icn"),
+  ...makePlayers("root-warden", "terra", "p-rwd"),
+  ...makePlayers("serpent-bloom", "terra", "p-sbl"),
+  ...makePlayers("terra-flux", "terra", "p-tfx"),
+  ...makePlayers("iron-canopy", "terra", "p-icn"),
 ];
 
 const MATCHES: Match[] = [
@@ -243,16 +243,16 @@ const MATCHES: Match[] = [
   { id: "l-m7", divisionId: "lunar", homeOrgId: "midnight-pact", awayOrgId: "nova-circuit", scheduledDate: "2025-05-26", scheduledTime: "19:00", seasonId: "s1", status: "scheduled", week: 4 },
   { id: "l-m8", divisionId: "lunar", homeOrgId: "frost-sigil", awayOrgId: "null-vector", scheduledDate: "2025-05-26", scheduledTime: "21:00", seasonId: "s1", status: "scheduled", week: 4 },
 
-  // Gaia — completed
-  { id: "g-m1", divisionId: "gaia", homeOrgId: "root-warden", awayOrgId: "serpent-bloom", scheduledDate: "2025-04-30", scheduledTime: "19:00", seasonId: "s1", status: "completed", week: 1, homeScore: 2, awayScore: 0 },
-  { id: "g-m2", divisionId: "gaia", homeOrgId: "terra-flux", awayOrgId: "iron-canopy", scheduledDate: "2025-04-30", scheduledTime: "21:00", seasonId: "s1", status: "completed", week: 1, homeScore: 1, awayScore: 2 },
-  { id: "g-m3", divisionId: "gaia", homeOrgId: "serpent-bloom", awayOrgId: "terra-flux", scheduledDate: "2025-05-07", scheduledTime: "19:00", seasonId: "s1", status: "completed", week: 2, homeScore: 2, awayScore: 2, vodUrl: "#" },
-  { id: "g-m4", divisionId: "gaia", homeOrgId: "root-warden", awayOrgId: "iron-canopy", scheduledDate: "2025-05-07", scheduledTime: "21:00", seasonId: "s1", status: "completed", week: 2, homeScore: 2, awayScore: 0 },
-  // Gaia — postponed + scheduled
-  { id: "g-m5", divisionId: "gaia", homeOrgId: "iron-canopy", awayOrgId: "root-warden", scheduledDate: "2025-05-17", scheduledTime: "19:00", seasonId: "s1", status: "postponed", week: 3 },
-  { id: "g-m6", divisionId: "gaia", homeOrgId: "terra-flux", awayOrgId: "serpent-bloom", scheduledDate: "2025-05-20", scheduledTime: "21:00", seasonId: "s1", status: "scheduled", week: 3 },
-  { id: "g-m7", divisionId: "gaia", homeOrgId: "root-warden", awayOrgId: "terra-flux", scheduledDate: "2025-05-28", scheduledTime: "19:00", seasonId: "s1", status: "scheduled", week: 4 },
-  { id: "g-m8", divisionId: "gaia", homeOrgId: "serpent-bloom", awayOrgId: "iron-canopy", scheduledDate: "2025-05-28", scheduledTime: "21:00", seasonId: "s1", status: "scheduled", week: 4 },
+  // Terra — completed
+  { id: "g-m1", divisionId: "terra", homeOrgId: "root-warden", awayOrgId: "serpent-bloom", scheduledDate: "2025-04-30", scheduledTime: "19:00", seasonId: "s1", status: "completed", week: 1, homeScore: 2, awayScore: 0 },
+  { id: "g-m2", divisionId: "terra", homeOrgId: "terra-flux", awayOrgId: "iron-canopy", scheduledDate: "2025-04-30", scheduledTime: "21:00", seasonId: "s1", status: "completed", week: 1, homeScore: 1, awayScore: 2 },
+  { id: "g-m3", divisionId: "terra", homeOrgId: "serpent-bloom", awayOrgId: "terra-flux", scheduledDate: "2025-05-07", scheduledTime: "19:00", seasonId: "s1", status: "completed", week: 2, homeScore: 2, awayScore: 2, vodUrl: "#" },
+  { id: "g-m4", divisionId: "terra", homeOrgId: "root-warden", awayOrgId: "iron-canopy", scheduledDate: "2025-05-07", scheduledTime: "21:00", seasonId: "s1", status: "completed", week: 2, homeScore: 2, awayScore: 0 },
+  // Terra — postponed + scheduled
+  { id: "g-m5", divisionId: "terra", homeOrgId: "iron-canopy", awayOrgId: "root-warden", scheduledDate: "2025-05-17", scheduledTime: "19:00", seasonId: "s1", status: "postponed", week: 3 },
+  { id: "g-m6", divisionId: "terra", homeOrgId: "terra-flux", awayOrgId: "serpent-bloom", scheduledDate: "2025-05-20", scheduledTime: "21:00", seasonId: "s1", status: "scheduled", week: 3 },
+  { id: "g-m7", divisionId: "terra", homeOrgId: "root-warden", awayOrgId: "terra-flux", scheduledDate: "2025-05-28", scheduledTime: "19:00", seasonId: "s1", status: "scheduled", week: 4 },
+  { id: "g-m8", divisionId: "terra", homeOrgId: "serpent-bloom", awayOrgId: "iron-canopy", scheduledDate: "2025-05-28", scheduledTime: "21:00", seasonId: "s1", status: "scheduled", week: 4 },
 ];
 
 function calcStandings(): OrgStanding[] {
@@ -296,7 +296,7 @@ function calcStandings(): OrgStanding[] {
   }
 
   // Calculate games back per division
-  const divIds: import("@/types/league").DivisionId[] = ["gaia", "solar", "lunar"];
+  const divIds: import("@/types/league").DivisionId[] = ["terra", "solar", "lunar"];
   for (const divId of divIds) {
     const divStandings = [...map.values()].filter((s) => s.divisionId === divId);
     const leader = divStandings.reduce((a, b) => (b.wins - b.losses > a.wins - a.losses ? b : a), divStandings[0]);
@@ -319,7 +319,7 @@ const ANNOUNCEMENTS: Announcement[] = [
   },
   {
     id: "ann-2",
-    title: "Gaia Division: Iron Canopy vs Root Warden Postponed",
+    title: "Terra Division: Iron Canopy vs Root Warden Postponed",
     body: "Due to a scheduling conflict, the Week 3 match between Iron Canopy and Root Warden has been postponed. A new date will be announced shortly.",
     createdAt: "2025-05-17T09:00:00Z",
     category: "results",
