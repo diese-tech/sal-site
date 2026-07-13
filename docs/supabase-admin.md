@@ -6,15 +6,23 @@ The Supabase project URL is configured via the `NEXT_PUBLIC_SUPABASE_URL` enviro
 
 ## Initial Setup
 
-Run the following SQL files **in order** in the Supabase SQL editor:
+Run `supabase/schema.sql` first, then **every** file in `supabase/migrations/` in
+numeric order (001 through 021 at time of writing) in the Supabase SQL editor.
+Highlights:
 
-| Order | File | Purpose |
-|---|---|---|
-| 1 | `supabase/schema.sql` | Base tables: seasons, divisions, orgs, players, matches, standings, announcements |
-| 2 | `supabase/migrations/001_admin_audit_log.sql` | Admin audit log — records every admin mutation |
-| 3 | `supabase/migrations/002_draft_engine.sql` | Draft rooms, draft picks, and captain tokens |
-| 4 | `supabase/migrations/003_rls.sql` | Row Level Security — anon key gets SELECT only on public tables |
-| 5 | `supabase/migrations/004_auth.sql` | Player Discord identity (`discord_id`, `profile_claimed`), registrations table, form fields table |
+| File | Purpose |
+|---|---|
+| `supabase/schema.sql` | Base tables: seasons, divisions, orgs, players, matches, standings, announcements, gods, god drafts |
+| `001_admin_audit_log.sql` | Admin audit log — records every admin mutation |
+| `002_draft_engine.sql` | Draft rooms, draft picks, and captain tokens |
+| `003_rls.sql` | Row Level Security — anon key gets SELECT only on public tables |
+| `004_auth.sql` | Player Discord identity (`discord_id`, `profile_claimed`), registrations, form fields |
+| `016_atomic_match_report_stats.sql` | `replace_match_report_stats` RPC (match_reports / player_match_stats) |
+| `017_atomic_standings_replace.sql` | `replace_standings` RPC — atomic standings replace |
+| `018_seed_divisions.sql` | Seeds the fixed division rows (`solar`, `lunar`, `terra`) |
+
+The shared database also carries SALbot's migrations (see below) — a fresh project
+needs those applied too, from the `lab-salbot` repo's `database/migrations/`.
 
 After the schema is applied, seed the database with Season 1 data:
 
@@ -61,9 +69,18 @@ Every mutation is logged to `admin_audit_log` with the action type, entity type,
 
 ## Standings Recalculation
 
-Standings are recalculated automatically whenever a completed match score is saved via `POST /api/admin/matches`. They can also be manually triggered from Admin → Standings.
+Standings are recalculated in exactly two places:
 
-The recalculation fetches match and org data directly from Supabase (bypassing the mock fallback), then upserts recalculated standings and removes any stale org rows. This is safe to run multiple times.
+1. The admin match-report submit flow (`POST /api/admin/match-reports/[id]/submit`)
+2. On demand from Admin → Standings (`POST /api/admin/recalculate-standings`)
+
+`POST /api/admin/matches` (the Admin → Matches editor) saves the match but does
+**not** recalculate standings, despite the editor's confirmation copy — recalculate
+manually after editing a completed score. SALbot's Discord approval flow also
+completes matches without touching standings, so after approving results in Discord
+an admin must recalculate from Admin → Standings.
+
+The recalculation fetches match and org data directly from Supabase (bypassing the mock fallback), then atomically replaces the standings rows via the `replace_standings` RPC. This is safe to run multiple times.
 
 ## Audit Log
 
@@ -72,3 +89,44 @@ Every admin write is recorded in `admin_audit_log`. You can view the last 50 ent
 ```sql
 SELECT * FROM admin_audit_log ORDER BY created_at DESC LIMIT 50;
 ```
+
+Note there are **two** audit trails in the shared database: `admin_audit_log`
+(website admin actions) and `audit_logs` (SALbot mutations). They are separate by
+design.
+
+## Shared Database with SALbot
+
+The same Supabase project is used by SALbot (the `lab-salbot` repo), which connects
+with the service role key. Full details live in `lab-salbot/docs/database/schema.md`;
+the contract summary from the site's perspective:
+
+**Bot-owned tables** — the site never reads or writes these: `pending_actions`
+(Discord approval queue), `audit_logs`, `pending_stat_records`, `player_stats`,
+`division_role_mappings`. The bot's migrations in `lab-salbot/database/migrations/`
+create them and add columns to `matches` (`winner_org_id`, `score`,
+`proof_thread_id`, `proof_thread_url`, `screenshot_count`, `screenshot_expected`)
+plus `players.display_alias`.
+
+**Match completion has two writers.** SALbot approval sets `matches.status`,
+`winner_org_id`, `home_score`, `away_score`, and `score`; the site's admin flows set
+`status` / `home_score` / `away_score` only, leaving `winner_org_id` and `score`
+NULL. Neither writer updates `standings` (see Standings Recalculation above). Site
+upserts to `matches` send only the site-owned columns, so PostgREST leaves the
+bot-owned columns intact.
+
+**Player stats have two pipelines.** The player pages render the `players.stats`
+JSONB aggregate, which is recomputed **only** by SALbot's stat pipeline
+(`pending_stat_records` → `player_stats` → aggregate). The site's admin match-report
+flow writes `match_reports` + `player_match_stats`, which do not feed `players.stats`
+and are not currently rendered anywhere public.
+
+**Identity linking.** Both systems match players by `players.discord_id`: the site
+sets it via the Discord OAuth claim flow, the bot via `/division-sync` CSV apply.
+Captain-only bot commands (`/report-result`, `/reschedule`) resolve the caller by
+`discord_id` + `is_captain`, so captains must be linked and flagged on the site for
+those commands to work.
+
+**Division ids** are the fixed set `solar` / `lunar` / `terra` (renamed from `gaia`
+on 2026-07-13; the `divisions_id_check` constraint enforces it). The bot maps
+division ids to Discord channels via `CHANNEL_RESULTS_*` / `CHANNEL_RESCHEDULES_*`
+env vars and to Discord roles via the `division_role_mappings` table.
