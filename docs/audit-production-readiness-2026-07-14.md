@@ -100,8 +100,8 @@ Severity: P0 catastrophic · P1 league-state correctness · P2 recoverable/opera
 
 ## 6. Go/No-Go Checklist
 
-- [ ] All 13 Vercel env vars set; `E2E_TEST_MODE` absent from production env
-- [ ] All real admins in `admin_users` via OAuth; `ADMIN_PASSWORD` unset (D-3)
+- [ ] All 12 required Vercel env vars set (everything except `ADMIN_PASSWORD` — see next item); `E2E_TEST_MODE` absent from production env
+- [ ] All real admins in `admin_users` via OAuth; `ADMIN_PASSWORD` deliberately **unset** in Vercel once onboarding is confirmed (D-3) — do not carry it forward from a previous env just because it's "one of the 13"
 - [ ] Migration parity: repo sequence matches `supabase_migrations.schema_migrations` in prod
 - [ ] Backups verified + one restore drill completed (F-09)
 - [ ] Claim → registration → approval → player-row verified live
