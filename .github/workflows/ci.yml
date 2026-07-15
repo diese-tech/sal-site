@@ -70,6 +70,10 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ""
           ADMIN_PASSWORD: test-admin-password
           ADMIN_SESSION_SECRET: test-admin-session-secret
+          # This job intentionally builds without real Supabase credentials to
+          # verify the app compiles; E2E_TEST_MODE keeps the mock-data fallback
+          # available at build time (#153 gates it behind NODE_ENV otherwise).
+          E2E_TEST_MODE: "1"
 
   e2e-tests:
     runs-on: ubuntu-latest

@@ -3,7 +3,7 @@ import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isAdminRequest, getAdminRequestSession } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { saveMatch, recalculateAndPersistStandings, writeAuditLog, getAdminLeagueData } from "@/lib/league-data";
+import { saveMatch, recalculateAndPersistStandings, writeAuditLog, getAdminLeagueData, LeagueDataUnavailableError } from "@/lib/league-data";
 import { errorMessage, reportError } from "@/lib/error-monitor";
 
 const playerStatSchema = z.object({
@@ -68,7 +68,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const totalGames = games.length;
 
   // Load match to update it
-  const leagueData = await getAdminLeagueData();
+  let leagueData;
+  try {
+    leagueData = await getAdminLeagueData();
+  } catch (err) {
+    if (err instanceof LeagueDataUnavailableError) {
+      return NextResponse.json({ error: "League data is temporarily unavailable — please check back shortly." }, { status: 503 });
+    }
+    throw err;
+  }
   const match = leagueData.matches.find((m) => m.id === r.match_id);
   if (!match) return NextResponse.json({ error: "Match not found in league data." }, { status: 404 });
 

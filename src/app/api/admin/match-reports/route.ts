@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isAdminRequest, getAdminRequestSession } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { getAdminLeagueData } from "@/lib/league-data";
+import { getAdminLeagueData, LeagueDataUnavailableError } from "@/lib/league-data";
 import type { ExtractedGame, MatchReportWithMatch } from "@/types/match-report";
 import type { DivisionId } from "@/types/league";
 
@@ -23,7 +23,15 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const leagueData = await getAdminLeagueData();
+  let leagueData;
+  try {
+    leagueData = await getAdminLeagueData();
+  } catch (err) {
+    if (err instanceof LeagueDataUnavailableError) {
+      return NextResponse.json({ error: "League data is temporarily unavailable — please check back shortly." }, { status: 503 });
+    }
+    throw err;
+  }
   const orgMap = new Map(leagueData.orgs.map((o) => [o.id, o]));
   const matchMap = new Map(leagueData.matches.map((m) => [m.id, m]));
 

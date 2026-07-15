@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { getAdminLeagueData } from "@/lib/league-data";
+import { getAdminLeagueData, LeagueDataUnavailableError } from "@/lib/league-data";
 import type { ExtractedGame } from "@/types/match-report";
 import { errorMessage } from "@/lib/error-monitor";
 
@@ -215,6 +215,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   } catch (err) {
     // Reset to pending on failure so admin can retry
     await supabase.from("match_reports").update({ status: "pending" }).eq("id", id);
+    if (err instanceof LeagueDataUnavailableError) {
+      return NextResponse.json({ error: "League data is temporarily unavailable — please check back shortly." }, { status: 503 });
+    }
     const message = errorMessage(err, "Extraction failed.");
     console.error("extract route error:", err);
     return NextResponse.json({ error: message }, { status: 500 });

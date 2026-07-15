@@ -3,7 +3,7 @@ import { z } from "zod";
 import { buildDraftState, finalizeDraftRosters, getDraftPicks, removePlayerFromAllShortlists, submitPickAtomic } from "@/lib/draft-data";
 import { getCaptainSessionFromRequest } from "@/lib/captain-auth";
 import { buildPickSequence } from "@/types/draft";
-import { getLeagueData, writeAuditLog } from "@/lib/league-data";
+import { getLeagueData, writeAuditLog, LeagueDataUnavailableError } from "@/lib/league-data";
 import { reportError } from "@/lib/error-monitor";
 
 const DIVISION_TIER: Record<string, number> = { terra: 1, solar: 2, lunar: 3 };
@@ -42,7 +42,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   // Division eligibility: captain cannot draft from a higher-tier division
   const roomTier = DIVISION_TIER[room.divisionId] ?? 999;
-  const leagueData = await getLeagueData();
+  let leagueData;
+  try {
+    leagueData = await getLeagueData();
+  } catch (err) {
+    if (err instanceof LeagueDataUnavailableError) {
+      return NextResponse.json({ error: "League data is temporarily unavailable — please check back shortly." }, { status: 503 });
+    }
+    throw err;
+  }
   const playerData = leagueData.players.find((p) => p.id === playerId);
   if (playerData?.divisionId) {
     const playerTier = DIVISION_TIER[playerData.divisionId] ?? 999;

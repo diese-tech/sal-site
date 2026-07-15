@@ -24,6 +24,10 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder' }}
           ADMIN_SESSION_SECRET: ci-test-secret-32chars-minimum-ok
           ADMIN_PASSWORD: ci-test-password
+          # Falls back to a placeholder Supabase project when no real secret is
+          # configured; E2E_TEST_MODE keeps the mock-data fallback available at
+          # build time in that case (#153 gates it behind NODE_ENV otherwise).
+          E2E_TEST_MODE: "1"
 
       - name: Run Lighthouse CI
         run: npx lhci autorun
