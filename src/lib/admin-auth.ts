@@ -80,6 +80,25 @@ export function isSuperAdminRequest(request: NextRequest): boolean {
   return session?.role === "super_admin";
 }
 
+/**
+ * Server-to-server auth for lab-salbot calling back into this site's admin
+ * API (e.g. to trigger a standings recalculation after a Discord-approved
+ * match result). Deliberately separate from ADMIN_PASSWORD/admin sessions —
+ * this credential isn't tied to a human admin identity and isn't affected by
+ * retiring ADMIN_PASSWORD post-onboarding (see F-05/D-3).
+ */
+export function isInternalServiceRequest(request: NextRequest): boolean {
+  const expected = process.env.INTERNAL_SERVICE_TOKEN;
+  if (!expected) return false;
+  const header = request.headers.get("authorization");
+  if (!header?.startsWith("Bearer ")) return false;
+  const provided = header.slice("Bearer ".length);
+  const expectedBuffer = Buffer.from(expected);
+  const providedBuffer = Buffer.from(provided);
+  if (expectedBuffer.length !== providedBuffer.length) return false;
+  return timingSafeEqual(expectedBuffer, providedBuffer);
+}
+
 export function adminCookie(discordId: string, role: "super_admin" | "admin") {
   return {
     name: COOKIE_NAME,
