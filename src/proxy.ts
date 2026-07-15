@@ -46,10 +46,19 @@ function isPublicAdminPath(pathname: string) {
   );
 }
 
+// Routes that accept an INTERNAL_SERVICE_TOKEN bearer request (e.g. from
+// lab-salbot) in addition to an admin cookie. The proxy only skips its
+// cookie-only gate for these paths -- the route handler itself still enforces
+// isAdminRequest() || isInternalServiceRequest() before doing anything (audit F-01).
+function isInternalServiceApiPath(pathname: string) {
+  return pathname === "/api/admin/recalculate-standings";
+}
+
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const protectsAdminPage = pathname.startsWith("/admin") && !isPublicAdminPath(pathname);
-  const protectsAdminApi = pathname.startsWith("/api/admin") && !isPublicAdminPath(pathname);
+  const protectsAdminApi =
+    pathname.startsWith("/api/admin") && !isPublicAdminPath(pathname) && !isInternalServiceApiPath(pathname);
 
   if (protectsAdminPage || protectsAdminApi) {
     const secret = process.env.ADMIN_SESSION_SECRET;
