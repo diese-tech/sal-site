@@ -28,7 +28,7 @@ gets its file added here instead.
 
 1. Find the current highest number in this directory:
    ```bash
-   ls supabase/migrations/ | sort | tail -1
+   ls supabase/migrations/*.sql | sort | tail -1
    ```
 2. Name the new file `NNN_description.sql`, where `NNN` is the highest
    existing number + 1, zero-padded to 3 digits (e.g. highest is `021`, so
