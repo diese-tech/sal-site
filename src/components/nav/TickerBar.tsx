@@ -1,4 +1,4 @@
-import { getLeagueData } from "@/lib/league-data";
+import { getLeagueData, LeagueDataUnavailableError } from "@/lib/league-data";
 import { isMatchLive } from "@/lib/match-live";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +22,21 @@ function shortTime(date: string, time: string) {
 }
 
 export async function TickerBar() {
-  const { matches, orgs } = await getLeagueData();
+  // TickerBar renders inside the root layout (src/app/layout.tsx via
+  // NavShell), so it sits above src/app/error.tsx — that boundary only
+  // catches errors thrown by segments nested below the layout, never by the
+  // layout's own render. A thrown LeagueDataUnavailableError here would take
+  // down the entire site's chrome instead of just this decorative strip, so
+  // it's caught locally and treated the same as the "nothing to show" case
+  // below (#153). Pages that actually need league data still get the honest
+  // "unavailable" message via error.tsx.
+  let matches, orgs;
+  try {
+    ({ matches, orgs } = await getLeagueData());
+  } catch (err) {
+    if (err instanceof LeagueDataUnavailableError) return null;
+    throw err;
+  }
 
   const getOrg = (id: string) => orgs.find((o) => o.id === id);
 
