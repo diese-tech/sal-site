@@ -102,7 +102,7 @@ Severity: P0 catastrophic · P1 league-state correctness · P2 recoverable/opera
 
 - [ ] All 12 required Vercel env vars set (everything except `ADMIN_PASSWORD` — see next item); `E2E_TEST_MODE` absent from production env
 - [ ] All real admins in `admin_users` via OAuth; `ADMIN_PASSWORD` deliberately **unset** in Vercel once onboarding is confirmed (D-3) — do not carry it forward from a previous env just because it's "one of the 13"
-- [ ] Migration parity: repo sequence matches `supabase_migrations.schema_migrations` in prod
+- [ ] Migration parity: repo sequence matches `supabase_migrations.schema_migrations` in prod (see `supabase/migrations/README.md`)
 - [ ] Backups verified + one restore drill completed (F-09)
 - [ ] Claim → registration → approval → player-row verified live
 - [ ] `/division-role-config list` shows all three mappings; bot role above division roles
