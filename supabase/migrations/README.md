@@ -43,8 +43,17 @@ gets its file added here instead.
 
 1. Confirm you're applying to the correct (shared) Supabase project — there
    is one production project shared by both `sal-site` and `lab-salbot`.
-2. Apply via the Supabase CLI (preferred) or the SQL editor in the Supabase
-   dashboard, running the new file's contents against the project.
+2. Apply via the Supabase CLI: `supabase db push` (or `supabase migration up`
+   against the linked project). This is the only path that both runs the SQL
+   *and* records it in `supabase_migrations.schema_migrations`.
+   **Avoid the SQL editor for normal migrations** — running DDL there applies
+   the change but does not add a row to `schema_migrations`, so the very next
+   parity check would report the migration as unapplied even though it ran.
+   If the CLI is genuinely unavailable and the SQL editor must be used as an
+   emergency fallback, immediately follow up with
+   `supabase migration repair --status applied <version>` so history matches
+   reality — don't skip this step, or the parity check will be wrong until
+   someone manually reconciles it.
 3. Verify the migration is recorded in `supabase_migrations.schema_migrations`
    (see the parity check below) — don't just trust that the `apply` command
    returned success.
