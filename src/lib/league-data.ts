@@ -4,6 +4,39 @@ import type { Announcement, Division, LeagueData, LeaguePlayer, Match, Org, OrgS
 import type { FormField, Registration } from "@/types/auth";
 import { recalcStandings } from "@/lib/standings";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { reportError } from "@/lib/error-monitor";
+
+/**
+ * Thrown by fetchLeagueData/getAdminLeagueData in production when the
+ * underlying Supabase data is unusable (env missing, query error, or
+ * critical rows missing). Never thrown outside production — see
+ * canServeMockLeagueData() below (#153).
+ */
+export class LeagueDataUnavailableError extends Error {
+  constructor(message = "League data is temporarily unavailable.") {
+    super(message);
+    this.name = "LeagueDataUnavailableError";
+  }
+}
+
+// MOCK_LEAGUE_DATA exists for local dev and the Playwright E2E suite (which
+// runs the production build with E2E_TEST_MODE=1) so both have deterministic
+// data without a configured Supabase project. It must never reach real
+// production users — a transient outage or misconfigured deploy would
+// otherwise render fabricated teams/standings with no visible signal (#153).
+function canServeMockLeagueData(): boolean {
+  return process.env.NODE_ENV !== "production" || process.env.E2E_TEST_MODE === "1";
+}
+
+// Call at every point that would previously have silently returned
+// MOCK_LEAGUE_DATA. In dev/E2E, behavior is unchanged. In production, throws
+// so the caller's nearest error boundary (or route handler) can surface an
+// explicit "unavailable" state instead of fabricated data.
+function unavailableOrMock(context: string, reason: string): LeagueData {
+  if (canServeMockLeagueData()) return MOCK_LEAGUE_DATA;
+  reportError(context, new LeagueDataUnavailableError(reason));
+  throw new LeagueDataUnavailableError(reason);
+}
 
 type DbDivision = Omit<Division, "accentColor"> & { accent_color: string };
 
@@ -223,7 +256,7 @@ function fromDbAnnouncement(row: DbAnnouncement): Announcement {
 
 async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
   const supabase = getSupabaseServerClient();
-  if (!supabase) return MOCK_LEAGUE_DATA;
+  if (!supabase) return unavailableOrMock("getLeagueData", "Supabase env is not configured.");
 
   try {
     // Fetch the season: use provided seasonId, or fall back to active/most recent.
@@ -244,13 +277,13 @@ async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
     const queryError = seasonRes.error ?? divisionRes.error ?? orgRes.error ?? playerRes.error ?? standingRes.error ?? announcementRes.error;
     if (queryError) {
       console.error("getLeagueData: Supabase query error, using mock data:", queryError.message);
-      return MOCK_LEAGUE_DATA;
+      return unavailableOrMock("getLeagueData", `Supabase query error: ${queryError.message}`);
     }
 
     const seasonRow = seasonRes.data as (Season & { start_date?: string; end_date?: string; current_week?: number }) | null;
     if (!seasonRow || !divisionRes.data?.length || !orgRes.data?.length) {
       console.error("getLeagueData: Missing critical Supabase data (season/divisions/orgs), using mock data.");
-      return MOCK_LEAGUE_DATA;
+      return unavailableOrMock("getLeagueData", "Missing critical Supabase data (season/divisions/orgs).");
     }
 
     // Fetch matches scoped to the selected season.
@@ -287,8 +320,9 @@ async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
       lastUpdated: new Date().toISOString(),
     };
   } catch (err) {
+    if (err instanceof LeagueDataUnavailableError) throw err;
     console.error("getLeagueData: unexpected error, using mock data:", err);
-    return MOCK_LEAGUE_DATA;
+    return unavailableOrMock("getLeagueData", `Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -303,7 +337,7 @@ export const getLeagueData = unstable_cache(fetchLeagueData, ["league-data"], {
 // can show / manage them. Never used by public-facing pages.
 export async function getAdminLeagueData(seasonId?: string): Promise<LeagueData> {
   const supabase = getSupabaseServerClient();
-  if (!supabase) return MOCK_LEAGUE_DATA;
+  if (!supabase) return unavailableOrMock("getAdminLeagueData", "Supabase env is not configured.");
 
   try {
     // Fetch the season: use provided seasonId, or fall back to active/most recent.
@@ -324,13 +358,13 @@ export async function getAdminLeagueData(seasonId?: string): Promise<LeagueData>
     const queryError = seasonRes.error ?? divisionRes.error ?? orgRes.error ?? playerRes.error ?? standingRes.error ?? announcementRes.error;
     if (queryError) {
       console.error("getAdminLeagueData: Supabase error, using mock data:", queryError.message);
-      return MOCK_LEAGUE_DATA;
+      return unavailableOrMock("getAdminLeagueData", `Supabase query error: ${queryError.message}`);
     }
 
     const seasonRow = seasonRes.data as (Season & { start_date?: string; end_date?: string; current_week?: number }) | null;
     if (!seasonRow || !divisionRes.data?.length) {
       console.error("getAdminLeagueData: Missing critical Supabase data, using mock data.");
-      return MOCK_LEAGUE_DATA;
+      return unavailableOrMock("getAdminLeagueData", "Missing critical Supabase data (season/divisions).");
     }
 
     // Fetch matches scoped to the selected season.
@@ -358,8 +392,9 @@ export async function getAdminLeagueData(seasonId?: string): Promise<LeagueData>
       lastUpdated: new Date().toISOString(),
     };
   } catch (err) {
+    if (err instanceof LeagueDataUnavailableError) throw err;
     console.error("getAdminLeagueData: unexpected error, using mock data:", err);
-    return MOCK_LEAGUE_DATA;
+    return unavailableOrMock("getAdminLeagueData", `Unexpected error: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
