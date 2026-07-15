@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // exercised the same way a misconfigured/outage deploy would hit it (#153).
 beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
-  vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+  vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", ""); // test-only env stub, not a real key
 });
 
 afterEach(() => {
