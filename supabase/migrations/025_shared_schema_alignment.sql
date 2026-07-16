@@ -54,3 +54,8 @@ CREATE TABLE IF NOT EXISTS player_match_stats (
 CREATE INDEX IF NOT EXISTS idx_player_match_stats_report ON player_match_stats(match_report_id);
 -- The report-create route checks for an existing report by match_id.
 CREATE INDEX IF NOT EXISTS idx_match_reports_match ON match_reports(match_id);
+
+-- Deny-by-default (verified matching live state): no public policies, so
+-- enabling RLS restricts access to the service role only (003_rls.sql pattern).
+ALTER TABLE match_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE player_match_stats ENABLE ROW LEVEL SECURITY;
