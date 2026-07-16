@@ -56,6 +56,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
                 reason: "shortlist_auto_pick",
                 isComplete,
               });
+            } else if (submitted.conflict) {
+              await writeAuditLog("draft_auto_pick_conflict", "draft_pick", `${id}-${pickNumber}`, {
+                draftRoomId: id,
+                pickNumber,
+                orgId: currentOrgId,
+                attemptedPlayerId: topPick,
+                reason: "concurrent_pick_conflict",
+              });
             }
             const updatedState = await buildDraftState(id);
             const shortlist = captainOrgId ? await getShortlist(id, captainOrgId) : undefined;
