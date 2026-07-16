@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
       not_found: "No player profile found matching your Discord username. Contact an admin if you believe this is incorrect.",
       already_claimed: "This player profile is already claimed by another account.",
       discord_taken: "This Discord account is already linked to a different player profile.",
+      ambiguous: "Multiple player profiles match your Discord username. An admin needs to reconcile — please contact support.",
     };
     return NextResponse.json({ error: msgs[result.reason] ?? "Claim failed." }, { status: 409 });
   }

@@ -46,7 +46,36 @@ vi.mock("@/lib/rate-limit", () => ({
   retryAfterSeconds: vi.fn().mockReturnValue("60"),
 }));
 
-vi.mock("next/cache", () => ({ revalidateTag: vi.fn() }));
+vi.mock("next/cache", () => ({
+  revalidateTag: vi.fn(),
+  // Pass-through: the real league-data module (loaded via vi.importActual in the
+  // ambiguous-claim tests below) calls unstable_cache at module scope.
+  unstable_cache: (fn: unknown) => fn,
+}));
+
+// Supabase client mock for the real claimPlayerByDiscordUsername (ambiguous
+// case, #143): the ilike lookup returns two case-variant matches. The function
+// must reject before reaching any other query, so only this chain is stubbed.
+vi.mock("@/lib/supabase-server", () => ({
+  getSupabaseServerClient: () => ({
+    from: () => ({
+      select: () => ({
+        ilike: () => ({
+          order: () => ({
+            limit: () =>
+              Promise.resolve({
+                data: [
+                  { id: "player-a", discord_id: null, profile_claimed: false },
+                  { id: "player-b", discord_id: null, profile_claimed: false },
+                ],
+                error: null,
+              }),
+          }),
+        }),
+      }),
+    }),
+  }),
+}));
 
 // ── Typed mock accessors ─────────────────────────────────────────────────────
 
@@ -250,6 +279,16 @@ describe("POST /api/auth/claim — Flow B", () => {
     expect(body.error).toMatch(/already claimed/i);
   });
 
+  it("returns 409 with the admin-reconciliation message when the username match is ambiguous", async () => {
+    mockClaimPlayer.mockResolvedValueOnce({ ok: false, reason: "ambiguous" });
+
+    const { POST } = await import("@/app/api/auth/claim/route");
+    const res = await POST(claimRequest());
+    const body = await res.json() as { error: string };
+    expect(res.status).toBe(409);
+    expect(body.error).toMatch(/multiple player profiles/i);
+  });
+
   it("returns 409 with reason discord_taken when Discord account links to a different player", async () => {
     mockClaimPlayer.mockResolvedValueOnce({ ok: false, reason: "discord_taken" });
 
@@ -304,6 +343,21 @@ describe("Concurrent claim requests", () => {
     }
     // DB-level "only one write succeeds" protection is enforced by the unique
     // constraint + RLS policy — verifiable only against a real Supabase instance.
+  });
+});
+
+// ── Ambiguous username collisions (#143) ─────────────────────────────────────
+
+describe("claimPlayerByDiscordUsername — ambiguous collisions (#143)", () => {
+  it("rejects with reason ambiguous when two case-variant usernames match (JOHN vs john)", async () => {
+    // Use the real implementation (this file mocks @/lib/league-data) against
+    // the stubbed Supabase client above, which returns two ilike matches —
+    // e.g. players imported as "JOHN" and "john" both match either handle.
+    const { claimPlayerByDiscordUsername: realClaim } =
+      await vi.importActual<typeof import("@/lib/league-data")>("@/lib/league-data");
+
+    const result = await realClaim(DISCORD_ID, "JOHN");
+    expect(result).toEqual({ ok: false, reason: "ambiguous" });
   });
 });
 
