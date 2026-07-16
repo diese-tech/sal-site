@@ -463,6 +463,31 @@ describe("recalcStandings()", () => {
       expect(a.losses).toBe(0);
     });
 
+    it("regression (#140): season-scoped standings ignore another season's matches entirely", () => {
+      const orgs = [makeOrg("a"), makeOrg("b")];
+      const matches = [
+        // Season 1: a wins twice
+        { ...makeMatch("a", "b", 3, 1), seasonId: "s1" },
+        { ...makeMatch("b", "a", 0, 2), seasonId: "s1" },
+        // Season 2: b wins twice (would flip the record if it leaked in)
+        { ...makeMatch("a", "b", 1, 3), seasonId: "s2" },
+        { ...makeMatch("b", "a", 5, 0), seasonId: "s2" },
+      ];
+      const result = recalcStandings({ orgs, matches }, "s1");
+      const a = result.find((s) => s.orgId === "a")!;
+      const b = result.find((s) => s.orgId === "b")!;
+
+      expect(a.wins).toBe(2);
+      expect(a.losses).toBe(0);
+      expect(a.matchesPlayed).toBe(2);
+      expect(a.pointsFor).toBe(5);
+      expect(a.pointsAgainst).toBe(1);
+      expect(a.gamesBack).toBe(0);
+      expect(b.wins).toBe(0);
+      expect(b.losses).toBe(2);
+      expect(b.gamesBack).toBe(2);
+    });
+
     it("returns zeroed standings when no matches match the seasonId", () => {
       const orgs = [makeOrg("a"), makeOrg("b")];
       const m1 = { ...makeMatch("a", "b", 3, 1), seasonId: "s1" };
