@@ -176,14 +176,19 @@ export async function getGodDraftRoomData(sessionId: string): Promise<GodDraftRo
 export async function getGodPool(): Promise<DraftGod[]> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return FALLBACK_GODS;
-  const { data, error } = await supabase.from("gods").select("id,name,class,damage_type").order("name");
+  // Live gods table has god_class ('Physical'/'Magical'), not damage_type —
+  // selecting the old column errored and permanently fell back to FALLBACK_GODS.
+  const { data, error } = await supabase.from("gods").select("id,name,class,god_class").order("name");
   if (error || !data?.length) return FALLBACK_GODS;
-  return data.map((row) => ({
-    id: String(row.id),
-    name: String(row.name),
-    class: (row.class as string | null) ?? null,
-    damageType: (row.damage_type as DraftGod["damageType"]) ?? null,
-  }));
+  return data.map((row) => {
+    const godClass = String(row.god_class ?? "").toLowerCase();
+    return {
+      id: String(row.id),
+      name: String(row.name),
+      class: (row.class as string | null) ?? null,
+      damageType: godClass === "physical" || godClass === "magical" ? godClass : null,
+    };
+  });
 }
 
 async function getChatMessages(sessionId: string): Promise<DraftChatMessage[]> {
