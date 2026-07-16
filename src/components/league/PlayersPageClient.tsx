@@ -96,9 +96,10 @@ export function PlayersPageClient({ data }: { data: LeagueData }) {
 
   const filtered = useMemo(() => {
     return [...players]
-      .sort((a, b) => a.ign.localeCompare(b.ign))
+      .sort((a, b) => (a.displayAlias ?? a.ign).localeCompare(b.displayAlias ?? b.ign))
       .filter((p) => {
-        if (search && !p.ign.toLowerCase().includes(search.toLowerCase()) && !p.discordUsername.toLowerCase().includes(search.toLowerCase())) return false;
+        const q = search.toLowerCase();
+        if (search && !p.ign.toLowerCase().includes(q) && !(p.displayAlias ?? "").toLowerCase().includes(q) && !p.discordUsername.toLowerCase().includes(q)) return false;
         if (roleFilter !== "all" && p.primaryRole !== roleFilter && !p.secondaryRoles.includes(roleFilter)) return false;
         if (divisionFilter !== "all" && p.divisionId !== divisionFilter) return false;
         if (teamFilter !== "all" && p.orgId !== teamFilter) return false;
