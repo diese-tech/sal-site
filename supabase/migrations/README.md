@@ -36,6 +36,9 @@ gets its file added here instead.
    lowercase-with-underscores description of what the migration does.
 3. Write the migration as plain SQL (DDL, RLS policies, RPCs, seed data,
    etc.), following the style of existing files in this directory.
+   Write DDL idempotently — use `IF NOT EXISTS` / `DO $$ … END $$` guards —
+   so a migration can be rerun without error (convention from #144; local
+   resets and test environments rerun migrations).
 4. Get it reviewed like any other change in this repo — a migration is
    product code even though it's SQL.
 
