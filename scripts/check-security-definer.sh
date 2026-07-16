@@ -4,6 +4,9 @@
 # ALTER FUNCTION ... SET search_path in any migration file (019 pins earlier
 # functions that way, in a different file from their definitions).
 # Intentionally grep-level, not a SQL parser (#146).
+# ponytail: matches by bare function name, so a pin on one overload would mask
+# an unpinned sibling overload. No overloads exist in this migration set;
+# upgrade to name(args) signature matching if any are ever added.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
