@@ -32,6 +32,9 @@ jobs:
           fi
           true
 
+      - name: Check SECURITY DEFINER functions pin search_path
+        run: bash scripts/check-security-definer.sh
+
   unit-tests:
     runs-on: ubuntu-latest
     steps:
