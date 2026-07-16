@@ -176,14 +176,21 @@ export async function getGodDraftRoomData(sessionId: string): Promise<GodDraftRo
 export async function getGodPool(): Promise<DraftGod[]> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return FALLBACK_GODS;
-  const { data, error } = await supabase.from("gods").select("id,name,class,damage_type").order("name");
+  // Live gods table has god_class ('Physical'/'Magical'); schema.sql-seeded
+  // environments have damage_type instead. Selecting a missing column makes
+  // PostgREST reject the whole query (permanently falling back to
+  // FALLBACK_GODS), so star-select and tolerate both shapes like stats-data.ts.
+  const { data, error } = await supabase.from("gods").select("*").order("name");
   if (error || !data?.length) return FALLBACK_GODS;
-  return data.map((row) => ({
-    id: String(row.id),
-    name: String(row.name),
-    class: (row.class as string | null) ?? null,
-    damageType: (row.damage_type as DraftGod["damageType"]) ?? null,
-  }));
+  return data.map((row) => {
+    const damageType = String(row.god_class ?? row.damage_type ?? "").toLowerCase();
+    return {
+      id: String(row.id),
+      name: String(row.name),
+      class: (row.class as string | null) ?? null,
+      damageType: damageType === "physical" || damageType === "magical" ? damageType : null,
+    };
+  });
 }
 
 async function getChatMessages(sessionId: string): Promise<DraftChatMessage[]> {

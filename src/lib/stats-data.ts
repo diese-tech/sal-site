@@ -335,7 +335,7 @@ export async function getTeamRosterStats(
   const matchJoin = seasonId ? ', matches!inner(season_id)' : '';
   let query = supabase
     .from('player_stats')
-    .select(`player_id, kills, deaths, assists, damage_dealt, damage_mitigated, won, players!inner(id, ign, primary_role, org_id)${matchJoin}`)
+    .select(`player_id, kills, deaths, assists, damage_dealt, damage_mitigated, won, players!inner(id, ign, display_alias, primary_role, org_id)${matchJoin}`)
     .eq('players.org_id', orgId)
     .not('won', 'is', null);
 
@@ -357,7 +357,7 @@ export async function getTeamRosterStats(
     damage_dealt: number | null;
     damage_mitigated: number | null;
     won: boolean | null;
-    players: { ign: string; primary_role: string };
+    players: { ign: string; display_alias?: string | null; primary_role: string };
   };
 
   type PlayerAcc = {
@@ -381,7 +381,9 @@ export async function getTeamRosterStats(
     if (!byPlayer.has(pid)) {
       byPlayer.set(pid, {
         playerId: pid,
-        ign: row.players.ign,
+        // Display-only aggregate: prefer the bot-managed alias, like the
+        // roster panel, so one page never shows two names for a player.
+        ign: row.players.display_alias ?? row.players.ign,
         primaryRole: row.players.primary_role,
         gamesPlayed: 0,
         wins: 0,

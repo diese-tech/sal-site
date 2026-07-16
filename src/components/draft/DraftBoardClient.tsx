@@ -300,7 +300,7 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
                   return (
                     <div key={p.id} className={cn("flex flex-col gap-2 rounded-xl border bg-slate-950/70 px-3 py-2.5 transition sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3", isMyTurn && !picking ? "cursor-pointer border-white/10 hover:border-cyan-300/40 hover:bg-white/[0.04]" : "border-white/5")}>
                       <div className="min-w-0">
-                        <p className="truncate font-black text-white">{p.ign}</p>
+                        <p className="truncate font-black text-white">{p.displayAlias ?? p.ign}</p>
                         <p className="truncate text-xs text-slate-500">@{p.discordUsername}</p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
@@ -366,7 +366,7 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
                               {idx + 1}.
                             </span>
                             <span className="min-w-0 flex-1 truncate font-black text-white">
-                              {player?.ign ?? entry.playerId}
+                              {player?.displayAlias ?? player?.ign ?? entry.playerId}
                             </span>
                             {player && <span className="text-[0.6rem] font-black text-cyan-200">{player.primaryRole}</span>}
                             <div className="flex items-center gap-0.5">
@@ -416,7 +416,7 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
                         <span className="w-6 shrink-0 text-right font-mono text-[0.6rem] text-slate-500">{entry.pick.pickNumber}</span>
                         <span className="text-xs text-slate-400">{getOrg(entry.pick.orgId)?.tag ?? entry.pick.orgId}</span>
                         <span className="text-slate-600">→</span>
-                        <span className="min-w-0 truncate font-black text-white">{getPlayer(entry.pick.playerId)?.ign ?? entry.pick.playerId}</span>
+                        <span className="min-w-0 truncate font-black text-white">{getPlayer(entry.pick.playerId)?.displayAlias ?? getPlayer(entry.pick.playerId)?.ign ?? entry.pick.playerId}</span>
                       </div>
                     ) : (
                       <div key={`skip-${entry.pickNumber}`} className="flex items-center gap-2 rounded-lg border border-red-300/15 bg-red-300/[0.04] px-3 py-1.5">

@@ -53,7 +53,8 @@ type DbOrg = Omit<Org, "divisionId" | "logoInitials" | "logoGradient" | "primary
   brand_id?: string | null;
 };
 
-type DbPlayer = Omit<LeaguePlayer, "orgId" | "discordUsername" | "avatarInitials" | "avatarGradient" | "primaryRole" | "secondaryRoles" | "isStarter" | "isCaptain" | "divisionId" | "archivedAt" | "deletionScheduledAt"> & {
+type DbPlayer = Omit<LeaguePlayer, "orgId" | "discordUsername" | "avatarInitials" | "avatarGradient" | "primaryRole" | "secondaryRoles" | "isStarter" | "isCaptain" | "divisionId" | "displayAlias" | "archivedAt" | "deletionScheduledAt"> & {
+  display_alias?: string | null;
   org_id?: string | null;
   discord_username: string;
   avatar_initials: string;
@@ -78,6 +79,8 @@ type DbMatch = Omit<Match, "divisionId" | "homeOrgId" | "awayOrgId" | "scheduled
   away_score?: number | null;
   stream_url?: string | null;
   vod_url?: string | null;
+  winner_org_id?: string | null;
+  score?: string | null;
   archived_at?: string | null;
   deletion_scheduled_at?: string | null;
 };
@@ -145,6 +148,7 @@ function fromDbPlayer(row: DbPlayer): LeaguePlayer {
     orgId: row.org_id ?? undefined,
     discordUsername: row.discord_username,
     ign: row.ign,
+    displayAlias: row.display_alias ?? undefined,
     avatarInitials: row.avatar_initials,
     avatarGradient: row.avatar_gradient,
     primaryRole: row.primary_role,
@@ -197,7 +201,18 @@ function fromDbMatch(row: DbMatch): Match {
   };
 }
 
-function toDbMatch(match: Match): DbMatch {
+export function toDbMatch(match: Match): DbMatch {
+  // lab-salbot's stat pipeline derives player_stats.won from winner_org_id,
+  // so it must be (re)derived on every save: writing it only on completion
+  // would leave it stale after score corrections, and never writing it
+  // records won=false for every player in site-saved matches.
+  const decided =
+    (match.status === "completed" || match.status === "forfeit") &&
+    match.homeScore != null &&
+    match.awayScore != null;
+  const winnerOrgId = !decided || match.homeScore === match.awayScore
+    ? null
+    : match.homeScore! > match.awayScore! ? match.homeOrgId : match.awayOrgId;
   return {
     id: match.id,
     division_id: match.divisionId,
@@ -212,6 +227,8 @@ function toDbMatch(match: Match): DbMatch {
     away_score: match.awayScore ?? null,
     stream_url: match.streamUrl ?? null,
     vod_url: match.vodUrl ?? null,
+    winner_org_id: winnerOrgId,
+    score: decided ? `${Math.max(match.homeScore!, match.awayScore!)}-${Math.min(match.homeScore!, match.awayScore!)}` : null,
   };
 }
 

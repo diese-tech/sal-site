@@ -58,7 +58,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const { players } = await getLeagueData();
   const p = players.find((x) => x.id === id);
-  return { title: p ? `${p.ign} — SAL` : "Player — SAL" };
+  return { title: p ? `${p.displayAlias ?? p.ign} — SAL` : "Player — SAL" };
 }
 
 export default async function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
@@ -125,7 +125,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
                 {statusLabel[player.status]}
               </span>
             </div>
-            <h1 className="text-2xl font-black text-white sm:text-3xl">{player.ign}</h1>
+            <h1 className="text-2xl font-black text-white sm:text-3xl">{player.displayAlias ?? player.ign}</h1>
             <p className="text-sm text-slate-500">@{player.discordUsername}</p>
           </div>
         </div>

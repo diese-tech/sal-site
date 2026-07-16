@@ -13,6 +13,33 @@ afterEach(() => {
   vi.resetModules();
 });
 
+describe("toDbMatch winner derivation (schema parity M1)", () => {
+  const base = {
+    id: "m1",
+    divisionId: "solar" as const,
+    homeOrgId: "org-home",
+    awayOrgId: "org-away",
+    scheduledDate: "2026-07-16",
+    scheduledTime: "19:00",
+    week: 1,
+    seasonId: "s1",
+  };
+
+  it("writes winner_org_id and score for decided matches, re-derives on correction", async () => {
+    const { toDbMatch } = await import("./league-data");
+    const won = toDbMatch({ ...base, status: "completed", homeScore: 1, awayScore: 2 });
+    expect(won.winner_org_id).toBe("org-away");
+    expect(won.score).toBe("2-1");
+    const forfeit = toDbMatch({ ...base, status: "forfeit", homeScore: 1, awayScore: 0 });
+    expect(forfeit.winner_org_id).toBe("org-home");
+    // Ties and undecided matches must clear (not preserve) any stale winner.
+    expect(toDbMatch({ ...base, status: "completed", homeScore: 1, awayScore: 1 }).winner_org_id).toBeNull();
+    const reverted = toDbMatch({ ...base, status: "scheduled" });
+    expect(reverted.winner_org_id).toBeNull();
+    expect(reverted.score).toBeNull();
+  });
+});
+
 describe("league-data mock fallback gating (#153)", () => {
   it("returns MOCK_LEAGUE_DATA outside production (dev/test behavior unchanged)", async () => {
     vi.stubEnv("NODE_ENV", "test");

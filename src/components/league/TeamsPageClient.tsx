@@ -34,7 +34,10 @@ export function TeamsPageClient({ data }: { data: LeagueData }) {
   }, [orgs, divisionFilter, search]);
 
   const getStanding = (orgId: string) => standings.find((s) => s.orgId === orgId);
-  const getCaptainIgn = (captainId?: string) => captainId ? players.find((p) => p.id === captainId)?.ign : undefined;
+  const getCaptainIgn = (captainId?: string) => {
+    const captain = captainId ? players.find((p) => p.id === captainId) : undefined;
+    return captain ? captain.displayAlias ?? captain.ign : undefined;
+  };
 
   return (
     <>

@@ -27,7 +27,7 @@ function PlayerRow({ player, divisionId }: { player: LeaguePlayer; divisionId: D
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="truncate text-base font-black leading-tight text-white">{player.ign}</p>
+            <p className="truncate text-base font-black leading-tight text-white">{player.displayAlias ?? player.ign}</p>
             {player.isCaptain && (
               <span className={cn("shrink-0 text-[0.65rem] font-black uppercase", divisionAccentText[divisionId])}>
                 CPT

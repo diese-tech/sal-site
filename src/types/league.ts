@@ -50,6 +50,12 @@ export interface LeaguePlayer {
   orgId?: string;
   discordUsername: string;
   ign: string;
+  /**
+   * Bot-managed display name (players.display_alias). Read-only on the site:
+   * shown in public displays as `displayAlias ?? ign`, never written back —
+   * ign remains the real in-game name used by admin edits and claim logic.
+   */
+  displayAlias?: string;
   avatarInitials: string;
   avatarGradient: string;
   primaryRole: import("@/types/card-lab").PlayerRole;

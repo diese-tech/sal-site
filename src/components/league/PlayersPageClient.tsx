@@ -49,7 +49,7 @@ function PlayerCard({ player, org }: { player: LeaguePlayer; org?: { id: string;
         <AvatarMark initials={player.avatarInitials} gradient={player.avatarGradient} className="h-12 w-12 shrink-0 rounded-xl text-sm" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <p className="truncate font-black text-white group-hover:text-cyan-100 transition">{player.ign}</p>
+            <p className="truncate font-black text-white group-hover:text-cyan-100 transition">{player.displayAlias ?? player.ign}</p>
             {player.isCaptain && <span className="shrink-0 text-[0.6rem] font-black uppercase text-orange-300">CPT</span>}
           </div>
           <p className="truncate text-xs text-slate-500">@{player.discordUsername}</p>
@@ -96,9 +96,10 @@ export function PlayersPageClient({ data }: { data: LeagueData }) {
 
   const filtered = useMemo(() => {
     return [...players]
-      .sort((a, b) => a.ign.localeCompare(b.ign))
+      .sort((a, b) => (a.displayAlias ?? a.ign).localeCompare(b.displayAlias ?? b.ign))
       .filter((p) => {
-        if (search && !p.ign.toLowerCase().includes(search.toLowerCase()) && !p.discordUsername.toLowerCase().includes(search.toLowerCase())) return false;
+        const q = search.toLowerCase();
+        if (search && !p.ign.toLowerCase().includes(q) && !(p.displayAlias ?? "").toLowerCase().includes(q) && !p.discordUsername.toLowerCase().includes(q)) return false;
         if (roleFilter !== "all" && p.primaryRole !== roleFilter && !p.secondaryRoles.includes(roleFilter)) return false;
         if (divisionFilter !== "all" && p.divisionId !== divisionFilter) return false;
         if (teamFilter !== "all" && p.orgId !== teamFilter) return false;
