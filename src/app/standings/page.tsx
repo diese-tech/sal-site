@@ -44,6 +44,9 @@ export default async function StandingsPage({
         <span>GB - Games behind leader</span>
         <span>Last 5 - Recent form</span>
       </div>
+      <p className="mt-2 text-[0.65rem] font-bold uppercase text-slate-600">
+        Forfeits count toward W/L but not points
+      </p>
     </main>
   );
 }
