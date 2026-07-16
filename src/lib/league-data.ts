@@ -933,7 +933,9 @@ export async function claimPlayerProfile(discordId: string, playerId: string): P
 export async function claimPlayerByDiscordUsername(
   discordId: string,
   discordUsername: string,
-): Promise<{ ok: true; playerId: string } | { ok: false; reason: "not_found" | "already_claimed" | "discord_taken" }> {
+): Promise<
+  { ok: true; playerId: string } | { ok: false; reason: "not_found" | "already_claimed" | "discord_taken" | "ambiguous" }
+> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return { ok: false, reason: "not_found" };
 
@@ -945,10 +947,15 @@ export async function claimPlayerByDiscordUsername(
     .from("players")
     .select("id, discord_id, profile_claimed")
     .ilike("discord_username", safeUsername)
-    .limit(1);
+    .order("id")
+    .limit(2);
   if (error) throw error;
-  const player = rows?.[0];
-  if (!player) return { ok: false, reason: "not_found" };
+  if (!rows || rows.length === 0) return { ok: false, reason: "not_found" };
+  // ilike is case-insensitive: two case-variant usernames (JOHN vs john) would
+  // otherwise resolve non-deterministically, silently locking one player out of
+  // their own profile. Reject for admin reconciliation instead (#143).
+  if (rows.length > 1) return { ok: false, reason: "ambiguous" };
+  const player = rows[0];
 
   if ((player.profile_claimed as boolean) && player.discord_id !== discordId) {
     return { ok: false, reason: "already_claimed" };
