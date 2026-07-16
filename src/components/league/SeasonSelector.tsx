@@ -12,13 +12,12 @@ interface Props {
 
 export function SeasonSelector({ seasons, currentSeasonId }: Props) {
   const pathname = usePathname();
-  const displaySeasons = seasons.filter((s) => s.status !== "pre-season");
 
-  if (displaySeasons.length <= 1) return null;
+  if (seasons.length <= 1) return null;
 
   return (
     <div className="mt-4 flex flex-wrap gap-2">
-      {displaySeasons.map((season) => {
+      {seasons.map((season) => {
         const isActive = season.id === currentSeasonId;
         const href = isActive ? pathname : `${pathname}?season=${season.id}`;
         return (
