@@ -14,7 +14,7 @@ SAL is not affiliated with Hi-Rez Studios or the Smite franchise.
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 24 LTS
 - A Supabase project (see `.env.example`)
 
 ### Setup
@@ -52,10 +52,14 @@ npm run test:load     # Load tests (Vitest in-process)
 
 **CI pipeline** (`.github/workflows/ci.yml`) runs on every push and PR:
 - `lint-and-typecheck` — ESLint + `tsc --noEmit` + service-role exposure check
+- `dependency-audit` — blocks high/critical advisories in both production and full dependency graphs
+- `secret-scan` — scans Git history for verified or unknown credentials with a commit-pinned TruffleHog release
 - `unit-tests` — `npm run test`
 - `build` — `next build`
 - `e2e-tests` — Playwright suite
-- `integration-tests` — RLS integration tests (requires `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` secrets and Supabase API allowlist to include CI runner IPs)
+- `integration-tests` — advisory RLS checks against the configured non-production project; the hard local gate is recovery-gated
+
+Database-local and contract-drift gates remain recovery-gated; see [`docs/ci.md`](docs/ci.md).
 
 ---
 
