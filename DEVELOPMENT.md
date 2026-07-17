@@ -46,27 +46,30 @@ TWITCH_CLIENT_SECRET=
 - `ADMIN_SESSION_SECRET`: generate with `openssl rand -hex 32`
 - Twitch credentials: Twitch Developer Console → your application
 
-> The app runs without Supabase configured — it falls back to mock data for public pages. Admin mutations will fail without a real Supabase connection.
+> Local development and E2E runs can use mock data without Supabase configured.
+> Production does not serve mock league data when Supabase is unavailable. Admin
+> mutations require a real Supabase connection.
 
 ---
 
-## Database Setup
+## Database setup
 
-Run these SQL files in order in the Supabase SQL editor:
+Do not build a new shared database by running `supabase/schema.sql` and the site
+and bot migration folders. Those pre-v1 sequences are interdependent and cannot
+reproduce the current shared schema from empty.
 
-1. `supabase/schema.sql` — base tables (seasons, divisions, orgs, players, matches, standings, announcements)
-2. `supabase/migrations/001_admin_audit_log.sql` — admin audit log table
-3. `supabase/migrations/002_draft_engine.sql` — draft rooms and picks tables
-4. `supabase/migrations/003_rls.sql` — Row Level Security policies
-5. `supabase/migrations/004_auth.sql` — player Discord identity, registrations, form fields
+[`diese-tech/sal-database`](https://github.com/diese-tech/sal-database) is the
+approved sole owner for Supabase migrations, generated types, contract releases,
+and production pushes. Its initial `db-v1.0.0` contract is intentionally blocked
+on the recovery drill in [#156](https://github.com/diese-tech/sal-site/issues/156)
+and canonical-baseline work in
+[#172](https://github.com/diese-tech/sal-site/issues/172); no released v1 contract
+is being claimed yet.
 
-After running migrations, seed the database:
-
-```bash
-npm run db:seed
-```
-
-This imports the current mock league data (Season 1 orgs, players, schedule).
+Until that release exists, use a maintainer-provided scratch project restored
+from the approved recovery process for database-backed development. The local
+mock-data path remains available for site-only work. Existing files under
+`supabase/` are transition evidence, not a supported blank-database bootstrap.
 
 ---
 
@@ -79,7 +82,9 @@ npm run dev
 
 Open http://localhost:3000
 
-The admin panel is at http://localhost:3000/admin — log in with the `ADMIN_PASSWORD` you set in `.env.local`.
+The admin panel is at http://localhost:3000/admin. Use Discord OAuth when it is
+configured; `ADMIN_PASSWORD` is a temporary local/break-glass fallback tracked by
+[#155](https://github.com/diese-tech/sal-site/issues/155).
 
 ---
 
@@ -110,8 +115,8 @@ src/
     auth.ts             # Registration and form field types
     card-lab.ts         # Player role and status enums
 supabase/
-  schema.sql            # Base schema
-  migrations/           # Numbered migration files
+  schema.sql            # Pre-v1 transition evidence; not the canonical baseline
+  migrations/           # Pre-v1 transition evidence; see migrations/README.md
 ```
 
 ---

@@ -1,8 +1,14 @@
-# SAL Platform Production Readiness Audit
+# Historical: SAL Platform Production Readiness Audit (2026-07-14)
+
+> **Historical snapshot.** This document preserves the July 14 evidence and
+> decisions at the commits named below. It is no longer an authoritative or
+> jointly maintained platform source. Current repository-specific site findings
+> and issue links live in [`docs/audit-status.md`](audit-status.md).
 
 **Date:** 2026-07-14
 **Scope:** `diese-tech/sal-site` @ `7679160` and `diese-tech/lab-salbot` @ `18a622a`, plus the shared production Supabase project (read-only inspection).
-**Status: This is the authoritative audit source for the SAL platform.** It supersedes all prior audit documents (sal-site's 2026-05-23 audits are archived under `docs/archive/`). This document is maintained identically in both repositories — update both copies together.
+**Status:** Historical and superseded for current tracking. The earlier 2026-05-23
+site audits remain archived under `docs/archive/`.
 
 Findings are tracked as GitHub issues in each repository; every issue references its finding ID (F-xx) below.
 
@@ -43,6 +49,12 @@ The platform core is solid: every admin API route is authorized (verified by exh
 | D-2 | Statistics pipeline | **Bot pipeline is authoritative for the season** (`pending_stat_records → player_stats → players.stats`; feeds all public stat display). Site's `player_match_stats` is dormant; note in admin docs that match-report stat entry does not feed player pages. Unify post-season (F-07). |
 | D-3 | Password admin fallback | Once all real admins are onboarded via Discord OAuth into `admin_users`, **unset `ADMIN_PASSWORD` in Vercel** (route degrades to 503 by design). Keep code as documented break-glass. |
 | D-4 | **LLM usage routing (owner's direction, 2026-07-14)** | Split OpenRouter usage by purpose with per-use-case handlers/routers instead of one global model config. Rationale (owner): "Gemini Flash probably doesn't need to be a mini-RAG chatbot" — `/rules` ruleset Q&A is plain-text retrieval over a bounded document and should route to a cheap or free text model; multimodal models (e.g., Gemini Flash) should be reserved for image parsing (the ForgeLens screenshot-OCR pipeline, Phase 4). Current state: a single `OPENROUTER_MODEL` env var (default `google/gemini-2.0-flash-001`) serves the one implemented LLM call site (`/rules`, `apps/bot/src/lib/openrouter.ts`). Classification: **post-season / ForgeLens-phase improvement** — not launch-relevant (one call site today; cost exposure is trivial at SAL volume). When ForgeLens lands, implement a model-router in the OpenRouter client keyed by task type (`rules-qa`, `image-extract`, …), each with its own model + fallback. Tracked as a lab-salbot issue (F-15). |
+
+> **Current ownership supersession (2026-07-17):** D-1 above is retained only
+> as historical context. The approved sole database owner is
+> `diese-tech/sal-database`, tracked in
+> [#172](https://github.com/diese-tech/sal-site/issues/172). No `db-v1.0.0`
+> release is claimed until the recovery gate and baseline adoption complete.
 
 ---
 

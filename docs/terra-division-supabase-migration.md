@@ -6,6 +6,12 @@
 > verification queries returned zero `gaia` rows. This document is retained as a
 > record and as a template for future identifier migrations.
 
+> **Ownership note:** This is a historical execution record, not an active
+> migration runbook. `diese-tech/sal-database` is the approved sole owner for
+> future Supabase migrations and production pushes. Its recovery-gated initial
+> release is tracked in [#172](https://github.com/diese-tech/sal-site/issues/172)
+> and is not yet claimed to exist.
+
 Goal: rename the live division identifier from `gaia` to `terra` so production Supabase data matches the app code and SALBot roster sync.
 
 Code has already been updated to use:
