@@ -44,7 +44,7 @@ npm run dev
 ### Testing
 
 ```bash
-npm run test          # Unit tests (Vitest) — 103 tests
+npm run test          # Unit tests (Vitest; the runner reports the current count)
 npm run test:e2e      # E2E tests (Playwright) — requires ADMIN_PASSWORD set
 npm run test:integration  # RLS integration tests — requires Supabase credentials
 npm run test:load     # Load tests (Vitest in-process)
@@ -60,6 +60,9 @@ npm run test:load     # Load tests (Vitest in-process)
 - `integration-tests` — advisory RLS checks against the configured non-production project; the hard local gate is recovery-gated
 
 Database-local and contract-drift gates remain recovery-gated; see [`docs/ci.md`](docs/ci.md).
+
+Current repository findings and their issue links are maintained in
+[`docs/audit-status.md`](docs/audit-status.md).
 
 ---
 
@@ -121,7 +124,10 @@ Placements are followed by a scouting period where captains evaluate players bef
 
 ## Admin Panel
 
-The admin panel lives at `/admin` and is password-protected. It is used by the SAL admin team to run the league.
+The admin panel lives at `/admin` and is access-controlled through Discord OAuth
+administrator membership, with a temporary password fallback tracked for removal
+in [#155](https://github.com/diese-tech/sal-site/issues/155). It is used by the SAL
+admin team to run the league.
 
 | Section | What it does |
 |---|---|
@@ -175,3 +181,21 @@ Announcements support Markdown. From **Admin → Announcements** you can write p
 | Twitch | https://twitch.tv/serpentascensionleague |
 
 For local development and technical setup, see [DEVELOPMENT.md](./DEVELOPMENT.md).
+
+## Deployment and ownership boundaries
+
+- This repository builds the Next.js site deployed on Vercel.
+- The Discord bot is built and deployed separately from
+  [`diese-tech/lab-salbot`](https://github.com/diese-tech/lab-salbot); this
+  repository does not deploy a bot process.
+- [`diese-tech/sal-database`](https://github.com/diese-tech/sal-database) is the
+  approved sole owner for shared Supabase migrations, generated types, contract
+  releases, and production database pushes. The recovery-gated repository and
+  initial `db-v1.0.0` release are tracked in
+  [#172](https://github.com/diese-tech/sal-site/issues/172) and are not yet being
+  claimed as complete.
+
+## License
+
+This repository is source-available under the proprietary terms in
+[`LICENSE`](LICENSE); it is not open source.

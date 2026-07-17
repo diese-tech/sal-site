@@ -1,37 +1,34 @@
-# Supabase Admin Setup
+# Supabase Runtime and Admin Reference
+
+> **Schema ownership:**
+> [`diese-tech/sal-database`](https://github.com/diese-tech/sal-database) is the
+> approved sole owner for active migrations, generated types, contract releases,
+> drift detection, and production database pushes. Its recovery-gated initial
+> release is tracked in [#172](https://github.com/diese-tech/sal-site/issues/172)
+> and is not yet claimed to exist.
 
 ## Project
 
 The Supabase project URL is configured via the `NEXT_PUBLIC_SUPABASE_URL` environment variable. Set this in Vercel (production) and `.env.local` (local dev).
 
-## Initial Setup
+## Provisioning status
 
-Run `supabase/schema.sql` first, then **every** file in `supabase/migrations/` in
-numeric order (001 through 021 at time of writing) in the Supabase SQL editor.
-Highlights:
+There is currently no supported blank-database bootstrap in this application
+repository. `supabase/schema.sql`, this repository's numbered migrations, and the
+pre-v1 SALbot migrations are interdependent historical inputs; applying them in a
+guessed order does not prove equivalence with the shared production schema.
 
-| File | Purpose |
-|---|---|
-| `supabase/schema.sql` | Base tables: seasons, divisions, orgs, players, matches, standings, announcements, gods, god drafts |
-| `001_admin_audit_log.sql` | Admin audit log — records every admin mutation |
-| `002_draft_engine.sql` | Draft rooms, draft picks, and captain tokens |
-| `003_rls.sql` | Row Level Security — anon key gets SELECT only on public tables |
-| `004_auth.sql` | Player Discord identity (`discord_id`, `profile_claimed`), registrations, form fields |
-| `016_atomic_match_report_stats.sql` | `replace_match_report_stats` RPC (match_reports / player_match_stats) |
-| `017_atomic_standings_replace.sql` | `replace_standings` RPC — atomic standings replace |
-| `018_seed_divisions.sql` | Seeds the fixed division rows (`solar`, `lunar`, `terra`) |
+Do not apply these files to production or repair the production migration ledger
+from this repository. The recovery drill in
+[#156](https://github.com/diese-tech/sal-site/issues/156) must pass first. Issue
+[#172](https://github.com/diese-tech/sal-site/issues/172) then owns scratch-restore
+reconciliation, canonical baseline generation, empty-reset proof, normalized
+schema diff, protected production adoption, and the first immutable contract
+release.
 
-The shared database also carries SALbot's migrations — a fresh project needs those
-applied too, from the `lab-salbot` repo's `database/migrations/`. **Ordering
-matters:** site migration `008_player_stats_read.sql` creates policies on
-`player_stats` and `gods`, and `player_stats` only exists once SALbot's initial
-migration has run — apply SALbot's migrations before 008 on a fresh project.
-
-After the schema is applied, seed the database with Season 1 data:
-
-```bash
-npm run db:seed
-```
+For current database-backed development, use a maintainer-approved scratch
+project from the recovery process. The files under `supabase/` remain pre-v1
+transition evidence until both applications pin the verified database contract.
 
 ## Environment Variables
 
@@ -101,18 +98,21 @@ Note there are **two** audit trails in the shared database: `admin_audit_log`
 (website admin actions) and `audit_logs` (SALbot mutations). They are separate by
 design.
 
-## Shared Database with SALbot
+## Shared database runtime contract
 
 The same Supabase project is used by SALbot (the `lab-salbot` repo), which connects
 with the service role key. Full details live in `lab-salbot/docs/database/schema.md`;
-the contract summary from the site's perspective:
+the runtime summary from the site's perspective follows. This describes which
+application currently reads or writes data; it does not assign migration
+ownership. All future schema changes belong in `diese-tech/sal-database`.
 
-**Bot-owned tables** — the site never reads or writes these: `pending_actions`
+**Bot-consumed operational tables** — the site never reads or writes these:
+`pending_actions`
 (Discord approval queue), `audit_logs`, `pending_stat_records`,
-`division_role_mappings`. The bot's migrations in `lab-salbot/database/migrations/`
-create them and add columns to `matches` (`winner_org_id`, `score`,
-`proof_thread_id`, `proof_thread_url`, `screenshot_count`, `screenshot_expected`)
-plus `players.display_alias`.
+`division_role_mappings`. Pre-v1 SALbot migrations originally created these and
+added columns to `matches` (`winner_org_id`, `score`, `proof_thread_id`,
+`proof_thread_url`, `screenshot_count`, `screenshot_expected`) plus
+`players.display_alias`; those files are historical inputs, not an active owner.
 
 **`player_stats` is bot-written but site-read.** Only the bot's approval handler
 writes rows, but `src/lib/stats-data.ts` reads them for the public player, team, and
