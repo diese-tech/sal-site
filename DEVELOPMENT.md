@@ -15,7 +15,7 @@
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 24 LTS
 - A Supabase project (free tier is fine)
 - A Discord OAuth application (only needed for player sign-in)
 
