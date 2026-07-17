@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LeagueData, Match } from "@/types/league";
 import type { ExtractedGame, ExtractedPlayer, MatchReportWithMatch } from "@/types/match-report";
@@ -125,7 +125,7 @@ function IgnInput({
   onPlayerMatch: (id?: string) => void;
   unmatched?: boolean;
 }) {
-  const listId = `roster-${Math.random().toString(36).slice(2)}`;
+  const listId = useId();
   return (
     <div className="relative">
       <input

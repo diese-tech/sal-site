@@ -17,7 +17,7 @@ export default async function AdminSeasonsPage() {
         <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">Admin · Superadmin</p>
         <h1 className="text-2xl font-black text-white">Seasons</h1>
         <p className="mt-1 text-sm font-semibold text-slate-400">
-          Create and manage league seasons. Use "Advance Week" to increment the current week counter.
+          Create and manage league seasons. Use &quot;Advance Week&quot; to increment the current week counter.
         </p>
       </div>
       <AdminSeasonsClient seasons={seasons} />

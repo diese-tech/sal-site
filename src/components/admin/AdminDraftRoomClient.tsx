@@ -20,10 +20,12 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
 }) {
   const router = useRouter();
   const [liveState, setLiveState] = useState(state);
+  const [previousState, setPreviousState] = useState(state);
 
-  useEffect(() => {
-    setLiveState(state); // sync if parent re-renders
-  }, [state]);
+  if (state !== previousState) {
+    setPreviousState(state);
+    setLiveState(state);
+  }
 
   useEffect(() => {
     const id = setInterval(async () => {
