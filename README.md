@@ -190,10 +190,10 @@ For local development and technical setup, see [DEVELOPMENT.md](./DEVELOPMENT.md
   repository does not deploy a bot process.
 - [`diese-tech/sal-database`](https://github.com/diese-tech/sal-database) is the
   approved sole owner for shared Supabase migrations, generated types, contract
-  releases, and production database pushes. The recovery-gated repository and
-  initial `db-v1.0.0` release are tracked in
-  [#172](https://github.com/diese-tech/sal-site/issues/172) and are not yet being
-  claimed as complete.
+  releases, and production database pushes. This application vendors the
+  generated types from immutable release `db-v1.2.0` at commit
+  `195a0792a396354d7809d7dcbb85a9cdfd4d8030`; `db-contract.lock.json` and
+  `npm run check:db-contract` enforce the exact contract.
 
 ## License
 

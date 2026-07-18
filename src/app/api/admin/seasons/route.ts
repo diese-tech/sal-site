@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await saveSeason(result.data);
+    await saveSeason({ ...result.data, isCurrent: false });
     revalidateTag("league-data", {});
     return NextResponse.json({ ok: true });
   } catch (err) {

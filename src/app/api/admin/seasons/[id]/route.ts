@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isSuperAdminRequest } from "@/lib/admin-auth";
-import { advanceWeek, getAllSeasons, saveSeason } from "@/lib/league-data";
+import { advanceWeek, getAllSeasons, saveSeason, setCurrentSeason } from "@/lib/league-data";
 import { errorMessage } from "@/lib/error-monitor";
 
 const patchSchema = z.object({
-  action: z.enum(["advanceWeek", "update"]).optional(),
+  action: z.enum(["advanceWeek", "setCurrent", "update"]).optional(),
   currentWeek: z.number().int().min(0).optional(),
   status: z.enum(["pre-season", "active", "post-season", "offseason"]).optional(),
   name: z.string().min(1).max(64).optional(),
@@ -34,6 +34,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   try {
     if (patch.action === "advanceWeek") {
       await advanceWeek(id);
+    } else if (patch.action === "setCurrent") {
+      await setCurrentSeason(id);
     } else {
       // Fetch the current season, merge the patch fields, then upsert
       const seasons = await getAllSeasons();

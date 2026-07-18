@@ -9,7 +9,7 @@ export default async function PlayersPage() {
   return (
     <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <div className="mb-6">
-        <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300">Season 1</p>
+        <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300">{data.season.name}</p>
         <h1 className="text-2xl font-black text-white">Players</h1>
       </div>
       <PlayersPageClient data={data} />

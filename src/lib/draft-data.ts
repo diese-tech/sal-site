@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { buildPickSequence, type DraftPick, type DraftRoom, type DraftState } from "@/types/draft";
 import type { DivisionId } from "@/types/league";
+import type { Database } from "@/types/database.types";
 
 // ---- DB row types --------------------------------------------------------
 
@@ -145,7 +146,7 @@ export async function updateDraftRoom(id: string, patch: Partial<{
 }>): Promise<DraftRoom> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
-  const dbPatch: Record<string, unknown> = {};
+  const dbPatch: Database["public"]["Tables"]["draft_rooms"]["Update"] = {};
   if (patch.status !== undefined) dbPatch.status = patch.status;
   if (patch.baseOrder !== undefined) dbPatch.base_order = patch.baseOrder;
   if (patch.currentPickIndex !== undefined) dbPatch.current_pick_index = patch.currentPickIndex;
@@ -201,7 +202,14 @@ export async function advancePickOnTimeout(
 ): Promise<boolean> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
-  const { data, error } = await supabase.rpc("advance_pick_on_timeout", {
+  // This legacy RPC exists in the site migration archive but is not yet part
+  // of the released shared contract. Keep the exception isolated until its
+  // forward migration is released from sal-database.
+  const legacyRpc = supabase.rpc as unknown as (
+    name: "advance_pick_on_timeout",
+    args: { p_draft_room_id: string; p_expected_pick_index: number; p_total_picks: number },
+  ) => Promise<{ data: boolean | null; error: { message: string } | null }>;
+  const { data, error } = await legacyRpc("advance_pick_on_timeout", {
     p_draft_room_id: draftRoomId,
     p_expected_pick_index: expectedPickIndex,
     p_total_picks: totalPicks,

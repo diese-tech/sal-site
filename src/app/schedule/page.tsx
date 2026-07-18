@@ -11,7 +11,7 @@ export default async function SchedulePage({
 }) {
   const { season: seasonId } = await searchParams;
   const data = await getLeagueData(seasonId);
-  const allSeasons = (await getAllSeasons()).filter((s) => s.status !== "pre-season");
+  const allSeasons = await getAllSeasons();
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-10 sm:px-6">

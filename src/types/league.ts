@@ -9,6 +9,7 @@ export interface Season {
   id: string;
   name: string;
   status: SeasonStatus;
+  isCurrent: boolean;
   startDate: string;
   endDate: string;
   currentWeek: number;
