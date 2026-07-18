@@ -13,7 +13,9 @@
     "test:load": "vitest run tests/load",
     "test:e2e": "playwright test",
     "test:integration": "vitest run tests/integration",
-    "db:seed": "tsx scripts/seed-supabase.mjs"
+    "db:seed": "tsx scripts/seed-supabase.mjs",
+    "check:db-contract": "node scripts/db-contract.mjs check src/types/database.types.ts",
+    "sync:db-contract": "node scripts/db-contract.mjs sync src/types/database.types.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

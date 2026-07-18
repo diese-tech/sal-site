@@ -20,6 +20,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify pinned database contract
+        run: npm run check:db-contract
+
       - name: Lint
         run: npm run lint
 
