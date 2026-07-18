@@ -340,6 +340,7 @@ export const MOCK_LEAGUE_DATA: LeagueData = {
     id: "sal-s1",
     name: "Season 1",
     status: "active",
+    isCurrent: true,
     startDate: "2025-04-21",
     endDate: "2025-07-13",
     currentWeek: 3,

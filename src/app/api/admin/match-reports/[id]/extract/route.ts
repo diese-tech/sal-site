@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { toDatabaseJson } from "@/lib/database-json";
 import { getAdminLeagueData, LeagueDataUnavailableError } from "@/lib/league-data";
 import type { ExtractedGame } from "@/types/match-report";
 import { errorMessage } from "@/lib/error-monitor";
@@ -208,7 +209,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Store extracted data and mark as review
     await supabase
       .from("match_reports")
-      .update({ status: "review", extracted_data: games })
+      .update({ status: "review", extracted_data: toDatabaseJson(games) })
       .eq("id", id);
 
     return NextResponse.json({ games });

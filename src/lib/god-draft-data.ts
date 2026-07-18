@@ -5,6 +5,7 @@ import { canRoleUseChat, effectiveChatChannel } from "@/lib/god-draft-rules";
 import { getLeagueData, getPlayerByDiscordId } from "@/lib/league-data";
 import { getAuthUser, getDiscordDisplayName, getDiscordId } from "@/lib/supabase-auth-server";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { toDatabaseJson } from "@/lib/database-json";
 import type {
   DraftActionType,
   DraftChatChannel,
@@ -18,6 +19,7 @@ import type {
   GodDraftSession,
 } from "@/types/god-draft";
 import type { LeaguePlayer, Match, Org } from "@/types/league";
+import type { Database } from "@/types/database.types";
 
 const FALLBACK_GODS: DraftGod[] = [
   { id: "achilles", name: "Achilles", class: "Warrior", damageType: "physical" },
@@ -183,7 +185,8 @@ export async function getGodPool(): Promise<DraftGod[]> {
   const { data, error } = await supabase.from("gods").select("*").order("name");
   if (error || !data?.length) return FALLBACK_GODS;
   return data.map((row) => {
-    const damageType = String(row.god_class ?? row.damage_type ?? "").toLowerCase();
+    const compatibilityRow = row as typeof row & { damage_type?: string | null };
+    const damageType = String(row.god_class ?? compatibilityRow.damage_type ?? "").toLowerCase();
     return {
       id: String(row.id),
       name: String(row.name),
@@ -357,9 +360,9 @@ async function completeDraft(room: GodDraftRoomData, draftState: DraftState) {
     p_session_id: room.session.id,
     p_match_id: room.match.id,
     p_game_number: room.session.gameNumber,
-    p_draft_state: draftState,
-    p_bans: bans,
-    p_picks: picks,
+    p_draft_state: toDatabaseJson(draftState),
+    p_bans: toDatabaseJson(bans),
+    p_picks: toDatabaseJson(picks),
   });
   if (error) throw error;
   revalidatePath(`/draft/god/${room.session.id}`);
@@ -380,15 +383,21 @@ function resetLobbyPatch() {
   };
 }
 
-async function upsertSession(session: GodDraftSession, patch: Record<string, unknown>) {
+type GodDraftSessionUpdate = Omit<
+  Database["public"]["Tables"]["god_draft_sessions"]["Update"],
+  "draft_state"
+> & { draft_state?: DraftState };
+
+async function upsertSession(session: GodDraftSession, patch: GodDraftSessionUpdate) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
-  const payload = {
+  const { draft_state: patchDraftState, ...scalarPatch } = patch;
+  const payload: Database["public"]["Tables"]["god_draft_sessions"]["Insert"] = {
     id: session.id,
     match_id: session.matchId,
     game_number: session.gameNumber,
-    draft_state: session.draftState,
-    ...patch,
+    draft_state: toDatabaseJson(patchDraftState ?? session.draftState),
+    ...scalarPatch,
     updated_at: new Date().toISOString(),
   };
   const { error } = await supabase.from("god_draft_sessions").upsert(payload);

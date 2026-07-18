@@ -12,7 +12,7 @@ export default async function TeamsPage() {
         <div className="h-1 bg-gradient-to-r from-cyan-400 via-emerald-400 to-blue-500" />
         <div className="p-5">
           <p className="text-xs font-black uppercase tracking-widest text-cyan-200">Teams & Orgs</p>
-          <h1 className="mt-2 text-2xl font-black leading-tight text-white">Season 1 Roster</h1>
+          <h1 className="mt-2 text-2xl font-black leading-tight text-white">{data.season.name} Roster</h1>
           <p className="mt-1.5 text-sm font-semibold text-slate-400">
             {data.orgs.length} orgs competing across Solar, Lunar, and Terra divisions. Click any team to view their full roster.
           </p>

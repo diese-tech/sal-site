@@ -1,10 +1,18 @@
 import { unstable_cache } from "next/cache";
+import { z } from "zod";
 import { MOCK_LEAGUE_DATA } from "@/data/mock-league";
-import type { Announcement, Division, LeagueData, LeaguePlayer, Match, Org, OrgStanding, Season } from "@/types/league";
+import type { Announcement, Division, DivisionId, LeagueData, LeaguePlayer, Match, Org, OrgStanding, Season } from "@/types/league";
 import type { FormField, Registration } from "@/types/auth";
 import { recalcStandings } from "@/lib/standings";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { reportError } from "@/lib/error-monitor";
+import { toDatabaseJson } from "@/lib/database-json";
+import type { Database } from "@/types/database.types";
+import {
+  scopeSeasonEntities,
+  type SeasonOrgAssignment,
+  type SeasonRosterAssignment,
+} from "@/lib/season-scope";
 
 /**
  * Thrown by fetchLeagueData/getAdminLeagueData in production when the
@@ -40,6 +48,16 @@ function unavailableOrMock(context: string, reason: string): LeagueData {
 
 type DbDivision = Omit<Division, "accentColor"> & { accent_color: string };
 
+type DbSeason = {
+  id: string;
+  name: string;
+  status: Season["status"];
+  is_current: boolean;
+  start_date: string;
+  end_date: string;
+  current_week: number;
+};
+
 type DbOrg = Omit<Org, "divisionId" | "logoInitials" | "logoGradient" | "primaryColor" | "accentGradient" | "captainId" | "socialLinks" | "archivedAt" | "deletionScheduledAt" | "brandId"> & {
   division_id: Org["divisionId"];
   logo_initials: string;
@@ -53,20 +71,8 @@ type DbOrg = Omit<Org, "divisionId" | "logoInitials" | "logoGradient" | "primary
   brand_id?: string | null;
 };
 
-type DbPlayer = Omit<LeaguePlayer, "orgId" | "discordUsername" | "avatarInitials" | "avatarGradient" | "primaryRole" | "secondaryRoles" | "isStarter" | "isCaptain" | "divisionId" | "displayAlias" | "archivedAt" | "deletionScheduledAt"> & {
-  display_alias?: string | null;
-  org_id?: string | null;
-  discord_username: string;
-  avatar_initials: string;
-  avatar_gradient: string;
-  primary_role: LeaguePlayer["primaryRole"];
-  secondary_roles: LeaguePlayer["secondaryRoles"];
-  is_starter: boolean;
-  is_captain: boolean;
-  division_id?: LeaguePlayer["divisionId"] | null;
-  archived_at?: string | null;
-  deletion_scheduled_at?: string | null;
-};
+type DbPlayer = Database["public"]["Tables"]["players"]["Row"];
+type DbPlayerInsert = Database["public"]["Tables"]["players"]["Insert"];
 
 type DbMatch = Omit<Match, "divisionId" | "homeOrgId" | "awayOrgId" | "scheduledDate" | "scheduledTime" | "homeScore" | "awayScore" | "streamUrl" | "vodUrl" | "archivedAt" | "deletionScheduledAt" | "seasonId"> & {
   division_id: Match["divisionId"];
@@ -125,6 +131,18 @@ function fromDbDivision(row: DbDivision): Division {
   };
 }
 
+function fromDbSeason(row: DbSeason): Season {
+  return {
+    id: row.id,
+    name: row.name,
+    status: row.status,
+    isCurrent: row.is_current,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    currentWeek: row.current_week,
+  };
+}
+
 function toDbOrg(org: Org): DbOrg {
   return {
     id: org.id,
@@ -142,6 +160,17 @@ function toDbOrg(org: Org): DbOrg {
   };
 }
 
+const playerRoleSchema = z.enum(["Solo", "Jungle", "Mid", "Carry", "Support", "Flex"]);
+const playerStatusSchema = z.enum(["free-agent", "org-affiliated", "drafted", "queued-ghost", "active"]);
+const nullableDivisionSchema = z.enum(["solar", "lunar", "terra"]).nullable();
+const playerStatsSchema = z.object({
+  kills: z.number(),
+  deaths: z.number(),
+  assists: z.number(),
+  gamesPlayed: z.number(),
+  wins: z.number(),
+});
+
 function fromDbPlayer(row: DbPlayer): LeaguePlayer {
   return {
     id: row.id,
@@ -151,19 +180,19 @@ function fromDbPlayer(row: DbPlayer): LeaguePlayer {
     displayAlias: row.display_alias ?? undefined,
     avatarInitials: row.avatar_initials,
     avatarGradient: row.avatar_gradient,
-    primaryRole: row.primary_role,
-    secondaryRoles: row.secondary_roles ?? [],
+    primaryRole: playerRoleSchema.parse(row.primary_role),
+    secondaryRoles: z.array(playerRoleSchema).parse(row.secondary_roles),
     isStarter: row.is_starter,
     isCaptain: row.is_captain,
-    divisionId: row.division_id ?? undefined,
-    status: row.status,
-    stats: row.stats,
+    divisionId: nullableDivisionSchema.parse(row.division_id) ?? undefined,
+    status: playerStatusSchema.parse(row.status),
+    stats: row.stats === null ? undefined : playerStatsSchema.parse(row.stats),
     archivedAt: row.archived_at ?? undefined,
     deletionScheduledAt: row.deletion_scheduled_at ?? undefined,
   };
 }
 
-function toDbPlayer(player: LeaguePlayer): DbPlayer {
+function toDbPlayer(player: LeaguePlayer): DbPlayerInsert {
   return {
     id: player.id,
     org_id: player.orgId ?? null,
@@ -172,12 +201,12 @@ function toDbPlayer(player: LeaguePlayer): DbPlayer {
     avatar_initials: player.avatarInitials,
     avatar_gradient: player.avatarGradient,
     primary_role: player.primaryRole,
-    secondary_roles: player.secondaryRoles,
+    secondary_roles: toDatabaseJson(player.secondaryRoles),
     is_starter: player.isStarter,
     is_captain: player.isCaptain,
     division_id: player.divisionId ?? null,
     status: player.status,
-    stats: player.stats,
+    stats: player.stats ? toDatabaseJson(player.stats) : null,
   };
 }
 
@@ -276,61 +305,84 @@ async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
   if (!supabase) return unavailableOrMock("getLeagueData", "Supabase env is not configured.");
 
   try {
-    // Fetch the season: use provided seasonId, or fall back to active/most recent.
-    let seasonQuery = supabase.from("seasons").select("*").order("start_date", { ascending: false });
+    // An explicit marker keeps every consumer on the same default season.
+    let seasonQuery = supabase.from("seasons").select("*");
     if (seasonId) {
       seasonQuery = seasonQuery.eq("id", seasonId);
+    } else {
+      seasonQuery = seasonQuery.eq("is_current", true);
     }
-    const seasonRes = await seasonQuery.limit(1).maybeSingle();
+    const seasonRes = await seasonQuery.maybeSingle();
+    const seasonRow = seasonRes.data as DbSeason | null;
 
-    const [divisionRes, orgRes, playerRes, standingRes, announcementRes] = await Promise.all([
+    if (seasonRes.error) {
+      console.error("getLeagueData: Supabase season query error:", seasonRes.error.message);
+      return unavailableOrMock("getLeagueData", `Supabase season query error: ${seasonRes.error.message}`);
+    }
+    if (!seasonRow) {
+      return unavailableOrMock("getLeagueData", "No current or requested season exists.");
+    }
+
+    const [divisionRes, seasonOrgRes, seasonRosterRes, standingRes, announcementRes, matchRes] = await Promise.all([
       supabase.from("divisions").select("*").order("tier"),
-      supabase.from("orgs").select("*").is("archived_at", null).order("name"),
-      supabase.from("players").select("*").is("archived_at", null).order("ign"),
+      supabase.from("season_orgs").select("org_id, division_id").eq("season_id", seasonRow.id).eq("status", "active"),
+      supabase.from("season_rosters").select("player_id, org_id, division_id, is_captain").eq("season_id", seasonRow.id).in("roster_status", ["active", "free_agent"]),
       supabase.from("standings").select("*"),
       supabase.from("announcements").select("*").order("pinned", { ascending: false }).order("created_at", { ascending: false }),
+      supabase.from("matches").select("*").eq("season_id", seasonRow.id).is("archived_at", null).order("scheduled_date").order("scheduled_time"),
     ]);
 
-    const queryError = seasonRes.error ?? divisionRes.error ?? orgRes.error ?? playerRes.error ?? standingRes.error ?? announcementRes.error;
+    const queryError = divisionRes.error ?? seasonOrgRes.error ?? seasonRosterRes.error ?? standingRes.error ?? announcementRes.error ?? matchRes.error;
     if (queryError) {
       console.error("getLeagueData: Supabase query error, using mock data:", queryError.message);
       return unavailableOrMock("getLeagueData", `Supabase query error: ${queryError.message}`);
     }
 
-    const seasonRow = seasonRes.data as (Season & { start_date?: string; end_date?: string; current_week?: number }) | null;
-    if (!seasonRow || !divisionRes.data?.length || !orgRes.data?.length) {
-      console.error("getLeagueData: Missing critical Supabase data (season/divisions/orgs), using mock data.");
-      return unavailableOrMock("getLeagueData", "Missing critical Supabase data (season/divisions/orgs).");
+    if (!divisionRes.data?.length) {
+      console.error("getLeagueData: Missing critical Supabase division data.");
+      return unavailableOrMock("getLeagueData", "Missing critical Supabase division data.");
     }
 
-    // Fetch matches scoped to the selected season.
-    let matchQuery = supabase.from("matches").select("*").is("archived_at", null).order("scheduled_date").order("scheduled_time");
-    if (seasonRow) {
-      matchQuery = matchQuery.eq("season_id", seasonRow.id);
+    const orgAssignments = (seasonOrgRes.data ?? []) as SeasonOrgAssignment[];
+    const rosterAssignments = (seasonRosterRes.data ?? []) as SeasonRosterAssignment[];
+    const orgIds = orgAssignments.map((assignment) => assignment.org_id);
+    const playerIds = rosterAssignments.map((assignment) => assignment.player_id);
+    const emptyResult = { data: [], error: null };
+    const [orgRes, playerRes] = await Promise.all([
+      orgIds.length
+        ? supabase.from("orgs").select("*").in("id", orgIds).is("archived_at", null).order("name")
+        : Promise.resolve(emptyResult),
+      playerIds.length
+        ? supabase.from("players").select("*").in("id", playerIds).is("archived_at", null).order("ign")
+        : Promise.resolve(emptyResult),
+    ]);
+    const catalogError = orgRes.error ?? playerRes.error;
+    if (catalogError) {
+      return unavailableOrMock("getLeagueData", `Supabase catalog query error: ${catalogError.message}`);
     }
-    const matchRes = await matchQuery;
+
+    const scoped = scopeSeasonEntities(
+      (orgRes.data as DbOrg[]).map(fromDbOrg),
+      (playerRes.data as DbPlayer[]).map(fromDbPlayer),
+      orgAssignments,
+      rosterAssignments,
+    );
+    if (scoped.orgs.length !== orgAssignments.length || scoped.players.length !== rosterAssignments.length) {
+      return unavailableOrMock("getLeagueData", "Season assignments reference unavailable identities.");
+    }
+
     const matches = (matchRes.data as DbMatch[]).map(fromDbMatch);
 
-    // For historical seasons, the global standings table only contains the
-    // current season's data. Compute standings from the scoped matches instead
-    // so that past-season pages show correct historical results.
-    const orgs = (orgRes.data as DbOrg[]).map(fromDbOrg);
-    const standings = seasonId
-      ? recalcStandings({ orgs, matches }, seasonRow.id)
-      : (standingRes.data as DbStanding[]).map(fromDbStanding);
+    const seasonOrgIds = new Set(scoped.orgs.map((org) => org.id));
+    const standings = seasonRow.is_current
+      ? (standingRes.data as DbStanding[]).map(fromDbStanding).filter((row) => seasonOrgIds.has(row.orgId))
+      : recalcStandings({ orgs: scoped.orgs, matches }, seasonRow.id);
 
     return {
-      season: {
-        id: seasonRow.id,
-        name: seasonRow.name,
-        status: seasonRow.status,
-        startDate: seasonRow.start_date ?? seasonRow.startDate,
-        endDate: seasonRow.end_date ?? seasonRow.endDate,
-        currentWeek: seasonRow.current_week ?? seasonRow.currentWeek,
-      },
+      season: fromDbSeason(seasonRow),
       divisions: (divisionRes.data as DbDivision[]).map(fromDbDivision),
-      orgs,
-      players: (playerRes.data as DbPlayer[]).map(fromDbPlayer),
+      orgs: scoped.orgs,
+      players: scoped.players,
       matches,
       standings,
       announcements: (announcementRes.data as DbAnnouncement[]).map(fromDbAnnouncement),
@@ -357,54 +409,78 @@ export async function getAdminLeagueData(seasonId?: string): Promise<LeagueData>
   if (!supabase) return unavailableOrMock("getAdminLeagueData", "Supabase env is not configured.");
 
   try {
-    // Fetch the season: use provided seasonId, or fall back to active/most recent.
-    let seasonQuery = supabase.from("seasons").select("*").order("start_date", { ascending: false });
+    let seasonQuery = supabase.from("seasons").select("*");
     if (seasonId) {
       seasonQuery = seasonQuery.eq("id", seasonId);
+    } else {
+      seasonQuery = seasonQuery.eq("is_current", true);
     }
-    const seasonRes = await seasonQuery.limit(1).maybeSingle();
+    const seasonRes = await seasonQuery.maybeSingle();
+    const seasonRow = seasonRes.data as DbSeason | null;
 
-    const [divisionRes, orgRes, playerRes, standingRes, announcementRes] = await Promise.all([
+    if (seasonRes.error) {
+      return unavailableOrMock("getAdminLeagueData", `Supabase season query error: ${seasonRes.error.message}`);
+    }
+    if (!seasonRow) {
+      return unavailableOrMock("getAdminLeagueData", "No current or requested season exists.");
+    }
+
+    const [divisionRes, seasonOrgRes, seasonRosterRes, standingRes, announcementRes, matchRes] = await Promise.all([
       supabase.from("divisions").select("*").order("tier"),
-      supabase.from("orgs").select("*").order("name"),
-      supabase.from("players").select("*").order("ign"),
+      supabase.from("season_orgs").select("org_id, division_id").eq("season_id", seasonRow.id),
+      supabase.from("season_rosters").select("player_id, org_id, division_id, is_captain").eq("season_id", seasonRow.id),
       supabase.from("standings").select("*"),
       supabase.from("announcements").select("*").order("pinned", { ascending: false }).order("created_at", { ascending: false }),
+      supabase.from("matches").select("*").eq("season_id", seasonRow.id).order("scheduled_date").order("scheduled_time"),
     ]);
 
-    const queryError = seasonRes.error ?? divisionRes.error ?? orgRes.error ?? playerRes.error ?? standingRes.error ?? announcementRes.error;
+    const queryError = divisionRes.error ?? seasonOrgRes.error ?? seasonRosterRes.error ?? standingRes.error ?? announcementRes.error ?? matchRes.error;
     if (queryError) {
       console.error("getAdminLeagueData: Supabase error, using mock data:", queryError.message);
       return unavailableOrMock("getAdminLeagueData", `Supabase query error: ${queryError.message}`);
     }
 
-    const seasonRow = seasonRes.data as (Season & { start_date?: string; end_date?: string; current_week?: number }) | null;
-    if (!seasonRow || !divisionRes.data?.length) {
+    if (!divisionRes.data?.length) {
       console.error("getAdminLeagueData: Missing critical Supabase data, using mock data.");
-      return unavailableOrMock("getAdminLeagueData", "Missing critical Supabase data (season/divisions).");
+      return unavailableOrMock("getAdminLeagueData", "Missing critical Supabase division data.");
     }
 
-    // Fetch matches scoped to the selected season.
-    let matchQuery = supabase.from("matches").select("*").order("scheduled_date").order("scheduled_time");
-    if (seasonRow) {
-      matchQuery = matchQuery.eq("season_id", seasonRow.id);
+    const orgAssignments = (seasonOrgRes.data ?? []) as SeasonOrgAssignment[];
+    const rosterAssignments = (seasonRosterRes.data ?? []) as SeasonRosterAssignment[];
+    const orgIds = orgAssignments.map((assignment) => assignment.org_id);
+    const playerIds = rosterAssignments.map((assignment) => assignment.player_id);
+    const emptyResult = { data: [], error: null };
+    const [orgRes, playerRes] = await Promise.all([
+      orgIds.length
+        ? supabase.from("orgs").select("*").in("id", orgIds).order("name")
+        : Promise.resolve(emptyResult),
+      playerIds.length
+        ? supabase.from("players").select("*").in("id", playerIds).order("ign")
+        : Promise.resolve(emptyResult),
+    ]);
+    const catalogError = orgRes.error ?? playerRes.error;
+    if (catalogError) {
+      return unavailableOrMock("getAdminLeagueData", `Supabase catalog query error: ${catalogError.message}`);
     }
-    const matchRes = await matchQuery;
+    const scoped = scopeSeasonEntities(
+      (orgRes.data as DbOrg[]).map(fromDbOrg),
+      (playerRes.data as DbPlayer[]).map(fromDbPlayer),
+      orgAssignments,
+      rosterAssignments,
+    );
+    const seasonOrgIds = new Set(scoped.orgs.map((org) => org.id));
+    const matches = (matchRes.data as DbMatch[]).map(fromDbMatch);
+    const standings = seasonRow.is_current
+      ? (standingRes.data as DbStanding[]).map(fromDbStanding).filter((row) => seasonOrgIds.has(row.orgId))
+      : recalcStandings({ orgs: scoped.orgs, matches }, seasonRow.id);
 
     return {
-      season: {
-        id: seasonRow.id,
-        name: seasonRow.name,
-        status: seasonRow.status,
-        startDate: seasonRow.start_date ?? seasonRow.startDate,
-        endDate: seasonRow.end_date ?? seasonRow.endDate,
-        currentWeek: seasonRow.current_week ?? seasonRow.currentWeek,
-      },
+      season: fromDbSeason(seasonRow),
       divisions: (divisionRes.data as DbDivision[]).map(fromDbDivision),
-      orgs: (orgRes.data as DbOrg[]).map(fromDbOrg),
-      players: (playerRes.data as DbPlayer[]).map(fromDbPlayer),
-      matches: (matchRes.data as DbMatch[]).map(fromDbMatch),
-      standings: (standingRes.data as DbStanding[]).map(fromDbStanding),
+      orgs: scoped.orgs,
+      players: scoped.players,
+      matches,
+      standings,
       announcements: (announcementRes.data as DbAnnouncement[]).map(fromDbAnnouncement),
       lastUpdated: new Date().toISOString(),
     };
@@ -422,14 +498,7 @@ export async function getAllSeasons(): Promise<Season[]> {
   if (!supabase) return [];
   const { data, error } = await supabase.from("seasons").select("*").order("start_date", { ascending: false });
   if (error) throw error;
-  return (data ?? []).map((row) => ({
-    id: row.id as string,
-    name: row.name as string,
-    status: row.status as Season["status"],
-    startDate: (row.start_date ?? row.startDate) as string,
-    endDate: (row.end_date ?? row.endDate) as string,
-    currentWeek: (row.current_week ?? row.currentWeek) as number,
-  }));
+  return (data ?? []).map((row) => fromDbSeason(row as DbSeason));
 }
 
 export async function saveSeason(season: Season): Promise<void> {
@@ -456,6 +525,126 @@ export async function advanceWeek(seasonId: string): Promise<void> {
   const { error } = await supabase.from("seasons").update({ current_week: nextWeek }).eq("id", seasonId);
   if (error) throw error;
   await writeAuditLog("advance_week", "season", seasonId, { week: nextWeek });
+}
+
+export async function setCurrentSeason(seasonId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const { error } = await supabase.rpc("set_current_season", { p_season_id: seasonId });
+  if (error) throw error;
+  await writeAuditLog("set_current_season", "season", seasonId, { isCurrent: true });
+}
+
+export interface SeasonOrgAdminAssignment extends SeasonOrgAssignment {
+  status: "active" | "inactive";
+}
+
+export interface SeasonRosterAdminAssignment extends SeasonRosterAssignment {
+  roster_status: "active" | "inactive" | "free_agent";
+}
+
+export interface SeasonRosterAdminData {
+  season: Season;
+  divisions: Division[];
+  orgCatalog: Org[];
+  playerCatalog: LeaguePlayer[];
+  orgAssignments: SeasonOrgAdminAssignment[];
+  rosterAssignments: SeasonRosterAdminAssignment[];
+}
+
+export async function getSeasonRosterAdminData(seasonId: string): Promise<SeasonRosterAdminData> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const [seasonRes, divisionRes, orgRes, playerRes, seasonOrgRes, rosterRes] = await Promise.all([
+    supabase.from("seasons").select("*").eq("id", seasonId).single(),
+    supabase.from("divisions").select("*").order("tier"),
+    supabase.from("orgs").select("*").is("archived_at", null).order("name"),
+    supabase.from("players").select("*").is("archived_at", null).order("ign"),
+    supabase.from("season_orgs").select("org_id, division_id, status").eq("season_id", seasonId),
+    supabase.from("season_rosters").select("player_id, org_id, division_id, is_captain, roster_status").eq("season_id", seasonId),
+  ]);
+  const error = seasonRes.error ?? divisionRes.error ?? orgRes.error ?? playerRes.error ?? seasonOrgRes.error ?? rosterRes.error;
+  if (error) throw error;
+  return {
+    season: fromDbSeason(seasonRes.data as DbSeason),
+    divisions: (divisionRes.data as DbDivision[]).map(fromDbDivision),
+    orgCatalog: (orgRes.data as DbOrg[]).map(fromDbOrg),
+    playerCatalog: (playerRes.data as DbPlayer[]).map(fromDbPlayer),
+    orgAssignments: (seasonOrgRes.data ?? []) as SeasonOrgAdminAssignment[],
+    rosterAssignments: (rosterRes.data ?? []) as SeasonRosterAdminAssignment[],
+  };
+}
+
+export async function saveSeasonOrgAssignment(
+  seasonId: string,
+  orgId: string,
+  divisionId: DivisionId,
+): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const { error } = await supabase.from("season_orgs").upsert({
+    season_id: seasonId,
+    org_id: orgId,
+    division_id: divisionId,
+    status: "active",
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "season_id,org_id" });
+  if (error) throw error;
+  await writeAuditLog("save_season_org", "season", seasonId, { orgId, divisionId });
+}
+
+export async function removeSeasonOrgAssignment(seasonId: string, orgId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const { error } = await supabase.from("season_orgs").delete().eq("season_id", seasonId).eq("org_id", orgId);
+  if (error) throw error;
+  await writeAuditLog("remove_season_org", "season", seasonId, { orgId });
+}
+
+export async function saveSeasonRosterAssignment(input: {
+  seasonId: string;
+  playerId: string;
+  orgId: string | null;
+  divisionId: DivisionId | null;
+  isCaptain: boolean;
+}): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  let divisionId = input.divisionId;
+  if (input.orgId) {
+    const { data, error } = await supabase
+      .from("season_orgs")
+      .select("division_id")
+      .eq("season_id", input.seasonId)
+      .eq("org_id", input.orgId)
+      .single();
+    if (error) throw error;
+    divisionId = (data as { division_id: DivisionId }).division_id;
+  }
+  const { error } = await supabase.from("season_rosters").upsert({
+    season_id: input.seasonId,
+    player_id: input.playerId,
+    org_id: input.orgId,
+    division_id: divisionId,
+    is_captain: input.orgId ? input.isCaptain : false,
+    roster_status: input.orgId ? "active" : "free_agent",
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "season_id,player_id" });
+  if (error) throw error;
+  await writeAuditLog("save_season_roster", "season", input.seasonId, {
+    playerId: input.playerId,
+    orgId: input.orgId,
+    divisionId,
+    isCaptain: input.orgId ? input.isCaptain : false,
+  });
+}
+
+export async function removeSeasonRosterAssignment(seasonId: string, playerId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const { error } = await supabase.from("season_rosters").delete().eq("season_id", seasonId).eq("player_id", playerId);
+  if (error) throw error;
+  await writeAuditLog("remove_season_roster", "season", seasonId, { playerId });
 }
 
 // ─── Org write ─────────────────────────────────────────────────────────────────────────────
@@ -615,7 +804,7 @@ export interface AuditLogEntry {
 export async function writeAuditLog(action: string, entityType: string | null, entityId: string | null, payload: unknown) {
   const supabase = getSupabaseServerClient();
   if (!supabase) return;
-  await supabase.from("admin_audit_log").insert({ action, entity_type: entityType, entity_id: entityId, payload });
+  await supabase.from("admin_audit_log").insert({ action, entity_type: entityType, entity_id: entityId, payload: toDatabaseJson(payload) });
 }
 
 export async function getAuditLog(limit = 50): Promise<AuditLogEntry[]> {

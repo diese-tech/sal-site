@@ -19,7 +19,7 @@ export function SeasonSelector({ seasons, currentSeasonId }: Props) {
     <div className="mt-4 flex flex-wrap gap-2">
       {seasons.map((season) => {
         const isActive = season.id === currentSeasonId;
-        const href = isActive ? pathname : `${pathname}?season=${season.id}`;
+        const href = isActive ? pathname : `${pathname}?season=${encodeURIComponent(season.id)}`;
         return (
           <Link
             key={season.id}

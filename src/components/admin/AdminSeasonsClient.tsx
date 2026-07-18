@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { Season, SeasonStatus } from "@/types/league";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ function emptySeasonForm(nextId: string): Omit<Season, "id"> & { id: string } {
     id: nextId,
     name: "",
     status: "pre-season",
+    isCurrent: false,
     startDate: new Date().toISOString().slice(0, 10),
     endDate: "",
     currentWeek: 0,
@@ -43,6 +45,7 @@ export function AdminSeasonsClient({ seasons }: { seasons: Season[] }) {
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [advancingId, setAdvancingId] = useState<string | null>(null);
+  const [settingCurrentId, setSettingCurrentId] = useState<string | null>(null);
 
   const nextSeasonId = `s${seasons.length + 1}`;
 
@@ -107,6 +110,23 @@ export function AdminSeasonsClient({ seasons }: { seasons: Season[] }) {
     if (!res.ok) {
       const json = await res.json().catch(() => null) as { error?: string } | null;
       setMessage(json?.error ?? "Status update failed.");
+      return;
+    }
+    router.refresh();
+  }
+
+  async function makeCurrent(season: Season) {
+    setSettingCurrentId(season.id);
+    setMessage("");
+    const res = await fetch(`/api/admin/seasons/${season.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "setCurrent" }),
+    });
+    setSettingCurrentId(null);
+    if (!res.ok) {
+      const json = await res.json().catch(() => null) as { error?: string } | null;
+      setMessage(json?.error ?? "Current season update failed.");
       return;
     }
     router.refresh();
@@ -181,6 +201,11 @@ export function AdminSeasonsClient({ seasons }: { seasons: Season[] }) {
                   <span className={cn("rounded border px-1.5 py-0.5 text-[0.55rem] font-black uppercase", STATUS_COLORS[season.status])}>
                     {season.status}
                   </span>
+                  {season.isCurrent && (
+                    <span className="rounded border border-cyan-300/40 bg-cyan-300/10 px-1.5 py-0.5 text-[0.55rem] font-black uppercase text-cyan-100">
+                      Site current
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs font-semibold text-slate-400">
                   {season.startDate} → {season.endDate} · Week {season.currentWeek}
@@ -188,6 +213,21 @@ export function AdminSeasonsClient({ seasons }: { seasons: Season[] }) {
                 <p className="mt-1 text-[0.6rem] font-black uppercase text-slate-600">ID: {season.id}</p>
               </div>
               <div className="flex shrink-0 flex-wrap gap-1.5">
+                <Link
+                  href={`/admin/seasons/${encodeURIComponent(season.id)}/roster`}
+                  className="rounded-lg border border-cyan-300/35 bg-cyan-300/10 px-2.5 py-1 text-[0.65rem] font-black uppercase text-cyan-200 transition hover:bg-cyan-300/20"
+                >
+                  Manage Roster
+                </Link>
+                {!season.isCurrent && (
+                  <button
+                    onClick={() => void makeCurrent(season)}
+                    disabled={settingCurrentId === season.id}
+                    className="rounded-lg border border-emerald-300/35 bg-emerald-300/10 px-2.5 py-1 text-[0.65rem] font-black uppercase text-emerald-200 transition hover:bg-emerald-300/20 disabled:opacity-50"
+                  >
+                    {settingCurrentId === season.id ? "Switching..." : "Make Site Current"}
+                  </button>
+                )}
                 {/* Status quick-toggle */}
                 {STATUS_OPTIONS.filter((s) => s !== season.status).map((s) => (
                   <button

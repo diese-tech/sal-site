@@ -5,7 +5,7 @@ import type { Season } from "@/types/league";
 vi.mock("next/navigation", () => ({ usePathname: () => "/standings" }));
 
 function season(id: string): Season {
-  return { id, name: id, status: "active", startDate: "", endDate: "", currentWeek: 1 };
+  return { id, name: id, status: "active", isCurrent: id === "s1", startDate: "", endDate: "", currentWeek: 1 };
 }
 
 describe("SeasonSelector", () => {

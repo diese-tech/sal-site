@@ -15,7 +15,7 @@ export default async function StandingsPage({
 }) {
   const { season: seasonId } = await searchParams;
   const { divisions, standings, orgs, season } = await getLeagueData(seasonId);
-  const allSeasons = (await getAllSeasons()).filter((s) => s.status !== "pre-season");
+  const allSeasons = await getAllSeasons();
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
