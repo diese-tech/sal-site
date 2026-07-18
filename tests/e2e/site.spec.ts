@@ -126,7 +126,7 @@ for (const path of ["/teams/helix-reign", "/teams/midnight-pact", "/teams/root-w
   });
 }
 
-for (const path of ["/admin", "/admin/matches", "/admin/players", "/admin/standings", "/admin/teams", "/admin/announcements"]) {
+for (const path of ["/admin", "/admin/matches", "/admin/players", "/admin/standings", "/admin/teams", "/admin/announcements", "/admin/tickets"]) {
   test(`admin route ${path} redirects when logged out`, async ({ page }) => {
     await page.goto(path);
     await expect(page).toHaveURL(/\/admin\/login$/);
@@ -154,11 +154,37 @@ for (const item of [
   { name: "Schedule", url: "/admin/matches" },
   { name: "Standings", url: "/admin/standings" },
   { name: "Announcements", url: "/admin/announcements" },
+  { name: "Tickets", url: "/admin/tickets" },
 ]) {
   test(`admin nav opens ${item.name}`, async ({ page }) => {
     await adminLogin(page);
     await page.getByRole("navigation").getByRole("link", { name: item.name, exact: true }).click();
     await expect(page).toHaveURL(item.url);
+  });
+}
+
+test("admin ticket queue renders filters and honest empty state", async ({ page }) => {
+  await adminLogin(page);
+  await page.goto("/admin/tickets");
+  await expect(page.getByRole("heading", { name: "Tickets" })).toBeVisible();
+  for (const label of ["Open", "Urgent", "Needs Info", "Resolved"]) {
+    await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+  }
+  await expect(page.getByPlaceholder("Search by ticket id, title, match, or summary...")).toBeVisible();
+  // The e2e server runs without Supabase, so every source reports unavailable.
+  await expect(
+    page.getByRole("alert").filter({ hasText: "ticket sources" }),
+  ).toContainText("Some ticket sources could not be read");
+  await expect(page.getByText("No tickets. All caught up.")).toBeVisible();
+});
+
+for (const viewport of viewports) {
+  test(`admin tickets has no page overflow at ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await adminLogin(page);
+    await page.goto("/admin/tickets");
+    await expect(page.getByText("No tickets. All caught up.")).toBeVisible();
+    await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
   });
 }
 
