@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AdminTicketActions } from "@/components/admin/AdminTicketActions";
 import type {
   AdminTicket,
   TicketCategory,
@@ -21,6 +22,7 @@ import {
   TICKET_STATUS_LABELS,
 } from "@/types/admin-ticket";
 import { applyTicketFilters, getTicketCounts } from "@/lib/admin-ticket-model";
+import { getTicketActionMode, type TicketActionMode } from "@/lib/admin-ticket-actions";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLE: Record<TicketStatus, string> = {
@@ -153,11 +155,17 @@ function TicketDetail({
   seasonNames,
   divisionNames,
   capabilities,
+  actionMode,
+  onTicketChange,
+  onActionSuccess,
 }: {
   ticket: AdminTicket;
   seasonNames: Record<string, string>;
   divisionNames: Record<string, string>;
   capabilities: TicketViewerCapabilities;
+  actionMode: TicketActionMode;
+  onTicketChange: (ticket: AdminTicket) => void;
+  onActionSuccess: () => void;
 }) {
   const facts: { label: string; value: string }[] = [
     { label: "Ticket", value: ticket.displayId },
@@ -243,11 +251,14 @@ function TicketDetail({
         ) : (
           <p className="text-xs font-semibold text-slate-300">{ticket.workflow.label}</p>
         )}
-        {!capabilities.canActOnTickets && (
-          <p className="mt-2 text-[0.65rem] text-slate-500">
-            This queue is read-only. Approvals and denials stay in the owning workflow.
-          </p>
-        )}
+        <AdminTicketActions
+          key={ticket.id}
+          ticket={ticket}
+          capabilities={capabilities}
+          actionMode={actionMode}
+          onTicketChange={onTicketChange}
+          onActionSuccess={onActionSuccess}
+        />
       </div>
     </div>
   );
@@ -266,7 +277,9 @@ export function AdminTicketsClient({
   divisionNames: Record<string, string>;
   capabilities: TicketViewerCapabilities;
 }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const [liveTickets, setLiveTickets] = useState(tickets);
   const [filters, setFilters] = useState<TicketFilters>(() => parseFilters(searchParams));
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("ticket"));
 
@@ -278,26 +291,41 @@ export function AdminTicketsClient({
     window.history.replaceState(null, "", url);
   }, [filters, selectedId]);
 
-  const counts = useMemo(() => getTicketCounts(tickets), [tickets]);
-  const filtered = useMemo(() => applyTicketFilters(tickets, filters), [tickets, filters]);
+  const counts = useMemo(() => getTicketCounts(liveTickets), [liveTickets]);
+  const filtered = useMemo(() => applyTicketFilters(liveTickets, filters), [liveTickets, filters]);
   const selected = useMemo(
-    () => (selectedId ? (tickets.find((t) => t.id === selectedId) ?? null) : null),
-    [tickets, selectedId],
+    () => (selectedId ? (liveTickets.find((t) => t.id === selectedId) ?? null) : null),
+    [liveTickets, selectedId],
   );
+  const selectedActionMode = useMemo(() => {
+    const serverTicket = selectedId ? tickets.find((ticket) => ticket.id === selectedId) : null;
+    const actionTicket = serverTicket ?? selected;
+    return actionTicket ? getTicketActionMode(actionTicket, capabilities) : "read_only";
+  }, [capabilities, selected, selectedId, tickets]);
+
+  const updateTicket = useCallback((nextTicket: AdminTicket) => {
+    setLiveTickets((current) => current.map((ticket) => (
+      ticket.id === nextTicket.id ? nextTicket : ticket
+    )));
+  }, []);
+
+  const refreshAfterAction = useCallback(() => {
+    router.refresh();
+  }, [router]);
 
   const seasonOptions = useMemo(() => {
-    const ids = [...new Set(tickets.map((t) => t.seasonId).filter((id): id is string => Boolean(id)))];
+    const ids = [...new Set(liveTickets.map((t) => t.seasonId).filter((id): id is string => Boolean(id)))];
     return ids
       .map((id) => ({ id, name: seasonNames[id] ?? id }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [tickets, seasonNames]);
+  }, [liveTickets, seasonNames]);
 
   const divisionOptions = useMemo(() => {
-    const ids = [...new Set(tickets.map((t) => t.divisionId).filter((id): id is string => Boolean(id)))];
+    const ids = [...new Set(liveTickets.map((t) => t.divisionId).filter((id): id is string => Boolean(id)))];
     return ids
       .map((id) => ({ id, name: divisionNames[id] ?? id }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [tickets, divisionNames]);
+  }, [liveTickets, divisionNames]);
 
   const failedSources = sourceHealth.filter((s) => !s.ok);
 
@@ -453,7 +481,7 @@ export function AdminTicketsClient({
           {filtered.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-slate-950/84 py-16 text-center backdrop-blur">
               <p className="text-sm font-black uppercase text-slate-500">
-                {tickets.length > 0
+                {liveTickets.length > 0
                   ? "No tickets match your filters."
                   : failedSources.length > 0
                     ? "No tickets loaded. Unavailable sources may still hold open work."
@@ -504,6 +532,9 @@ export function AdminTicketsClient({
                 seasonNames={seasonNames}
                 divisionNames={divisionNames}
                 capabilities={capabilities}
+                actionMode={selectedActionMode}
+                onTicketChange={updateTicket}
+                onActionSuccess={refreshAfterAction}
               />
             </>
           ) : (

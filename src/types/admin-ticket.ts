@@ -139,7 +139,7 @@ export interface AdminTicket {
  */
 export interface TicketViewerCapabilities {
   canViewQueue: boolean;
-  /** Always false in this PR: the queue is read-only. */
+  /** Whether the viewer may use safe ticket actions backed by admin endpoints. */
   canActOnTickets: boolean;
   /** Whether restricted identities may be revealed. Always false for now. */
   canViewRestrictedIdentities: boolean;
@@ -151,7 +151,9 @@ export function capabilitiesForAdminRole(
   void role;
   return {
     canViewQueue: true,
-    canActOnTickets: false,
+    // SITE-05 replaces this temporary all-admin mapping with database-backed
+    // role capabilities and matching server-side scope enforcement.
+    canActOnTickets: true,
     canViewRestrictedIdentities: false,
   };
 }
