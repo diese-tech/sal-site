@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
+
+const mocks = vi.hoisted(() => ({
+  getSupabaseServerClient: vi.fn(),
+}));
+
+vi.mock("@/lib/supabase-server", () => ({
+  getSupabaseServerClient: mocks.getSupabaseServerClient,
+}));
+
 import {
   getUnresolvedAdminTicketCount,
   getUnresolvedAdminTicketCountFromClient,
@@ -30,7 +39,7 @@ function fakeClient(results: Record<string, FakeCountResult>) {
 describe("getUnresolvedAdminTicketCountFromClient", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.unstubAllEnvs();
+    mocks.getSupabaseServerClient.mockReset();
   });
 
   it("returns the unresolved total across every current ticket source", async () => {
@@ -65,9 +74,9 @@ describe("getUnresolvedAdminTicketCountFromClient", () => {
   });
 
   it("omits the count when Supabase is not configured", async () => {
-    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
-    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    mocks.getSupabaseServerClient.mockReturnValue(null);
 
     await expect(getUnresolvedAdminTicketCount()).resolves.toBeNull();
+    expect(mocks.getSupabaseServerClient).toHaveBeenCalledOnce();
   });
 });
