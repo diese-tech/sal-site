@@ -514,6 +514,8 @@ function BugReportReceipt({ receipt }: { receipt: BugReportSubmissionReceipt }) 
       <div className={`mt-6 grid gap-3 ${anonymousAccess ? "sm:grid-cols-[1fr_auto]" : ""}`}>
         <a
           href={receipt.reporterAccess.accessUrl}
+          referrerPolicy="no-referrer"
+          rel="noreferrer"
           className="min-w-0 truncate rounded-lg border border-cyan-300/25 bg-cyan-300/[0.07] px-4 py-3 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10"
         >
           {receipt.reporterAccess.accessUrl}

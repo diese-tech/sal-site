@@ -69,6 +69,8 @@ export interface BugReportUploadTarget {
 export interface BugReportUploadSessionReceipt {
   sessionId: string;
   targets: BugReportUploadTarget[];
+  /** Exact HTTPS hosts approved by protected server runtime configuration. */
+  allowedUploadHosts: string[];
   expiresAt: string;
 }
 

@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import type { BugReportPersistence } from "@/lib/bug-reports/persistence";
-import { createBugReportPostHandler } from "./route";
+import {
+  createBugReportPostHandler as createHandler,
+  type BugReportPostDependencies,
+} from "./route";
 
 const validPayload = {
   category: "website",
@@ -15,7 +18,7 @@ const validPayload = {
 };
 
 function requestFor(payload: unknown = validPayload, attachments: unknown = []) {
-  return new NextRequest("http://localhost/api/bug-reports", {
+  return new NextRequest("https://sal.example/api/bug-reports", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ payload, attachments }),
@@ -23,9 +26,25 @@ function requestFor(payload: unknown = validPayload, attachments: unknown = []) 
 }
 
 const anonymousReporter = async () => ({ kind: "anonymous" } as const);
+const canonicalSiteOrigin = "https://sal.example";
 const allowedSubmission = {
-  checkSubmission: async () => ({ allowed: true, decisionId: "rate-decision-1", captchaVerified: false } as const),
+  checkAttempt: async () => ({
+    allowed: true,
+    decisionId: "attempt-decision-1",
+    captchaVerified: false,
+  } as const),
+  consumeAction: async () => ({
+    allowed: true,
+    decisionId: "rate-decision-1",
+    captchaVerified: false,
+  } as const),
 };
+
+function createBugReportPostHandler(
+  dependencies: Omit<BugReportPostDependencies, "canonicalSiteOrigin">,
+) {
+  return createHandler({ ...dependencies, canonicalSiteOrigin });
+}
 
 describe("POST /api/bug-reports", () => {
   it("fails closed before reading input while the feature is disabled", async () => {
@@ -39,7 +58,7 @@ describe("POST /api/bug-reports", () => {
     });
 
     const response = await handler(
-      new NextRequest("http://localhost/api/bug-reports", { method: "POST", body: "not multipart" }),
+      new NextRequest("https://sal.example/api/bug-reports", { method: "POST", body: "not json" }),
     );
 
     expect(response.status).toBe(503);
@@ -58,12 +77,61 @@ describe("POST /api/bug-reports", () => {
     });
 
     const response = await handler(
-      new NextRequest("http://localhost/api/bug-reports", { method: "POST", body: "not multipart" }),
+      new NextRequest("https://sal.example/api/bug-reports", { method: "POST", body: "not json" }),
     );
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({ ok: false, code: "persistence_unavailable" });
     expect(resolveReporter).not.toHaveBeenCalled();
+  });
+
+  it("applies the anonymous attempt gate before parsing input or resolving identity", async () => {
+    const resolveReporter = vi.fn(anonymousReporter);
+    const consumeAction = vi.fn();
+    const handler = createBugReportPostHandler({
+      isEnabled: () => true,
+      persistence: { persist: vi.fn() },
+      abuseProtection: {
+        checkAttempt: vi.fn().mockResolvedValue({
+          allowed: false,
+          retryAfterSeconds: 60,
+          captchaRequired: true,
+        }),
+        consumeAction,
+      },
+      resolveReporter,
+    });
+
+    const response = await handler(
+      new NextRequest("https://sal.example/api/bug-reports", {
+        method: "POST",
+        body: "not json",
+      }),
+    );
+
+    expect(response.status).toBe(429);
+    expect(resolveReporter).not.toHaveBeenCalled();
+    expect(consumeAction).not.toHaveBeenCalled();
+  });
+
+  it("rejects unexpected request hosts before building any public access link", async () => {
+    const persist = vi.fn();
+    const handler = createBugReportPostHandler({
+      isEnabled: () => true,
+      persistence: { persist },
+      abuseProtection: allowedSubmission,
+      resolveReporter: anonymousReporter,
+    });
+
+    const request = new NextRequest("https://attacker.example/api/bug-reports", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ payload: validPayload, attachments: [] }),
+    });
+    const response = await handler(request);
+
+    expect(response.status).toBe(400);
+    expect(persist).not.toHaveBeenCalled();
   });
 
   it("returns field-level validation errors for an invalid submission", async () => {
@@ -149,7 +217,7 @@ describe("POST /api/bug-reports", () => {
         reporterAccess: {
           kind: "anonymous",
           accessUrl:
-            "http://localhost/report-a-bug/tickets/ticket-public-0190#access=secret-access-token",
+            "https://sal.example/report-a-bug/tickets/ticket-public-0190#access=secret-access-token",
           recoveryCode: "SAL-190-A",
         },
         relay: { requested: false, queued: false },
@@ -226,7 +294,7 @@ describe("POST /api/bug-reports", () => {
   });
 
   it("does not link a signed-in identity unless the reporter consents to private relay", async () => {
-    const checkSubmission = vi.fn().mockResolvedValue({
+    const consumeAction = vi.fn().mockResolvedValue({
       allowed: true,
       decisionId: "rate-decision-1",
       captchaVerified: false,
@@ -250,7 +318,7 @@ describe("POST /api/bug-reports", () => {
     const handler = createBugReportPostHandler({
       isEnabled: () => true,
       persistence: { persist },
-      abuseProtection: { checkSubmission },
+      abuseProtection: { ...allowedSubmission, consumeAction },
       resolveReporter,
     });
 
@@ -260,7 +328,7 @@ describe("POST /api/bug-reports", () => {
     expect(persist).toHaveBeenCalledWith(
       expect.objectContaining({ reporter: { kind: "anonymous" } }),
     );
-    expect(checkSubmission).toHaveBeenCalledWith(
+    expect(consumeAction).toHaveBeenCalledWith(
       expect.objectContaining({
         reporter: { kind: "anonymous" },
         action: "ticket_submission",
@@ -317,7 +385,8 @@ describe("POST /api/bug-reports", () => {
       isEnabled: () => true,
       persistence: { persist },
       abuseProtection: {
-        checkSubmission: async () => ({ allowed: false, retryAfterSeconds: 900, captchaRequired: true }),
+        checkAttempt: async () => ({ allowed: false, retryAfterSeconds: 900, captchaRequired: true }),
+        consumeAction: vi.fn(),
       },
       resolveReporter: anonymousReporter,
     });
@@ -326,6 +395,8 @@ describe("POST /api/bug-reports", () => {
 
     expect(response.status).toBe(429);
     expect(response.headers.get("Retry-After")).toBe("900");
+    expect(response.headers.get("Cache-Control")).toContain("no-store");
+    expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
     await expect(response.json()).resolves.toMatchObject({
       ok: false,
       code: "rate_limited",

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { uploadBugReportAttachments } from "./client-upload";
+import { assertDirectUploadTarget, uploadBugReportAttachments } from "./client-upload";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -20,6 +20,7 @@ describe("direct bug-report attachment upload", () => {
             uploadSession: {
               sessionId: "upload-session-0001",
               expiresAt: "2026-07-19T00:15:00.000Z",
+              allowedUploadHosts: ["storage.example"],
               targets: [
                 {
                   uploadId: "upload-object-0000001",
@@ -66,5 +67,16 @@ describe("direct bug-report attachment upload", () => {
       "/api/bug-reports/uploads/upload-object-0000001/finalize",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("rejects non-HTTPS, localhost, and arbitrary HTTPS upload targets", () => {
+    expect(() => assertDirectUploadTarget("ftp://storage.example/file", ["storage.example"])).toThrow();
+    expect(() => assertDirectUploadTarget("https://localhost/file", ["localhost"])).toThrow();
+    expect(() =>
+      assertDirectUploadTarget("https://attacker.example/file", ["storage.example"]),
+    ).toThrow();
+    expect(() =>
+      assertDirectUploadTarget("https://storage.example/file", ["storage.example"]),
+    ).not.toThrow();
   });
 });

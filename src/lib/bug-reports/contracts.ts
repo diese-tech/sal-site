@@ -6,11 +6,13 @@ import {
   type BugReportAttachmentReference,
   type BugReportErrorCode,
   type BugReportSubmissionPayload,
+  type BugReportUploadSessionReceipt,
 } from "@/types/bug-report";
 
 export const BUG_REPORT_ATTACHMENT_LIMITS = {
   maxFiles: 5,
   maxBytesPerFile: 20 * 1024 * 1024,
+  maxBytesPerSession: 100 * 1024 * 1024,
   maxWidth: 16_384,
   maxHeight: 16_384,
   maxPixels: 40_000_000,
@@ -156,7 +158,13 @@ export function parseBugReportAttachmentMetadata(
   const parsed = z.array(attachmentDescriptorSchema).min(1).max(
     BUG_REPORT_ATTACHMENT_LIMITS.maxFiles,
   ).safeParse(input);
-  if (parsed.success) return { success: true, data: parsed.data };
+  if (
+    parsed.success &&
+    parsed.data.reduce((total, file) => total + file.size, 0) <=
+      BUG_REPORT_ATTACHMENT_LIMITS.maxBytesPerSession
+  ) {
+    return { success: true, data: parsed.data };
+  }
   return {
     success: false,
     code: "invalid_request",
@@ -184,6 +192,114 @@ export function parseBugReportAttachmentReferences(
     code: "invalid_upload_reference",
     message: "One or more uploaded image references are invalid or duplicated.",
   };
+}
+
+const uploadTargetAdapterSchema = z.object({
+  uploadId: z.string().regex(/^[A-Za-z0-9_-]{16,160}$/),
+  uploadUrl: z.url(),
+  method: z.literal("PUT"),
+  requiredHeaders: z.record(z.string(), z.string()),
+  finalizationToken: z.string().min(32).max(512),
+  expiresAt: z.iso.datetime(),
+});
+
+const uploadSessionAdapterSchema = z.object({
+  sessionId: z.string().regex(/^[A-Za-z0-9_-]{16,160}$/),
+  targets: z.array(uploadTargetAdapterSchema).min(1).max(BUG_REPORT_ATTACHMENT_LIMITS.maxFiles),
+  expiresAt: z.iso.datetime(),
+});
+
+export type BugReportUploadSessionAdapterParseResult =
+  | { success: true; data: Omit<BugReportUploadSessionReceipt, "allowedUploadHosts"> }
+  | { success: false; message: string };
+
+export function parseBugReportUploadSessionAdapterResult(
+  input: unknown,
+  expectedTargets: number,
+  now: Date,
+): BugReportUploadSessionAdapterParseResult {
+  const parsed = uploadSessionAdapterSchema.safeParse(input);
+  if (!parsed.success || parsed.data.targets.length !== expectedTargets) {
+    return { success: false, message: "Private storage returned an invalid upload session." };
+  }
+
+  const nowMs = now.getTime();
+  const latestExpiry = nowMs + 15 * 60 * 1_000;
+  const expiries = [parsed.data.expiresAt, ...parsed.data.targets.map((target) => target.expiresAt)];
+  if (
+    expiries.some((value) => {
+      const expiry = Date.parse(value);
+      return !Number.isFinite(expiry) || expiry <= nowMs || expiry > latestExpiry;
+    })
+  ) {
+    return { success: false, message: "Private storage returned an unsafe upload expiry." };
+  }
+
+  for (const target of parsed.data.targets) {
+    const headers = Object.entries(target.requiredHeaders);
+    const allowedHeaderNames = new Set(["content-type", "cache-control", "x-upsert"]);
+    if (
+      headers.length === 0 ||
+      headers.length > 16 ||
+      headers.some(
+        ([name, value]) =>
+          !/^[a-z0-9-]+$/.test(name) ||
+          !allowedHeaderNames.has(name) ||
+          value.length > 1_024 ||
+          name === "authorization" ||
+          name === "cookie",
+      )
+    ) {
+      return { success: false, message: "Private storage returned unsafe upload headers." };
+    }
+  }
+
+  return { success: true, data: parsed.data };
+}
+
+export function parseBugReportFinalizationAdapterResult(
+  input: unknown,
+): { success: true; data: BugReportAttachmentReference } | { success: false; message: string } {
+  const parsed = attachmentReferenceSchema.safeParse(input);
+  return parsed.success
+    ? { success: true, data: parsed.data }
+    : { success: false, message: "Private storage returned an invalid finalized reference." };
+}
+
+export function normalizeCanonicalSiteOrigin(input: unknown): string | null {
+  if (typeof input !== "string") return null;
+  try {
+    const url = new URL(input);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash
+    ) {
+      return null;
+    }
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+export function normalizeAllowedUploadHosts(input: unknown): string[] | null {
+  if (!Array.isArray(input) || input.length === 0 || input.length > 8) return null;
+  const hosts = input.map((value) => (typeof value === "string" ? value.toLowerCase() : ""));
+  if (
+    hosts.some(
+      (host) =>
+        !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::\d{2,5})?$/.test(host) ||
+        host === "localhost" ||
+        !host.split(":")[0].includes("."),
+    )
+  ) {
+    return null;
+  }
+  return [...new Set(hosts)];
 }
 
 export function describeBugReportAttachments(

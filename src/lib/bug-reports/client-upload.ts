@@ -33,12 +33,16 @@ export async function uploadBugReportAttachments(
   const finalized: BugReportAttachmentReference[] = [];
   for (const [index, file] of files.entries()) {
     const target = sessionResult.uploadSession.targets[index];
-    assertDirectUploadTarget(target.uploadUrl);
+    assertDirectUploadTarget(
+      target.uploadUrl,
+      sessionResult.uploadSession.allowedUploadHosts,
+    );
     const uploadResponse = await fetch(target.uploadUrl, {
       method: target.method,
       headers: target.requiredHeaders,
       body: file,
       credentials: "omit",
+      referrerPolicy: "no-referrer",
     });
     if (!uploadResponse.ok) {
       throw new Error(`${file.name} could not be uploaded to private storage.`);
@@ -76,9 +80,16 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-function assertDirectUploadTarget(uploadUrl: string) {
+export function assertDirectUploadTarget(uploadUrl: string, allowedUploadHosts: readonly string[]) {
   const url = new URL(uploadUrl);
-  if (url.protocol !== "https:" && url.hostname !== "localhost") {
+  const normalizedAllowedHosts = allowedUploadHosts.map((host) => host.toLowerCase());
+  if (
+    url.protocol !== "https:" ||
+    Boolean(url.username) ||
+    Boolean(url.password) ||
+    url.hostname === "localhost" ||
+    !normalizedAllowedHosts.includes(url.host.toLowerCase())
+  ) {
     throw new Error("Private upload storage returned an unsafe upload target.");
   }
 }

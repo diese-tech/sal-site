@@ -13,6 +13,11 @@ export type BugReportAbuseDecision =
       captchaRequired: boolean;
     };
 
+export type BugReportAbuseAction =
+  | "upload_session"
+  | "upload_finalization"
+  | "ticket_submission";
+
 /**
  * Release B supplies a shared implementation. For anonymous reports it may
  * derive a rotating salted hash from request IP headers, but it must never
@@ -20,11 +25,21 @@ export type BugReportAbuseDecision =
  * submissions per hour with CAPTCHA escalation after repeated attempts.
  */
 export interface BugReportAbuseProtection {
-  checkSubmission(input: {
+  /** Durable, anonymous, low-cost gate that runs before parsing bodies or resolving auth. */
+  checkAttempt(input: {
     request: NextRequest;
+    action: BugReportAbuseAction;
+  }): Promise<BugReportAbuseDecision>;
+
+  /**
+   * Consumes the validated action allowance after syntax and capability checks.
+   * Upload reservations and completed ticket submissions may use separate
+   * durable buckets so one report is not double-counted.
+   */
+  consumeAction(input: {
+    attemptDecisionId: string;
+    action: BugReportAbuseAction;
     reporter: BugReportReporterContext;
-    /** Upload sessions reserve capacity; ticket submission consumes the report allowance. */
-    action: "upload_session" | "ticket_submission";
   }): Promise<BugReportAbuseDecision>;
 }
 

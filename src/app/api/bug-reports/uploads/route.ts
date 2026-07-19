@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseBugReportAttachmentMetadata } from "@/lib/bug-reports/contracts";
+import {
+  normalizeAllowedUploadHosts,
+  normalizeCanonicalSiteOrigin,
+  parseBugReportAttachmentMetadata,
+  parseBugReportUploadSessionAdapterResult,
+} from "@/lib/bug-reports/contracts";
 import type { BugReportAbuseProtection } from "@/lib/bug-reports/abuse-protection";
 import { getBugReportRuntime } from "@/lib/bug-reports/runtime";
 import type { BugReportUploadService } from "@/lib/bug-reports/upload-service";
+import {
+  requestUsesCanonicalOrigin,
+  sensitiveJsonResponse,
+} from "@/lib/bug-reports/http";
 import type {
   BugReportErrorCode,
   BugReportErrorResponse,
@@ -15,6 +24,9 @@ export interface BugReportUploadSessionDependencies {
   isEnabled: () => boolean;
   abuseProtection: BugReportAbuseProtection | null;
   uploadService: BugReportUploadService | null;
+  canonicalSiteOrigin: string | null;
+  allowedUploadHosts: readonly string[] | null;
+  now: () => Date;
 }
 
 export function createBugReportUploadSessionHandler(
@@ -35,6 +47,41 @@ export function createBugReportUploadSessionHandler(
         503,
         "rate_limit_unavailable",
         "Secure upload limits are not available yet. No files were uploaded.",
+      );
+    }
+
+    const canonicalSiteOrigin = normalizeCanonicalSiteOrigin(dependencies.canonicalSiteOrigin);
+    const allowedUploadHosts = normalizeAllowedUploadHosts(dependencies.allowedUploadHosts);
+    if (!canonicalSiteOrigin || !allowedUploadHosts) {
+      return errorResponse(
+        503,
+        "upload_unavailable",
+        "Private upload configuration is unavailable. No files were uploaded.",
+      );
+    }
+    if (!requestUsesCanonicalOrigin(request, canonicalSiteOrigin)) {
+      return errorResponse(400, "invalid_request", "The request host is not allowed.");
+    }
+
+    let attemptDecision;
+    try {
+      attemptDecision = await dependencies.abuseProtection.checkAttempt({
+        request,
+        action: "upload_session",
+      });
+    } catch {
+      return errorResponse(
+        503,
+        "rate_limit_unavailable",
+        "Secure upload limits could not be verified. No files were uploaded.",
+      );
+    }
+    if (!attemptDecision.allowed) {
+      return errorResponse(
+        429,
+        "rate_limited",
+        "Too many upload attempts were made. Please wait before trying again.",
+        attemptDecision.retryAfterSeconds,
       );
     }
 
@@ -61,8 +108,8 @@ export function createBugReportUploadSessionHandler(
 
     let abuseDecision;
     try {
-      abuseDecision = await dependencies.abuseProtection.checkSubmission({
-        request,
+      abuseDecision = await dependencies.abuseProtection.consumeAction({
+        attemptDecisionId: attemptDecision.decisionId,
         reporter: { kind: "anonymous" },
         action: "upload_session",
       });
@@ -83,11 +130,35 @@ export function createBugReportUploadSessionHandler(
     }
 
     try {
-      const uploadSession = await dependencies.uploadService.createSession({
+      const adapterResult = await dependencies.uploadService.createSession({
         files: parsed.data,
         abuseDecisionId: abuseDecision.decisionId,
       });
-      return NextResponse.json({ ok: true, uploadSession }, { status: 201 });
+      const uploadSessionResult = parseBugReportUploadSessionAdapterResult(
+        adapterResult,
+        parsed.data.length,
+        dependencies.now(),
+      );
+      if (!uploadSessionResult.success) throw new Error(uploadSessionResult.message);
+
+      const targetHosts = uploadSessionResult.data.targets.map((target, index) => {
+        const url = new URL(target.uploadUrl);
+        if (
+          url.protocol !== "https:" ||
+          url.username ||
+          url.password ||
+          !allowedUploadHosts.includes(url.host.toLowerCase()) ||
+          target.requiredHeaders["content-type"] !== parsed.data[index].mediaType
+        ) {
+          throw new Error("Unsafe upload target");
+        }
+        return url.host.toLowerCase();
+      });
+      const uploadSession = {
+        ...uploadSessionResult.data,
+        allowedUploadHosts: [...new Set(targetHosts)],
+      };
+      return sensitiveJsonResponse({ ok: true as const, uploadSession }, { status: 201 });
     } catch {
       return errorResponse(
         503,
@@ -104,7 +175,7 @@ function errorResponse(
   message: string,
   retryAfterSeconds?: number,
 ): NextResponse<BugReportErrorResponse> {
-  return NextResponse.json(
+  return sensitiveJsonResponse(
     {
       ok: false,
       code,
@@ -124,4 +195,7 @@ export const POST = createBugReportUploadSessionHandler({
   isEnabled: () => runtime.ready,
   abuseProtection: runtime.abuseProtection,
   uploadService: runtime.uploadService,
+  canonicalSiteOrigin: runtime.configuration?.canonicalSiteOrigin ?? null,
+  allowedUploadHosts: runtime.configuration?.allowedUploadHosts ?? null,
+  now: () => new Date(),
 });

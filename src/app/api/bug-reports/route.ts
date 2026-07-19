@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser, getDiscordId } from "@/lib/supabase-auth-server";
 import {
+  normalizeCanonicalSiteOrigin,
   parseBugReportAttachmentReferences,
   parseBugReportPayload,
 } from "@/lib/bug-reports/contracts";
@@ -13,6 +14,10 @@ import {
   type BugReportAbuseProtection,
 } from "@/lib/bug-reports/abuse-protection";
 import { getBugReportRuntime } from "@/lib/bug-reports/runtime";
+import {
+  requestUsesCanonicalOrigin,
+  sensitiveJsonResponse,
+} from "@/lib/bug-reports/http";
 import type {
   BugReportErrorCode,
   BugReportErrorResponse,
@@ -27,6 +32,7 @@ export interface BugReportPostDependencies {
   isEnabled: () => boolean;
   persistence: BugReportPersistence | null;
   abuseProtection: BugReportAbuseProtection | null;
+  canonicalSiteOrigin: string | null;
   resolveReporter: (request: NextRequest) => Promise<BugReportReporterContext>;
 }
 
@@ -53,6 +59,41 @@ export function createBugReportPostHandler(dependencies: BugReportPostDependenci
         503,
         "rate_limit_unavailable",
         "Secure submission limits are not available yet. No report was submitted.",
+      );
+    }
+
+    const canonicalSiteOrigin = normalizeCanonicalSiteOrigin(dependencies.canonicalSiteOrigin);
+    if (!canonicalSiteOrigin) {
+      return errorResponse(
+        503,
+        "persistence_unavailable",
+        "Canonical ticket links are not configured. No report was submitted.",
+      );
+    }
+    if (!requestUsesCanonicalOrigin(request, canonicalSiteOrigin)) {
+      return errorResponse(400, "invalid_request", "The request host is not allowed.");
+    }
+
+    let attemptDecision;
+    try {
+      attemptDecision = await dependencies.abuseProtection.checkAttempt({
+        request,
+        action: "ticket_submission",
+      });
+    } catch {
+      return errorResponse(
+        503,
+        "rate_limit_unavailable",
+        "Secure submission limits could not be verified. No report was submitted.",
+      );
+    }
+    if (!attemptDecision.allowed) {
+      return errorResponse(
+        429,
+        "rate_limited",
+        "Too many reports were attempted. Please wait before trying again.",
+        undefined,
+        attemptDecision.retryAfterSeconds,
       );
     }
 
@@ -91,8 +132,8 @@ export function createBugReportPostHandler(dependencies: BugReportPostDependenci
 
     let abuseDecision;
     try {
-      abuseDecision = await dependencies.abuseProtection.checkSubmission({
-        request,
+      abuseDecision = await dependencies.abuseProtection.consumeAction({
+        attemptDecisionId: attemptDecision.decisionId,
         reporter,
         action: "ticket_submission",
       });
@@ -121,8 +162,8 @@ export function createBugReportPostHandler(dependencies: BugReportPostDependenci
         reporter,
         abuseDecisionId: abuseDecision.decisionId,
       });
-      return NextResponse.json(
-        { ok: true, ticket: buildPublicBugReportReceipt(ticket, request.nextUrl.origin) },
+      return sensitiveJsonResponse(
+        { ok: true as const, ticket: buildPublicBugReportReceipt(ticket, canonicalSiteOrigin) },
         { status: 201 },
       );
     } catch {
@@ -222,7 +263,7 @@ function errorResponse(
   fieldErrors?: Partial<Record<keyof BugReportSubmissionPayload | "attachments", string>>,
   retryAfterSeconds?: number,
 ): NextResponse<BugReportErrorResponse> {
-  return NextResponse.json(
+  return sensitiveJsonResponse(
     {
       ok: false,
       code,
@@ -253,5 +294,6 @@ export const POST = createBugReportPostHandler({
   isEnabled: () => runtime.ready,
   persistence: runtime.persistence,
   abuseProtection: runtime.abuseProtection,
+  canonicalSiteOrigin: runtime.configuration?.canonicalSiteOrigin ?? null,
   resolveReporter,
 });
