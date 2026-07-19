@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
 import { cn } from "@/lib/utils";
 
-// badge is a typed extension point: a later PR can supply a server-side
-// unresolved-ticket count without reshaping the nav.
+// Badge values arrive with the server-rendered admin shell; the client layout
+// never fetches or polls ticket data.
 type NavItem = { href: string; label: string; exact?: boolean; badge?: number };
 type NavGroup = { title: string; items: NavItem[] };
 
@@ -70,7 +70,15 @@ function Brand() {
   );
 }
 
-function NavGroups({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function NavGroups({
+  pathname,
+  onNavigate,
+  ticketBadgeCount,
+}: {
+  pathname: string;
+  onNavigate?: () => void;
+  ticketBadgeCount?: number | null;
+}) {
   const isActive = (href: string, exact?: boolean) => (exact ? pathname === href : pathname.startsWith(href));
   return (
     <nav className="space-y-5">
@@ -78,7 +86,9 @@ function NavGroups({ pathname, onNavigate }: { pathname: string; onNavigate?: ()
         <div key={group.title}>
           <p className="mb-1.5 px-3 text-[0.6rem] font-black uppercase tracking-[0.18em] text-slate-600">{group.title}</p>
           <div className="space-y-0.5">
-            {group.items.map(({ href, label, exact, badge }) => {
+            {group.items.map((item) => {
+              const { href, label, exact } = item;
+              const badge = href === "/admin/tickets" ? ticketBadgeCount ?? undefined : item.badge;
               const active = isActive(href, exact);
               return (
                 <Link
@@ -95,7 +105,10 @@ function NavGroups({ pathname, onNavigate }: { pathname: string; onNavigate?: ()
                   {active && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-cyan-300" />}
                   {label}
                   {badge !== undefined && badge > 0 && (
-                    <span className="ml-auto rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[0.6rem] text-amber-200">
+                    <span
+                      aria-label={`${badge} unresolved ${badge === 1 ? "ticket" : "tickets"}`}
+                      className="ml-auto rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[0.6rem] text-amber-200"
+                    >
                       {badge}
                     </span>
                   )}
@@ -137,12 +150,22 @@ function MockDataBanner() {
 export function AdminLayoutClient({
   children,
   isMockFallback,
+  ticketBadgeCount,
 }: {
   children: React.ReactNode;
   isMockFallback: boolean;
+  ticketBadgeCount?: number | null;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const previousPathname = useRef(pathname);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (previousPathname.current === pathname) return;
+    previousPathname.current = pathname;
+    router.refresh();
+  }, [pathname, router]);
   const isLogin = pathname === "/admin/login";
 
   if (isLogin) return <>{children}</>;
@@ -179,7 +202,11 @@ export function AdminLayoutClient({
               </button>
             </div>
             <div className="flex-1 overflow-y-auto px-3 py-4">
-              <NavGroups pathname={pathname} onNavigate={() => setMenuOpen(false)} />
+              <NavGroups
+                pathname={pathname}
+                onNavigate={() => setMenuOpen(false)}
+                ticketBadgeCount={ticketBadgeCount}
+              />
             </div>
             <div className="border-t border-white/8 px-3 py-3">
               <NavFooter />
@@ -195,7 +222,7 @@ export function AdminLayoutClient({
             <Brand />
           </div>
           <div className="flex-1 overflow-y-auto px-3 py-4">
-            <NavGroups pathname={pathname} />
+            <NavGroups pathname={pathname} ticketBadgeCount={ticketBadgeCount} />
           </div>
           <div className="border-t border-white/8 px-3 py-3">
             <NavFooter />
