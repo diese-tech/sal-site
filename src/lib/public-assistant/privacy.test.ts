@@ -16,7 +16,7 @@ const publicSource = {
   releaseId: "rules-2026.1",
   sourceVersion: "1.0.0",
   approvalVersion: "approval-4",
-  scope: { global: true, seasonIds: [], divisionIds: [] },
+  scope: { global: true, seasonIds: [], divisionScopes: [] },
   effectiveAt: "2026-07-18T12:00:00Z",
   expiresAt: null,
   status: "published" as const,

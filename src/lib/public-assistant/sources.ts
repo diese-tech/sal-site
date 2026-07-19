@@ -18,18 +18,27 @@ const publicScopeSchema = z
   .object({
     global: z.boolean(),
     seasonIds: z.array(z.string().min(1).max(160)).max(100),
-    divisionIds: z.array(z.string().min(1).max(160)).max(100),
+    divisionScopes: z.array(z.object({
+      seasonId: z.string().min(1).max(160),
+      divisionId: z.string().min(1).max(160),
+    }).strict()).max(100),
   })
   .strict()
   .superRefine((scope, context) => {
-    if (scope.global && (scope.seasonIds.length > 0 || scope.divisionIds.length > 0)) {
+    if (scope.global && (scope.seasonIds.length > 0 || scope.divisionScopes.length > 0)) {
       context.addIssue({ code: "custom", message: "Global sources cannot also declare season or division scope." });
     }
-    if (!scope.global && scope.seasonIds.length === 0 && scope.divisionIds.length === 0) {
+    if (!scope.global && scope.seasonIds.length === 0 && scope.divisionScopes.length === 0) {
       context.addIssue({ code: "custom", message: "A non-global source must declare season or division scope." });
     }
-    if (scope.divisionIds.length > 0 && scope.seasonIds.length === 0) {
-      context.addIssue({ code: "custom", message: "Division sources must also declare their season scope." });
+    if (new Set(scope.seasonIds).size !== scope.seasonIds.length) {
+      context.addIssue({ code: "custom", message: "Season scopes must be unique." });
+    }
+    const divisionPairs = scope.divisionScopes.map(
+      ({ seasonId, divisionId }) => `${seasonId}\u0000${divisionId}`,
+    );
+    if (new Set(divisionPairs).size !== divisionPairs.length) {
+      context.addIssue({ code: "custom", message: "Season and division scope pairs must be unique." });
     }
   });
 
@@ -155,14 +164,17 @@ function sourceMatchesScope(source: SanitizedAssistantSource, requested: Assista
   if (source.scope.global) return true;
   if (requested.kind === "global") return false;
 
-  const seasonMatches = source.scope.seasonIds.length === 0 || source.scope.seasonIds.includes(requested.seasonId);
   if (requested.kind === "season") {
-    return seasonMatches && source.scope.seasonIds.length > 0 && source.scope.divisionIds.length === 0;
+    return source.scope.seasonIds.includes(requested.seasonId);
   }
 
-  const divisionMatches =
-    source.scope.divisionIds.length === 0 || source.scope.divisionIds.includes(requested.divisionId);
-  return seasonMatches && divisionMatches && (source.scope.seasonIds.length > 0 || source.scope.divisionIds.length > 0);
+  return (
+    source.scope.seasonIds.includes(requested.seasonId) ||
+    source.scope.divisionScopes.some(
+      ({ seasonId, divisionId }) =>
+        seasonId === requested.seasonId && divisionId === requested.divisionId,
+    )
+  );
 }
 
 export function selectEligibleSources(input: unknown, context: SourceSelectionContext): SourceSelectionResult {

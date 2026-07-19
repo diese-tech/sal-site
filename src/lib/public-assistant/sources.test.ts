@@ -21,7 +21,7 @@ function source(
     releaseId: "rules-2026.1",
     sourceVersion: "1.0.0",
     approvalVersion: "approval-4",
-    scope: { global: true, seasonIds: [], divisionIds: [] },
+    scope: { global: true, seasonIds: [], divisionScopes: [] },
     effectiveAt,
     expiresAt: null,
     status: "published",
@@ -53,7 +53,7 @@ describe("sanitized assistant sources", () => {
     expect(
       sanitizedAssistantSourceSchema.safeParse({
         ...source("bad", "published_rule", "2026-07-18T12:00:00Z"),
-        scope: { global: false, seasonIds: [], divisionIds: [] },
+        scope: { global: false, seasonIds: [], divisionScopes: [] },
         expiresAt: "2026-07-17T12:00:00Z",
         supersededBy: "rule-next",
         publicUrl: "javascript:alert(1)",
@@ -62,13 +62,17 @@ describe("sanitized assistant sources", () => {
     expect(
       sanitizedAssistantSourceSchema.safeParse({
         ...source("mixed-scope", "published_rule", "2026-07-18T12:00:00Z"),
-        scope: { global: true, seasonIds: ["season-3"], divisionIds: [] },
+        scope: { global: true, seasonIds: ["season-3"], divisionScopes: [] },
       }).success,
     ).toBe(false);
     expect(
       sanitizedAssistantSourceSchema.safeParse({
         ...source("division-without-season", "published_rule", "2026-07-18T12:00:00Z"),
-        scope: { global: false, seasonIds: [], divisionIds: ["solar"] },
+        scope: {
+          global: false,
+          seasonIds: [],
+          divisionScopes: [{ seasonId: "", divisionId: "solar" }],
+        },
       }).success,
     ).toBe(false);
   });
@@ -108,7 +112,11 @@ describe("sanitized assistant sources", () => {
   it("binds sources to the exact release, current time, scope, supersession, and conflict contract", () => {
     const eligibleRule = {
       ...source("eligible-rule", "published_rule", "2026-07-01T12:00:00Z"),
-      scope: { global: false, seasonIds: ["season-3"], divisionIds: ["solar"] },
+      scope: {
+        global: false,
+        seasonIds: [],
+        divisionScopes: [{ seasonId: "season-3", divisionId: "solar" }],
+      },
     };
     const eligiblePrecedent = {
       ...source("eligible-precedent", "sanitized_precedent", "2026-07-10T12:00:00Z"),
@@ -122,7 +130,11 @@ describe("sanitized assistant sources", () => {
       { ...source("expired", "published_rule", "2026-01-01T12:00:00Z"), expiresAt: "2026-07-17T12:00:00Z" },
       {
         ...source("out-of-scope", "published_rule", "2026-01-01T12:00:00Z"),
-        scope: { global: false, seasonIds: ["season-2"], divisionIds: ["lunar"] },
+        scope: {
+          global: false,
+          seasonIds: [],
+          divisionScopes: [{ seasonId: "season-2", divisionId: "lunar" }],
+        },
       },
       { ...source("different-release", "published_rule", "2026-01-01T12:00:00Z"), releaseId: "rules-2025.9" },
       { ...source("conflict", "published_rule", "2026-01-01T12:00:00Z"), conflictState: "under_review" as const },
@@ -148,7 +160,7 @@ describe("sanitized assistant sources", () => {
   it("does not expose season or division material to a global request", () => {
     const scoped = {
       ...source("season-only", "published_rule", "2026-07-01T12:00:00Z"),
-      scope: { global: false, seasonIds: ["season-3"], divisionIds: [] },
+      scope: { global: false, seasonIds: ["season-3"], divisionScopes: [] },
     };
     expect(
       selectEligibleSources([scoped], {
@@ -157,5 +169,36 @@ describe("sanitized assistant sources", () => {
         now: "2026-07-18T12:00:00Z",
       }).eligible,
     ).toEqual([]);
+  });
+
+  it("preserves explicit season and division pairings without creating cross-pair matches", () => {
+    const paired = {
+      ...source("paired-divisions", "sanitized_precedent", "2026-07-01T12:00:00Z"),
+      scope: {
+        global: false,
+        seasonIds: [],
+        divisionScopes: [
+          { seasonId: "season-1", divisionId: "solar" },
+          { seasonId: "season-2", divisionId: "lunar" },
+        ],
+      },
+    };
+
+    const exactPair = selectEligibleSources([paired], {
+      contract: expectedContract,
+      scope: { kind: "division", seasonId: "season-1", divisionId: "solar" },
+      now: "2026-07-18T12:00:00Z",
+    });
+    const crossedPair = selectEligibleSources([paired], {
+      contract: expectedContract,
+      scope: { kind: "division", seasonId: "season-1", divisionId: "lunar" },
+      now: "2026-07-18T12:00:00Z",
+    });
+
+    expect(exactPair.eligible.map(({ id }) => id)).toEqual(["paired-divisions"]);
+    expect(crossedPair.eligible).toEqual([]);
+    expect(crossedPair.rejected).toEqual([
+      { id: "paired-divisions", reasons: ["out_of_scope"] },
+    ]);
   });
 });
