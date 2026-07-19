@@ -9,7 +9,7 @@ describe("POST /api/assistant/questions", () => {
       get headers() {
         throw new Error("headers must not be read while disabled");
       },
-      json: async () => {
+      get body() {
         bodyRead = true;
         throw new Error("body must not be parsed while disabled");
       },
@@ -25,7 +25,12 @@ describe("POST /api/assistant/questions", () => {
       kind: "assistant_unavailable",
       paidFallback: false,
       escalation: { available: false },
-      reasons: ["durable_feature_flag_missing", "sanitized_sources_missing"],
+      reasons: [
+        "durable_feature_flag_missing",
+        "sanitized_sources_missing",
+        "privacy_guard_missing",
+        "durable_rate_limiter_missing",
+      ],
     });
   });
 });

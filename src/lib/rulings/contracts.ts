@@ -8,41 +8,91 @@ import {
 import { isSafePublicUrl } from "@/lib/public-assistant/safe-url";
 
 const entityIdSchema = z.string().trim().min(1).max(160).regex(/^[A-Za-z0-9._:-]+$/, "Use a stable SAL record ID.");
+const urgencySchema = z.enum(["normal", "game_day_urgent"]);
+const factsSchema = z
+  .array(
+    z
+      .object({
+        key: z.string().trim().min(1).max(120),
+        value: z.string().trim().min(1).max(2_000),
+      })
+      .strict(),
+  )
+  .min(1)
+  .max(30);
+const partySchema = z
+  .object({
+    type: z.enum(["player", "team", "match", "organization"]),
+    id: entityIdSchema,
+  })
+  .strict();
+const commonCaseFields = {
+  seasonId: entityIdSchema,
+  divisionId: entityIdSchema.optional(),
+  facts: factsSchema,
+};
+
+const bindingCaseSchema = z.discriminatedUnion("caseType", [
+  z
+    .object({
+      caseType: z.literal("eligibility"),
+      urgency: urgencySchema,
+      ...commonCaseFields,
+      playerId: entityIdSchema,
+      teamId: entityIdSchema,
+      matchId: entityIdSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      caseType: z.literal("roster"),
+      urgency: urgencySchema,
+      ...commonCaseFields,
+      playerId: entityIdSchema,
+      teamId: entityIdSchema,
+      rosterAction: z.enum(["add", "remove", "substitute", "transfer"]),
+      matchId: entityIdSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      caseType: z.literal("game_day"),
+      urgency: z.literal("game_day_urgent"),
+      ...commonCaseFields,
+      matchId: entityIdSchema,
+      requestingTeamId: entityIdSchema,
+      opponentTeamId: entityIdSchema,
+      gameNumber: z.number().int().positive().max(99).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      caseType: z.literal("conduct"),
+      urgency: urgencySchema,
+      ...commonCaseFields,
+      subject: partySchema,
+      matchId: entityIdSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      caseType: z.literal("other"),
+      urgency: urgencySchema,
+      ...commonCaseFields,
+      affectedParties: z.array(partySchema).min(1).max(10),
+      matchId: entityIdSchema.optional(),
+    })
+    .strict(),
+]).superRefine((request, context) => {
+  if (request.caseType === "game_day" && request.requestingTeamId === request.opponentTeamId) {
+    context.addIssue({ code: "custom", path: ["opponentTeamId"], message: "Opponent must be a different team." });
+  }
+});
 
 export const officialRulingRequestSchema = z
   .object({
     question: z.string().trim().min(6).max(2_000),
-    bindingCase: z
-      .object({
-        caseType: z.enum(["eligibility", "roster", "game_day", "conduct", "other"]),
-        urgency: z.enum(["normal", "game_day_urgent"]),
-        seasonId: entityIdSchema,
-        divisionId: entityIdSchema.optional(),
-        matchId: entityIdSchema.optional(),
-        affectedParties: z
-          .array(
-            z
-              .object({
-                type: z.enum(["player", "team", "match", "organization"]),
-                id: entityIdSchema,
-              })
-              .strict(),
-          )
-          .min(1)
-          .max(10),
-        facts: z
-          .array(
-            z
-              .object({
-                key: z.string().trim().min(1).max(120),
-                value: z.string().trim().min(1).max(2_000),
-              })
-              .strict(),
-          )
-          .min(1)
-          .max(30),
-      })
-      .strict(),
+    bindingCase: bindingCaseSchema,
     confirmation: z
       .object({
         accepted: z.literal(true),

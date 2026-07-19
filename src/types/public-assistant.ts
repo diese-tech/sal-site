@@ -12,8 +12,14 @@ export type PublicSafeModelInput = string & { readonly [publicSafeModelInputBran
 
 export type AssistantSourceType = "published_rule" | "sanitized_precedent" | "public_faq";
 
+export type AssistantQuestionScope =
+  | { kind: "global" }
+  | { kind: "season"; seasonId: string }
+  | { kind: "division"; seasonId: string; divisionId: string };
+
 export interface AssistantQuestionRequest {
   question: string;
+  scope: AssistantQuestionScope;
 }
 
 export interface AssistantCitation {
@@ -83,6 +89,8 @@ export type AssistantUnavailableReason =
   | "durable_feature_flag_missing"
   | "sanitized_sources_missing"
   | "sanitized_source_version_mismatch"
+  | "privacy_guard_missing"
+  | "durable_rate_limiter_missing"
   | "free_model_contract_mismatch";
 
 export interface AssistantUnavailableResponse {

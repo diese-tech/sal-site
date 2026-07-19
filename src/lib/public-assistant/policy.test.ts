@@ -3,17 +3,24 @@ import { PUBLIC_ASSISTANT_MODEL } from "@/types/public-assistant";
 import { evaluateAssistantAvailability, evaluateDeterminism } from "./policy";
 
 describe("public assistant policy", () => {
-  it("fails closed until both durable gates are ready", () => {
+  it("fails closed until every durable launch gate is ready", () => {
     expect(
       evaluateAssistantAvailability({
         durableFeatureFlagEnabled: false,
         sanitizedSourceRepositoryReady: false,
         sanitizedSourceVersionVerified: false,
+        privacyGuardReady: false,
+        durableRateLimiterReady: false,
         model: PUBLIC_ASSISTANT_MODEL,
       }),
     ).toEqual({
       enabled: false,
-      reasons: ["durable_feature_flag_missing", "sanitized_sources_missing"],
+      reasons: [
+        "durable_feature_flag_missing",
+        "sanitized_sources_missing",
+        "privacy_guard_missing",
+        "durable_rate_limiter_missing",
+      ],
     });
   });
 
@@ -23,6 +30,8 @@ describe("public assistant policy", () => {
         durableFeatureFlagEnabled: true,
         sanitizedSourceRepositoryReady: true,
         sanitizedSourceVersionVerified: true,
+        privacyGuardReady: true,
+        durableRateLimiterReady: true,
         model: "paid/provider-model",
       }),
     ).toEqual({
@@ -37,6 +46,8 @@ describe("public assistant policy", () => {
         durableFeatureFlagEnabled: true,
         sanitizedSourceRepositoryReady: true,
         sanitizedSourceVersionVerified: false,
+        privacyGuardReady: true,
+        durableRateLimiterReady: true,
         model: PUBLIC_ASSISTANT_MODEL,
       }),
     ).toEqual({ enabled: false, reasons: ["sanitized_source_version_mismatch"] });

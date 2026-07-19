@@ -15,15 +15,55 @@ export interface BindingCaseParty {
   id: string;
 }
 
-export interface BindingCaseFacts {
-  caseType: BindingCaseType;
+interface BindingCaseBase {
   urgency: BindingCaseUrgency;
   seasonId: string;
   divisionId?: string;
-  matchId?: string;
-  affectedParties: BindingCaseParty[];
   facts: BindingCaseFact[];
 }
+
+export interface EligibilityCaseFacts extends BindingCaseBase {
+  caseType: "eligibility";
+  playerId: string;
+  teamId: string;
+  matchId?: string;
+}
+
+export interface RosterCaseFacts extends BindingCaseBase {
+  caseType: "roster";
+  playerId: string;
+  teamId: string;
+  rosterAction: "add" | "remove" | "substitute" | "transfer";
+  matchId?: string;
+}
+
+export interface GameDayCaseFacts extends Omit<BindingCaseBase, "urgency"> {
+  caseType: "game_day";
+  urgency: "game_day_urgent";
+  matchId: string;
+  requestingTeamId: string;
+  opponentTeamId: string;
+  gameNumber?: number;
+}
+
+export interface ConductCaseFacts extends BindingCaseBase {
+  caseType: "conduct";
+  subject: BindingCaseParty;
+  matchId?: string;
+}
+
+export interface OtherCaseFacts extends BindingCaseBase {
+  caseType: "other";
+  affectedParties: BindingCaseParty[];
+  matchId?: string;
+}
+
+export type BindingCaseFacts =
+  | EligibilityCaseFacts
+  | RosterCaseFacts
+  | GameDayCaseFacts
+  | ConductCaseFacts
+  | OtherCaseFacts;
 
 export interface OfficialRulingRequest {
   question: string;

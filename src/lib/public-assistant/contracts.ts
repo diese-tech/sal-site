@@ -43,6 +43,13 @@ export const assistantCitationSchema = z
 export const assistantQuestionRequestSchema = z
   .object({
     question: z.string().trim().min(6, "Ask a complete question.").max(2_000, "Keep the question under 2,000 characters."),
+    scope: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("global") }).strict(),
+      z.object({ kind: z.literal("season"), seasonId: publicSourceIdSchema }).strict(),
+      z
+        .object({ kind: z.literal("division"), seasonId: publicSourceIdSchema, divisionId: publicSourceIdSchema })
+        .strict(),
+    ]),
   })
   .strict();
 
@@ -72,7 +79,7 @@ const deterministicGuidanceResponseSchema = z
       (citation) =>
         citation.sourceType === "published_rule" &&
         citation.current &&
-        citation.conflictState === "none" &&
+        (citation.conflictState === "none" || citation.conflictState === "resolved") &&
         citation.version === response.determinism.ruleVersion,
     );
 
@@ -119,6 +126,8 @@ const assistantUnavailableResponseSchema = z
         "durable_feature_flag_missing",
         "sanitized_sources_missing",
         "sanitized_source_version_mismatch",
+        "privacy_guard_missing",
+        "durable_rate_limiter_missing",
         "free_model_contract_mismatch",
       ]),
     ),

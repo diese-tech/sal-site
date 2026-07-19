@@ -9,7 +9,7 @@ describe("POST /api/rulings", () => {
       get headers() {
         throw new Error("headers must not be read while Release B/C is disabled");
       },
-      json: async () => {
+      get body() {
         bodyRead = true;
         throw new Error("body must not be parsed while Release B/C is disabled");
       },

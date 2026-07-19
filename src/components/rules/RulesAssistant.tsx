@@ -43,6 +43,7 @@ function clientUnavailableResponse(message: string): PublicAssistantResponse {
 export function RulesAssistant() {
   const questionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const requestButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -61,6 +62,19 @@ export function RulesAssistant() {
     previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : requestButtonRef.current;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const inerted: Array<{ element: HTMLElement; wasInert: boolean; ariaHidden: string | null }> = [];
+    let activeBranch: HTMLElement | null = overlayRef.current;
+    while (activeBranch?.parentElement) {
+      const parent = activeBranch.parentElement;
+      for (const sibling of Array.from(parent.children)) {
+        if (sibling === activeBranch || !(sibling instanceof HTMLElement)) continue;
+        inerted.push({ element: sibling, wasInert: sibling.inert, ariaHidden: sibling.getAttribute("aria-hidden") });
+        sibling.inert = true;
+        sibling.setAttribute("aria-hidden", "true");
+      }
+      if (parent === document.body) break;
+      activeBranch = parent;
+    }
     cancelButtonRef.current?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -102,6 +116,11 @@ export function RulesAssistant() {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("focusin", handleFocusIn);
       document.body.style.overflow = previousOverflow;
+      for (const { element, wasInert, ariaHidden } of inerted.reverse()) {
+        element.inert = wasInert;
+        if (ariaHidden === null) element.removeAttribute("aria-hidden");
+        else element.setAttribute("aria-hidden", ariaHidden);
+      }
       previousFocusRef.current?.focus();
       previousFocusRef.current = null;
     };
@@ -120,7 +139,7 @@ export function RulesAssistant() {
       const response = await fetch("/api/assistant/questions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: trimmedQuestion }),
+        body: JSON.stringify({ question: trimmedQuestion, scope: { kind: "global" } }),
         signal: controller.signal,
       });
       const parsed = parsePublicAssistantResponse(await response.json());
@@ -244,8 +263,8 @@ export function RulesAssistant() {
               <span className="font-mono text-[0.58rem] text-slate-500">{PUBLIC_ASSISTANT_MODEL}</span>
             </div>
             <p className="mt-2 text-[0.68rem] font-semibold leading-5 text-slate-500">
-              There is no paid fallback. If the free route or approved sources are unavailable, SAL offers search and
-              ticket options instead of inventing an answer.
+              The launch contract has no paid fallback. Once enabled, if the free route or approved sources are
+              unavailable, SAL will offer search and ticket options instead of inventing an answer.
             </p>
           </div>
         </div>
@@ -253,6 +272,7 @@ export function RulesAssistant() {
 
       {confirmationOpen && (
         <div
+          ref={overlayRef}
           className="fixed inset-0 z-[80] flex items-end justify-center bg-black/75 p-4 backdrop-blur-sm sm:items-center"
           onMouseDown={(event) => {
             if (event.currentTarget === event.target) setConfirmationOpen(false);

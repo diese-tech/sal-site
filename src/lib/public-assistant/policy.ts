@@ -8,6 +8,8 @@ export interface AssistantAvailabilityInput {
   durableFeatureFlagEnabled: boolean;
   sanitizedSourceRepositoryReady: boolean;
   sanitizedSourceVersionVerified: boolean;
+  privacyGuardReady: boolean;
+  durableRateLimiterReady: boolean;
   model: string;
 }
 
@@ -41,6 +43,8 @@ export function evaluateAssistantAvailability(input: AssistantAvailabilityInput)
   if (input.sanitizedSourceRepositoryReady && !input.sanitizedSourceVersionVerified) {
     reasons.push("sanitized_source_version_mismatch");
   }
+  if (!input.privacyGuardReady) reasons.push("privacy_guard_missing");
+  if (!input.durableRateLimiterReady) reasons.push("durable_rate_limiter_missing");
   if (input.model !== PUBLIC_ASSISTANT_MODEL) reasons.push("free_model_contract_mismatch");
 
   return { enabled: reasons.length === 0, reasons };

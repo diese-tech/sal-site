@@ -1,29 +1,65 @@
+import { createHash } from "node:crypto";
+import { z } from "zod";
 import type { PublicSafeModelInput } from "@/types/public-assistant";
 import type { SanitizedAssistantSource } from "./sources";
-import { parseSanitizedAssistantSources } from "./sources";
 
-const DISCORD_MENTION_PATTERN = /<(?:@!?|@&|#)\d{17,20}>/g;
-const DISCORD_SNOWFLAKE_PATTERN = /(?<!\d)\d{17,20}(?!\d)/g;
-const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-
-const PROHIBITED_INPUT_PATTERNS: Array<{ code: string; pattern: RegExp }> = [
-  { code: "secret_material", pattern: /\b(?:api[_ -]?key|password|client[_ -]?secret|access[_ -]?token)\s*[:=]\s*\S{8,}/i },
-  { code: "secret_material", pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}/i },
-  { code: "secret_material", pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i },
-  { code: "secret_material", pattern: /https:\/\/(?:discord(?:app)?\.com)\/api\/webhooks\//i },
-  {
-    code: "private_evidence",
-    pattern: /\b(?:raw meeting notes|private evidence|confidential evidence|admin-only evidence|unredacted evidence)\b/i,
-  },
+const UNTRUSTED_RISK_PATTERNS: Array<{ code: string; pattern: RegExp; replacement?: string }> = [
+  { code: "discord_identifier", pattern: /<(?:@!?|@&|#)\d{17,20}>|(?<!\d)\d{17,20}(?!\d)/g, replacement: "[possible Discord identifier]" },
+  { code: "email", pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, replacement: "[possible email]" },
+  { code: "username", pattern: /(?:\B@[A-Za-z0-9_.-]{2,32}\b|\b(?:user(?:name)?|IGN)\s*(?:is|[:=])\s*\S+)/gi },
+  { code: "self_identification", pattern: /\b(?:my name is|I am|I'm)\s+[A-Z][A-Za-z'-]{1,40}\b/g },
+  { code: "phone", pattern: /\b(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)\d{3}[-.\s]?\d{4}\b/g },
+  { code: "street_address", pattern: /\b\d{1,6}\s+[A-Za-z0-9.'-]+(?:\s+[A-Za-z0-9.'-]+){0,5}\s+(?:Street|St|Road|Rd|Avenue|Ave|Lane|Ln|Drive|Dr|Court|Ct)\b/gi },
+  { code: "admin_vote", pattern: /\b(?:admin|moderator)\s+\S+\s+voted\s+(?:yes|no|for|against)\b/gi },
+  { code: "private_prose", pattern: /\b(?:private admin chat|raw meeting notes|private evidence|confidential evidence|admin-only evidence|unredacted evidence)\b/gi },
+  { code: "secret", pattern: /\b(?:api[_ -]?key|password|client[_ -]?secret|access[_ -]?token)\s*[:=]\s*\S{8,}/gi },
+  { code: "secret", pattern: /\bBearer\s+[A-Za-z0-9._~+/=-]{12,}/g },
+  { code: "secret", pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g },
+  { code: "secret", pattern: /https:\/\/(?:discord(?:app)?\.com)\/api\/webhooks\//gi },
 ];
 
-export type PublicInputRedaction = "discord_identifier" | "email_address";
+const privacyGuardDecisionSchema = z.discriminatedUnion("outcome", [
+  z
+    .object({
+      outcome: z.literal("verified_public_safe"),
+      decisionId: z.string().min(8).max(160),
+      policyVersion: z.string().min(1).max(80),
+      auditedAt: z.iso.datetime({ offset: true }),
+      inputDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      sanitizedText: z.string().min(1).max(50_000),
+      findings: z.array(z.string().min(1).max(80)).max(100),
+    })
+    .strict(),
+  z
+    .object({
+      outcome: z.literal("rejected"),
+      decisionId: z.string().min(8).max(160),
+      policyVersion: z.string().min(1).max(80),
+      auditedAt: z.iso.datetime({ offset: true }),
+      inputDigest: z.string().regex(/^[a-f0-9]{64}$/),
+      findings: z.array(z.string().min(1).max(80)).min(1).max(100),
+    })
+    .strict(),
+]);
 
-export type PublicInputPreparation =
-  | { ok: true; value: PublicSafeModelInput; redactions: PublicInputRedaction[] }
-  | { ok: false; reasons: string[] };
+export interface UntrustedPrivacyPrefilter {
+  candidate: string;
+  riskHints: string[];
+}
 
-export interface PublicModelSource {
+export interface PrivacyGuardInput {
+  rawText: string;
+  untrustedCandidate: string;
+  riskHints: string[];
+  context: "question" | "source_title" | "source_text";
+  inputDigest: string;
+}
+
+export interface AssistantPrivacyGuard {
+  inspect(input: PrivacyGuardInput): Promise<unknown>;
+}
+
+export interface GuardVerifiedSource {
   id: string;
   sourceType: SanitizedAssistantSource["sourceType"];
   title: PublicSafeModelInput;
@@ -33,90 +69,130 @@ export interface PublicModelSource {
   sourceVersion: string;
   approvalVersion: string;
   conflictState: SanitizedAssistantSource["conflictState"];
+  privacyDecisionIds: [string, string];
 }
 
 export interface PublicModelPayload {
   question: PublicSafeModelInput;
-  sources: PublicModelSource[];
+  questionPrivacyDecisionId: string;
+  sources: GuardVerifiedSource[];
 }
 
 export type PublicModelProvider<T> = (payload: PublicModelPayload) => Promise<T>;
 
-function preparePublicText(rawInput: string, minimumLength: number): PublicInputPreparation {
-  const prohibited = PROHIBITED_INPUT_PATTERNS.filter(({ pattern }) => pattern.test(rawInput)).map(({ code }) => code);
-  if (prohibited.length > 0) return { ok: false, reasons: [...new Set(prohibited)] };
+export function untrustedPrivacyPrefilter(rawInput: string): UntrustedPrivacyPrefilter {
+  const riskHints: string[] = [];
+  let candidate = rawInput;
 
-  const redactions: PublicInputRedaction[] = [];
-  let safe = rawInput;
-
-  const redact = (pattern: RegExp, replacement: string, reason: PublicInputRedaction) => {
-    pattern.lastIndex = 0;
-    if (pattern.test(safe)) {
-      redactions.push(reason);
-      pattern.lastIndex = 0;
-      safe = safe.replace(pattern, replacement);
+  for (const risk of UNTRUSTED_RISK_PATTERNS) {
+    risk.pattern.lastIndex = 0;
+    if (!risk.pattern.test(rawInput)) continue;
+    riskHints.push(risk.code);
+    if (risk.replacement) {
+      risk.pattern.lastIndex = 0;
+      candidate = candidate.replace(risk.pattern, risk.replacement);
     }
+  }
+
+  return { candidate: candidate.trim(), riskHints: [...new Set(riskHints)] };
+}
+
+export function getAssistantPrivacyGuard(): AssistantPrivacyGuard | null {
+  return null;
+}
+
+async function verifyTextWithGuard(
+  rawText: string,
+  context: PrivacyGuardInput["context"],
+  guard: AssistantPrivacyGuard,
+): Promise<{ text: PublicSafeModelInput; decisionId: string } | null> {
+  const prefilter = untrustedPrivacyPrefilter(rawText);
+  const inputDigest = createHash("sha256").update(rawText, "utf8").digest("hex");
+  const decision = privacyGuardDecisionSchema.safeParse(
+    await guard.inspect({
+      rawText,
+      untrustedCandidate: prefilter.candidate,
+      riskHints: prefilter.riskHints,
+      context,
+      inputDigest,
+    }),
+  );
+
+  if (!decision.success || decision.data.outcome !== "verified_public_safe") return null;
+  if (decision.data.inputDigest !== inputDigest) return null;
+
+  return {
+    text: decision.data.sanitizedText as PublicSafeModelInput,
+    decisionId: decision.data.decisionId,
   };
-
-  redact(DISCORD_MENTION_PATTERN, "[redacted Discord identifier]", "discord_identifier");
-  redact(DISCORD_SNOWFLAKE_PATTERN, "[redacted Discord identifier]", "discord_identifier");
-  redact(EMAIL_PATTERN, "[redacted email address]", "email_address");
-
-  safe = safe.trim().replace(/\s{3,}/g, "  ");
-  if (safe.length < minimumLength) return { ok: false, reasons: ["insufficient_public_safe_content"] };
-
-  return { ok: true, value: safe as PublicSafeModelInput, redactions: [...new Set(redactions)] };
 }
 
-export function preparePublicSafeModelInput(rawInput: string): PublicInputPreparation {
-  return preparePublicText(rawInput, 6);
+export function verifyQuestionWithPrivacyGuard(
+  rawQuestion: string,
+  guard: AssistantPrivacyGuard,
+): Promise<{ text: PublicSafeModelInput; decisionId: string } | null> {
+  return verifyTextWithGuard(rawQuestion, "question", guard);
 }
 
-export function buildPublicModelPayload(
-  question: PublicSafeModelInput,
-  sourceInput: unknown,
-): PublicModelPayload | null {
-  const sources = parseSanitizedAssistantSources(sourceInput);
-  if (!sources) return null;
-
-  const publicSources: PublicModelSource[] = [];
+export async function verifySourcesWithPrivacyGuard(
+  sources: SanitizedAssistantSource[],
+  guard: AssistantPrivacyGuard,
+): Promise<GuardVerifiedSource[] | null> {
+  const verified: GuardVerifiedSource[] = [];
   for (const source of sources) {
-    if (source.visibility !== "public_sanitized" || source.status !== "published") continue;
-    const safeCanonicalText = preparePublicSafeModelInput(source.canonicalText);
-    const safeTitle = preparePublicText(source.title, 1);
-    if (!safeCanonicalText.ok || !safeTitle.ok) return null;
+    const [title, text] = await Promise.all([
+      verifyTextWithGuard(source.title, "source_title", guard),
+      verifyTextWithGuard(source.canonicalText, "source_text", guard),
+    ]);
+    if (!title || !text) return null;
 
-    publicSources.push({
+    verified.push({
       id: source.id,
       sourceType: source.sourceType,
-      title: safeTitle.value,
-      canonicalText: safeCanonicalText.value,
+      title: title.text,
+      canonicalText: text.text,
       ruleSetId: source.ruleSetId,
       releaseId: source.releaseId,
       sourceVersion: source.sourceVersion,
       approvalVersion: source.approvalVersion,
       conflictState: source.conflictState,
+      privacyDecisionIds: [title.decisionId, text.decisionId],
     });
   }
+  return verified;
+}
 
-  if (publicSources.length === 0) return null;
+export function buildPublicModelPayload(
+  question: { text: PublicSafeModelInput; decisionId: string },
+  sources: GuardVerifiedSource[],
+): PublicModelPayload | null {
+  if (sources.length === 0) return null;
+  return { question: question.text, questionPrivacyDecisionId: question.decisionId, sources };
+}
 
-  return {
-    question,
-    sources: publicSources,
-  };
+export async function buildGuardVerifiedPublicModelPayload(
+  rawQuestion: string,
+  sources: SanitizedAssistantSource[],
+  guard: AssistantPrivacyGuard,
+): Promise<PublicModelPayload | null> {
+  const [question, verifiedSources] = await Promise.all([
+    verifyQuestionWithPrivacyGuard(rawQuestion, guard),
+    verifySourcesWithPrivacyGuard(sources, guard),
+  ]);
+  if (!question || !verifiedSources) return null;
+  return buildPublicModelPayload(question, verifiedSources);
 }
 
 export async function routeQuestionToPublicModel<T>(
   rawQuestion: string,
-  sourceInput: unknown,
+  sources: SanitizedAssistantSource[],
+  guard: AssistantPrivacyGuard | null,
   provider: PublicModelProvider<T>,
-): Promise<{ ok: true; value: T; redactions: PublicInputRedaction[] } | { ok: false; reasons: string[] }> {
-  const prepared = preparePublicSafeModelInput(rawQuestion);
-  if (!prepared.ok) return prepared;
+): Promise<{ ok: true; value: T } | { ok: false; reasons: string[] }> {
+  if (!guard) return { ok: false, reasons: ["privacy_guard_missing"] };
+  if (sources.length === 0) return { ok: false, reasons: ["no_eligible_public_sources"] };
 
-  const payload = buildPublicModelPayload(prepared.value, sourceInput);
-  if (!payload) return { ok: false, reasons: ["invalid_public_source_payload"] };
-
-  return { ok: true, value: await provider(payload), redactions: prepared.redactions };
+  const payload = await buildGuardVerifiedPublicModelPayload(rawQuestion, sources, guard);
+  if (!payload) return { ok: false, reasons: ["privacy_guard_rejected"] };
+  return { ok: true, value: await provider(payload) };
 }

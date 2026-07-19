@@ -47,17 +47,30 @@ function deterministicResponse() {
 
 describe("public assistant contracts", () => {
   it("accepts a one-shot guidance question", () => {
-    expect(parseAssistantQuestion({ question: "Can a substitute play in this match?" }).success).toBe(true);
+    expect(
+      parseAssistantQuestion({ question: "Can a substitute play in this match?", scope: { kind: "global" } }).success,
+    ).toBe(true);
   });
 
   it("rejects official-request intent and chat history on the guidance endpoint", () => {
     expect(
       parseAssistantQuestion({
         question: "Can a substitute play in this match?",
+        scope: { kind: "global" },
         intent: "request_official_ruling",
         chatHistory: [{ role: "user", content: "private prior message" }],
       }).success,
     ).toBe(false);
+  });
+
+  it("requires an exact global, season, or division scope", () => {
+    expect(parseAssistantQuestion({ question: "Can a substitute play in this match?" }).success).toBe(false);
+    expect(
+      parseAssistantQuestion({
+        question: "Can a substitute play in this match?",
+        scope: { kind: "division", seasonId: "season-3", divisionId: "solar" },
+      }).success,
+    ).toBe(true);
   });
 
   it("requires a current published-rule citation matching deterministic ruleVersion", () => {

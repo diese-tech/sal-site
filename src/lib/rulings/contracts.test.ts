@@ -15,7 +15,8 @@ function validRequest() {
       seasonId: "season-preseason",
       divisionId: "solar",
       matchId: "match-12",
-      affectedParties: [{ type: "player", id: "player-7" }],
+      playerId: "player-7",
+      teamId: "team-2",
       facts: [{ key: "roster_status", value: "The player appears on the current roster." }],
     },
     confirmation: {
@@ -31,8 +32,68 @@ describe("official ruling request contract", () => {
     expect(
       parseOfficialRulingRequest({
         ...validRequest(),
-        bindingCase: { ...validRequest().bindingCase, affectedParties: [], facts: [] },
+        bindingCase: { ...validRequest().bindingCase, facts: [] },
         confirmation: { accepted: true, noticeVersion: "old-notice" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("requires case-specific eligibility, roster, and game-day facts", () => {
+    const eligibility = validRequest();
+    expect(
+      parseOfficialRulingRequest({
+        ...eligibility,
+        bindingCase: {
+          caseType: "eligibility",
+          urgency: "normal",
+          seasonId: "season-preseason",
+          teamId: "team-2",
+          facts: eligibility.bindingCase.facts,
+        },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      parseOfficialRulingRequest({
+        ...eligibility,
+        bindingCase: {
+          caseType: "roster",
+          urgency: "normal",
+          seasonId: "season-preseason",
+          playerId: "player-7",
+          teamId: "team-2",
+          facts: eligibility.bindingCase.facts,
+        },
+      }).success,
+    ).toBe(false);
+
+    expect(
+      parseOfficialRulingRequest({
+        ...eligibility,
+        bindingCase: {
+          caseType: "game_day",
+          urgency: "game_day_urgent",
+          seasonId: "season-preseason",
+          matchId: "match-12",
+          requestingTeamId: "team-2",
+          opponentTeamId: "team-3",
+          facts: eligibility.bindingCase.facts,
+        },
+      }).success,
+    ).toBe(true);
+
+    expect(
+      parseOfficialRulingRequest({
+        ...eligibility,
+        bindingCase: {
+          caseType: "game_day",
+          urgency: "normal",
+          seasonId: "season-preseason",
+          matchId: "match-12",
+          requestingTeamId: "team-2",
+          opponentTeamId: "team-2",
+          facts: eligibility.bindingCase.facts,
+        },
       }).success,
     ).toBe(false);
   });

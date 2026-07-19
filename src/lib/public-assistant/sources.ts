@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { AssistantSourceType, PublicSafeModelInput } from "@/types/public-assistant";
+import type { AssistantQuestionScope, AssistantSourceType, PublicSafeModelInput } from "@/types/public-assistant";
 import { isSafePublicUrl } from "./safe-url";
 
 export const PUBLIC_SOURCE_PRECEDENCE: Record<AssistantSourceType, number> = {
@@ -22,8 +22,14 @@ const publicScopeSchema = z
   })
   .strict()
   .superRefine((scope, context) => {
+    if (scope.global && (scope.seasonIds.length > 0 || scope.divisionIds.length > 0)) {
+      context.addIssue({ code: "custom", message: "Global sources cannot also declare season or division scope." });
+    }
     if (!scope.global && scope.seasonIds.length === 0 && scope.divisionIds.length === 0) {
       context.addIssue({ code: "custom", message: "A non-global source must declare season or division scope." });
+    }
+    if (scope.divisionIds.length > 0 && scope.seasonIds.length === 0) {
+      context.addIssue({ code: "custom", message: "Division sources must also declare their season scope." });
     }
   });
 
@@ -87,6 +93,7 @@ export interface SourceReadinessVerification {
 
 export interface SanitizedSourceSearch {
   question: PublicSafeModelInput;
+  scope: AssistantQuestionScope;
   limit: number;
   sourceTypes: AssistantSourceType[];
 }
@@ -126,6 +133,77 @@ export function orderSanitizedSources(sources: SanitizedAssistantSource[]): Sani
       PUBLIC_SOURCE_PRECEDENCE[left.sourceType] - PUBLIC_SOURCE_PRECEDENCE[right.sourceType] ||
       right.effectiveAt.localeCompare(left.effectiveAt),
   );
+}
+
+export interface SourceSelectionContext {
+  contract: ExpectedSourceContract;
+  scope: AssistantQuestionScope;
+  now: string;
+}
+
+export interface RejectedAssistantSource {
+  id: string | null;
+  reasons: string[];
+}
+
+export interface SourceSelectionResult {
+  eligible: SanitizedAssistantSource[];
+  rejected: RejectedAssistantSource[];
+}
+
+function sourceMatchesScope(source: SanitizedAssistantSource, requested: AssistantQuestionScope): boolean {
+  if (source.scope.global) return true;
+  if (requested.kind === "global") return false;
+
+  const seasonMatches = source.scope.seasonIds.length === 0 || source.scope.seasonIds.includes(requested.seasonId);
+  if (requested.kind === "season") {
+    return seasonMatches && source.scope.seasonIds.length > 0 && source.scope.divisionIds.length === 0;
+  }
+
+  const divisionMatches =
+    source.scope.divisionIds.length === 0 || source.scope.divisionIds.includes(requested.divisionId);
+  return seasonMatches && divisionMatches && (source.scope.seasonIds.length > 0 || source.scope.divisionIds.length > 0);
+}
+
+export function selectEligibleSources(input: unknown, context: SourceSelectionContext): SourceSelectionResult {
+  const parsed = z.array(z.unknown()).safeParse(input);
+  if (!parsed.success) return { eligible: [], rejected: [{ id: null, reasons: ["invalid_source_payload"] }] };
+
+  const eligible: SanitizedAssistantSource[] = [];
+  const rejected: RejectedAssistantSource[] = [];
+  const now = Date.parse(context.now);
+  if (!Number.isFinite(now)) return { eligible: [], rejected: [{ id: null, reasons: ["invalid_selection_time"] }] };
+
+  for (const candidate of parsed.data) {
+    const validated = sanitizedAssistantSourceSchema.safeParse(candidate);
+    if (!validated.success) {
+      rejected.push({
+        id: typeof candidate === "object" && candidate !== null && "id" in candidate && typeof candidate.id === "string"
+          ? candidate.id
+          : null,
+        reasons: ["invalid_source"],
+      });
+      continue;
+    }
+
+    const source = validated.data;
+    const reasons: string[] = [];
+    if (source.ruleSetId !== context.contract.ruleSetId) reasons.push("rule_set_mismatch");
+    if (source.releaseId !== context.contract.releaseId) reasons.push("release_mismatch");
+    if (source.approvalVersion !== context.contract.approvalVersion) reasons.push("approval_version_mismatch");
+    if (Date.parse(source.effectiveAt) > now) reasons.push("not_yet_effective");
+    if (source.expiresAt && Date.parse(source.expiresAt) <= now) reasons.push("expired");
+    if (source.status !== "published" || source.supersededBy !== null) reasons.push("superseded");
+    if (source.conflictState === "detected" || source.conflictState === "under_review") {
+      reasons.push("unresolved_conflict");
+    }
+    if (!sourceMatchesScope(source, context.scope)) reasons.push("out_of_scope");
+
+    if (reasons.length > 0) rejected.push({ id: source.id, reasons });
+    else eligible.push(source);
+  }
+
+  return { eligible: orderSanitizedSources(eligible), rejected };
 }
 
 /**
