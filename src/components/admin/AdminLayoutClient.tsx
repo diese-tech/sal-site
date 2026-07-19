@@ -6,7 +6,9 @@ import { useState } from "react";
 import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
 import { cn } from "@/lib/utils";
 
-type NavItem = { href: string; label: string; exact?: boolean };
+// badge is a typed extension point: a later PR can supply a server-side
+// unresolved-ticket count without reshaping the nav.
+type NavItem = { href: string; label: string; exact?: boolean; badge?: number };
 type NavGroup = { title: string; items: NavItem[] };
 
 const ADMIN_NAV_GROUPS: NavGroup[] = [
@@ -19,10 +21,17 @@ const ADMIN_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    title: "Operations",
+    items: [
+      { href: "/admin/tickets", label: "Tickets" },
+      { href: "/admin/registrations", label: "Registrations" },
+      { href: "/admin/match-report", label: "Match Report" },
+    ],
+  },
+  {
     title: "Competition",
     items: [
       { href: "/admin/matches", label: "Schedule" },
-      { href: "/admin/match-report", label: "Match Report" },
       { href: "/admin/draft", label: "Draft" },
     ],
   },
@@ -31,7 +40,6 @@ const ADMIN_NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/admin/teams", label: "Teams" },
       { href: "/admin/players", label: "Roster" },
-      { href: "/admin/registrations", label: "Registrations" },
       { href: "/admin/import", label: "Import" },
     ],
   },
@@ -70,7 +78,7 @@ function NavGroups({ pathname, onNavigate }: { pathname: string; onNavigate?: ()
         <div key={group.title}>
           <p className="mb-1.5 px-3 text-[0.6rem] font-black uppercase tracking-[0.18em] text-slate-600">{group.title}</p>
           <div className="space-y-0.5">
-            {group.items.map(({ href, label, exact }) => {
+            {group.items.map(({ href, label, exact, badge }) => {
               const active = isActive(href, exact);
               return (
                 <Link
@@ -86,6 +94,11 @@ function NavGroups({ pathname, onNavigate }: { pathname: string; onNavigate?: ()
                 >
                   {active && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-cyan-300" />}
                   {label}
+                  {badge !== undefined && badge > 0 && (
+                    <span className="ml-auto rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[0.6rem] text-amber-200">
+                      {badge}
+                    </span>
+                  )}
                 </Link>
               );
             })}
