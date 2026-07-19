@@ -42,6 +42,7 @@ export async function uploadBugReportAttachments(
       headers: target.requiredHeaders,
       body: file,
       credentials: "omit",
+      redirect: "error",
       referrerPolicy: "no-referrer",
     });
     if (!uploadResponse.ok) {

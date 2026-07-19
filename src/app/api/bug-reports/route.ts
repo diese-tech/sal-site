@@ -4,6 +4,7 @@ import {
   normalizeCanonicalSiteOrigin,
   parseBugReportAttachmentReferences,
   parseBugReportPayload,
+  parsePersistedBugReportResult,
 } from "@/lib/bug-reports/contracts";
 import type {
   BugReportPersistence,
@@ -156,14 +157,23 @@ export function createBugReportPostHandler(dependencies: BugReportPostDependenci
     }
 
     try {
-      const ticket = await dependencies.persistence.persist({
+      const adapterResult = await dependencies.persistence.persist({
         payload: payloadResult.data,
         attachments: attachmentResult.data,
         reporter,
         abuseDecisionId: abuseDecision.decisionId,
       });
+      const persisted = parsePersistedBugReportResult(
+        adapterResult,
+        reporter,
+        payloadResult.data.replyRelayConsent,
+      );
+      if (!persisted.success) throw new Error(persisted.message);
       return sensitiveJsonResponse(
-        { ok: true as const, ticket: buildPublicBugReportReceipt(ticket, canonicalSiteOrigin) },
+        {
+          ok: true as const,
+          ticket: buildPublicBugReportReceipt(persisted.data, canonicalSiteOrigin),
+        },
         { status: 201 },
       );
     } catch {

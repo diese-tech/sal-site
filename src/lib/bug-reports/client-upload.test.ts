@@ -60,7 +60,12 @@ describe("direct bug-report attachment upload", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "https://storage.example/private-signed-upload",
-      expect.objectContaining({ method: "PUT", body: file, credentials: "omit" }),
+      expect.objectContaining({
+        method: "PUT",
+        body: file,
+        credentials: "omit",
+        redirect: "error",
+      }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,

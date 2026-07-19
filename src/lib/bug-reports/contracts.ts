@@ -8,6 +8,10 @@ import {
   type BugReportSubmissionPayload,
   type BugReportUploadSessionReceipt,
 } from "@/types/bug-report";
+import type {
+  BugReportReporterContext,
+  PersistedBugReportResult,
+} from "./persistence";
 
 export const BUG_REPORT_ATTACHMENT_LIMITS = {
   maxFiles: 5,
@@ -264,6 +268,83 @@ export function parseBugReportFinalizationAdapterResult(
   return parsed.success
     ? { success: true, data: parsed.data }
     : { success: false, message: "Private storage returned an invalid finalized reference." };
+}
+
+const anonymousReporterAccessSchema = z.object({
+  kind: z.literal("anonymous"),
+  // 43 base64url characters carry at least 256 bits when generated uniformly.
+  oneTimeAccessToken: z.string().regex(/^[A-Za-z0-9_-]{43,256}$/),
+  recoveryCode: z.string().regex(/^[A-Z0-9-]{8,64}$/),
+}).strict();
+
+const signedInReporterAccessSchema = z.object({
+  kind: z.literal("signed_in"),
+}).strict();
+
+const persistedBugReportResultSchema = z.object({
+  ticketId: z.string().regex(/^[A-Z][A-Z0-9-]{7,63}$/),
+  // Public route identifiers are opaque and must contain at least 128 bits
+  // when generated uniformly as base64url.
+  publicTicketId: z.string().regex(/^[A-Za-z0-9_-]{22,160}$/),
+  status: z.enum([
+    "open",
+    "acknowledged",
+    "waiting_on_reporter",
+    "investigating",
+    "resolved",
+    "no_response",
+  ]),
+  reporterAccess: z.discriminatedUnion("kind", [
+    anonymousReporterAccessSchema,
+    signedInReporterAccessSchema,
+  ]),
+  relay: z.object({
+    requested: z.boolean(),
+    queued: z.boolean(),
+  }).strict(),
+}).strict();
+
+export type PersistedBugReportResultParseResult =
+  | { success: true; data: PersistedBugReportResult }
+  | { success: false; message: string };
+
+export function parsePersistedBugReportResult(
+  input: unknown,
+  expectedReporter: BugReportReporterContext,
+  replyRelayConsent: boolean,
+): PersistedBugReportResultParseResult {
+  const parsed = persistedBugReportResultSchema.safeParse(input);
+  if (!parsed.success || parsed.data.ticketId === parsed.data.publicTicketId) {
+    return { success: false, message: "Ticket storage returned an invalid receipt." };
+  }
+
+  if (
+    parsed.data.reporterAccess.kind === "anonymous" &&
+    (parsed.data.publicTicketId.includes(parsed.data.reporterAccess.oneTimeAccessToken) ||
+      parsed.data.ticketId.includes(parsed.data.reporterAccess.oneTimeAccessToken) ||
+      parsed.data.reporterAccess.recoveryCode.includes(
+        parsed.data.reporterAccess.oneTimeAccessToken,
+      ))
+  ) {
+    return { success: false, message: "Ticket storage returned an exposed access token." };
+  }
+
+  const expectsSignedRelay =
+    replyRelayConsent &&
+    expectedReporter.kind === "signed_in" &&
+    Boolean(expectedReporter.discordId);
+  const accessMatches = expectsSignedRelay
+    ? parsed.data.reporterAccess.kind === "signed_in"
+    : parsed.data.reporterAccess.kind === "anonymous";
+  const relayMatches = expectsSignedRelay
+    ? parsed.data.relay.requested && parsed.data.relay.queued
+    : !parsed.data.relay.requested && !parsed.data.relay.queued;
+
+  if (!accessMatches || !relayMatches) {
+    return { success: false, message: "Ticket storage returned an inconsistent receipt." };
+  }
+
+  return { success: true, data: parsed.data };
 }
 
 export function normalizeCanonicalSiteOrigin(input: unknown): string | null {

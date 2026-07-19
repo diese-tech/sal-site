@@ -27,6 +27,8 @@ function requestFor(payload: unknown = validPayload, attachments: unknown = []) 
 
 const anonymousReporter = async () => ({ kind: "anonymous" } as const);
 const canonicalSiteOrigin = "https://sal.example";
+const strongPublicTicketId = `public_${"p".repeat(32)}`;
+const strongAnonymousToken = `token_${"a".repeat(43)}`;
 const allowedSubmission = {
   checkAttempt: async () => ({
     allowed: true,
@@ -189,11 +191,11 @@ describe("POST /api/bug-reports", () => {
   it("returns a ticket only after the durable persistence boundary resolves", async () => {
     const receipt = {
       ticketId: "BUG-0190",
-      publicTicketId: "ticket-public-0190",
+      publicTicketId: strongPublicTicketId,
       status: "open" as const,
       reporterAccess: {
         kind: "anonymous" as const,
-        oneTimeAccessToken: "secret-access-token",
+        oneTimeAccessToken: strongAnonymousToken,
         recoveryCode: "SAL-190-A",
       },
       relay: { requested: false, queued: false },
@@ -216,8 +218,7 @@ describe("POST /api/bug-reports", () => {
         status: "open",
         reporterAccess: {
           kind: "anonymous",
-          accessUrl:
-            "https://sal.example/report-a-bug/tickets/ticket-public-0190#access=secret-access-token",
+          accessUrl: `https://sal.example/report-a-bug/tickets/${strongPublicTicketId}#access=${strongAnonymousToken}`,
           recoveryCode: "SAL-190-A",
         },
         relay: { requested: false, queued: false },
@@ -236,11 +237,11 @@ describe("POST /api/bug-reports", () => {
   it("passes only finalized opaque attachment claims through the ticket boundary", async () => {
     const persist = vi.fn().mockResolvedValue({
       ticketId: "BUG-0193",
-      publicTicketId: "ticket-public-0193",
+      publicTicketId: strongPublicTicketId,
       status: "open",
       reporterAccess: {
         kind: "anonymous",
-        oneTimeAccessToken: "attachment-secret",
+        oneTimeAccessToken: strongAnonymousToken,
         recoveryCode: "SAL-193-A",
       },
       relay: { requested: false, queued: false },
@@ -265,12 +266,11 @@ describe("POST /api/bug-reports", () => {
   it("projects a strict public receipt without leaking internal or path-based secrets", async () => {
     const persist = vi.fn().mockResolvedValue({
       ticketId: "BUG-0192",
-      publicTicketId: "public-0192",
+      publicTicketId: strongPublicTicketId,
       status: "open",
-      adminTicketUrl: "https://sal.example/admin/tickets/BUG-0192",
       reporterAccess: {
         kind: "anonymous",
-        oneTimeAccessToken: "one-time-secret",
+        oneTimeAccessToken: strongAnonymousToken,
         recoveryCode: "SAL-192-A",
       },
       relay: { requested: false, queued: false },
@@ -288,9 +288,141 @@ describe("POST /api/bug-reports", () => {
 
     expect(response.status).toBe(201);
     expect(serialized).not.toContain("adminTicketUrl");
-    expect(serialized).not.toContain("/one-time-secret");
-    expect(serialized.match(/one-time-secret/g)).toHaveLength(1);
-    expect(result.ticket.reporterAccess.accessUrl).toContain("#access=one-time-secret");
+    expect(serialized).not.toContain(`/${strongAnonymousToken}`);
+    expect(serialized.match(new RegExp(strongAnonymousToken, "g"))).toHaveLength(1);
+    expect(result.ticket.reporterAccess.accessUrl).toContain(`#access=${strongAnonymousToken}`);
+  });
+
+  it("rejects weak or unexpected persistence output without leaking adapter fields", async () => {
+    const persist = vi.fn().mockResolvedValue({
+      ticketId: "BUG-0194",
+      publicTicketId: strongPublicTicketId,
+      status: "open",
+      adminTicketUrl: "https://sal.example/admin/tickets/BUG-0194",
+      reporterAccess: {
+        kind: "anonymous",
+        oneTimeAccessToken: "weak-token",
+        recoveryCode: "SAL-194-A",
+      },
+      relay: { requested: false, queued: false },
+    });
+    const handler = createBugReportPostHandler({
+      isEnabled: () => true,
+      persistence: { persist },
+      abuseProtection: allowedSubmission,
+      resolveReporter: anonymousReporter,
+    });
+
+    const response = await handler(requestFor());
+    const serialized = JSON.stringify(await response.json());
+
+    expect(response.status).toBe(503);
+    expect(serialized).not.toContain("adminTicketUrl");
+    expect(serialized).not.toContain("weak-token");
+  });
+
+  it("rejects a bearer token that would also appear in the public ticket path", async () => {
+    const sharedPathAndToken = "s".repeat(43);
+    const handler = createBugReportPostHandler({
+      isEnabled: () => true,
+      persistence: {
+        persist: vi.fn().mockResolvedValue({
+          ticketId: "BUG-0198",
+          publicTicketId: sharedPathAndToken,
+          status: "open",
+          reporterAccess: {
+            kind: "anonymous",
+            oneTimeAccessToken: sharedPathAndToken,
+            recoveryCode: "SAL-198-A",
+          },
+          relay: { requested: false, queued: false },
+        }),
+      },
+      abuseProtection: allowedSubmission,
+      resolveReporter: anonymousReporter,
+    });
+
+    const response = await handler(requestFor());
+    const serialized = JSON.stringify(await response.json());
+
+    expect(response.status).toBe(503);
+    expect(serialized).not.toContain(sharedPathAndToken);
+  });
+
+  it("rejects persistence output whose access kind or relay state contradicts the request", async () => {
+    const anonymousMismatch = createBugReportPostHandler({
+      isEnabled: () => true,
+      persistence: {
+        persist: vi.fn().mockResolvedValue({
+          ticketId: "BUG-0195",
+          publicTicketId: strongPublicTicketId,
+          status: "open",
+          reporterAccess: { kind: "signed_in" },
+          relay: { requested: true, queued: true },
+        }),
+      },
+      abuseProtection: allowedSubmission,
+      resolveReporter: anonymousReporter,
+    });
+
+    const anonymousResponse = await anonymousMismatch(requestFor());
+    expect(anonymousResponse.status).toBe(503);
+
+    const signedMismatch = createBugReportPostHandler({
+      isEnabled: () => true,
+      persistence: {
+        persist: vi.fn().mockResolvedValue({
+          ticketId: "BUG-0196",
+          publicTicketId: strongPublicTicketId,
+          status: "open",
+          reporterAccess: { kind: "signed_in" },
+          relay: { requested: true, queued: false },
+        }),
+      },
+      abuseProtection: allowedSubmission,
+      resolveReporter: async () => ({
+        kind: "signed_in",
+        authUserId: "auth-user-1",
+        discordId: "discord-user-1",
+      }),
+    });
+
+    const signedResponse = await signedMismatch(
+      requestFor({ ...validPayload, replyRelayConsent: true }),
+    );
+    expect(signedResponse.status).toBe(503);
+  });
+
+  it("accepts a signed-in receipt only when the requested relay is durably queued", async () => {
+    const persist = vi.fn().mockResolvedValue({
+      ticketId: "BUG-0197",
+      publicTicketId: strongPublicTicketId,
+      status: "open",
+      reporterAccess: { kind: "signed_in" },
+      relay: { requested: true, queued: true },
+    });
+    const handler = createBugReportPostHandler({
+      isEnabled: () => true,
+      persistence: { persist },
+      abuseProtection: allowedSubmission,
+      resolveReporter: async () => ({
+        kind: "signed_in",
+        authUserId: "auth-user-1",
+        discordId: "discord-user-1",
+      }),
+    });
+
+    const response = await handler(
+      requestFor({ ...validPayload, replyRelayConsent: true }),
+    );
+    const result = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(result.ticket.reporterAccess).toEqual({
+      kind: "signed_in",
+      accessUrl: `https://sal.example/report-a-bug/tickets/${strongPublicTicketId}`,
+    });
+    expect(JSON.stringify(result)).not.toMatch(/accessToken|recoveryCode|#access=/i);
   });
 
   it("does not link a signed-in identity unless the reporter consents to private relay", async () => {
@@ -301,11 +433,11 @@ describe("POST /api/bug-reports", () => {
     });
     const persist = vi.fn().mockResolvedValue({
       ticketId: "BUG-0191",
-      publicTicketId: "ticket-public-0191",
+      publicTicketId: strongPublicTicketId,
       status: "open",
       reporterAccess: {
         kind: "anonymous",
-        oneTimeAccessToken: "secret-access-token",
+        oneTimeAccessToken: strongAnonymousToken,
         recoveryCode: "SAL-191-A",
       },
       relay: { requested: false, queued: false },
