@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Registration } from "@/types/auth";
 import type { LeaguePlayer, Org } from "@/types/league";
@@ -26,6 +27,7 @@ export function AdminRegistrationsClient({
   players: LeaguePlayer[];
   orgs: Org[];
 }) {
+  const router = useRouter();
   const [registrations, setRegistrations] = useState(initial);
   const [tab, setTab] = useState<Registration["status"] | "all">("pending");
   const [noteMap, setNoteMap] = useState<Record<string, string>>({});
@@ -53,6 +55,7 @@ export function AdminRegistrationsClient({
         ),
       );
       setMessage({ id: reg.id, text: `Marked as ${status}.`, ok: true });
+      router.refresh();
     } else {
       setMessage({ id: reg.id, text: data.error ?? "Failed.", ok: false });
     }
