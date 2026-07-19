@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   BUG_REPORT_ATTACHMENT_LIMITS,
+  parseBugReportAttachmentMetadata,
+  parseBugReportAttachmentReferences,
   parseBugReportPayload,
   validateBugReportAttachments,
 } from "./contracts";
@@ -22,7 +24,9 @@ function imageFile(bytes: number[], overrides: Partial<{ name: string; type: str
     name: overrides.name ?? "evidence.png",
     type: overrides.type ?? "image/png",
     size: overrides.size ?? content.byteLength,
-    arrayBuffer: async () => content.buffer,
+    slice: (start = 0, end = content.byteLength) => ({
+      arrayBuffer: async () => content.slice(start, end).buffer,
+    }),
   };
 }
 
@@ -87,5 +91,22 @@ describe("bug report submission contract", () => {
     );
 
     expect(result).toMatchObject({ success: false, code: "too_many_files" });
+  });
+
+  it("validates direct-upload metadata and opaque finalized references", () => {
+    expect(
+      parseBugReportAttachmentMetadata([
+        { name: "evidence.png", mediaType: "image/png", size: 121_905 },
+      ]),
+    ).toMatchObject({ success: true });
+    expect(
+      parseBugReportAttachmentReferences([{ opaqueRef: `brup_${"a".repeat(48)}` }]),
+    ).toMatchObject({ success: true });
+    expect(
+      parseBugReportAttachmentReferences([
+        { opaqueRef: `brup_${"a".repeat(48)}` },
+        { opaqueRef: `brup_${"a".repeat(48)}` },
+      ]),
+    ).toMatchObject({ success: false, code: "invalid_upload_reference" });
   });
 });

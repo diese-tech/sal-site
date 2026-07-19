@@ -23,6 +23,8 @@ export interface BugReportAbuseProtection {
   checkSubmission(input: {
     request: NextRequest;
     reporter: BugReportReporterContext;
+    /** Upload sessions reserve capacity; ticket submission consumes the report allowance. */
+    action: "upload_session" | "ticket_submission";
   }): Promise<BugReportAbuseDecision>;
 }
 

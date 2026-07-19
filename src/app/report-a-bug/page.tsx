@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { BugReportForm } from "@/components/bug-report/BugReportForm";
-import { getAuthUser } from "@/lib/supabase-auth-server";
+import { getAuthUser, getDiscordId } from "@/lib/supabase-auth-server";
 import { getBugReportRuntime } from "@/lib/bug-reports/runtime";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default async function ReportABugPage() {
   const user = await getAuthUser();
-  const relayAvailable = Boolean(user);
+  const relayAvailable = Boolean(user && getDiscordId(user));
   const submissionEnabled = getBugReportRuntime().ready;
 
   return (

@@ -40,16 +40,63 @@ export interface BugReportAttachmentDescriptor {
   size: number;
 }
 
+/**
+ * Opaque claim returned only after a quarantined object passes server-side
+ * finalization. It is not a storage key and must be stored hashed at rest.
+ */
+export interface BugReportAttachmentReference {
+  opaqueRef: string;
+}
+
+export interface BugReportSubmissionRequest {
+  payload: BugReportSubmissionPayload;
+  attachments: BugReportAttachmentReference[];
+}
+
+export interface BugReportUploadSessionRequest {
+  files: BugReportAttachmentDescriptor[];
+}
+
+export interface BugReportUploadTarget {
+  uploadId: string;
+  uploadUrl: string;
+  method: "PUT";
+  requiredHeaders: Record<string, string>;
+  finalizationToken: string;
+  expiresAt: string;
+}
+
+export interface BugReportUploadSessionReceipt {
+  sessionId: string;
+  targets: BugReportUploadTarget[];
+  expiresAt: string;
+}
+
+export interface BugReportUploadSessionSuccessResponse {
+  ok: true;
+  uploadSession: BugReportUploadSessionReceipt;
+}
+
+export interface BugReportUploadFinalizationSuccessResponse {
+  ok: true;
+  attachment: BugReportAttachmentReference;
+}
+
 export interface BugReportSubmissionReceipt {
   ticketId: string;
   status: BugReportStatus;
-  /** Private admin queue URL. Only include this for callers authorized to see it. */
-  adminTicketUrl?: string;
-  reporterAccess: {
-    accessToken: string;
-    accessUrl: string;
-    recoveryCode: string;
-  };
+  reporterAccess:
+    | {
+        kind: "anonymous";
+        /** Contains a one-time token in the URL fragment, never the path or query. */
+        accessUrl: string;
+        recoveryCode: string;
+      }
+    | {
+        kind: "signed_in";
+        /** Uses the authenticated site session and contains no bearer secret. */
+        accessUrl: string;
+      };
   relay: {
     requested: boolean;
     queued: boolean;
@@ -63,6 +110,9 @@ export type BugReportErrorCode =
   | "unsupported_file_type"
   | "file_too_large"
   | "invalid_file_content"
+  | "upload_unavailable"
+  | "upload_failed"
+  | "invalid_upload_reference"
   | "rate_limited"
   | "rate_limit_unavailable"
   | "persistence_unavailable"
@@ -82,6 +132,14 @@ export interface BugReportErrorResponse {
 }
 
 export type BugReportSubmissionResponse = BugReportSuccessResponse | BugReportErrorResponse;
+
+export type BugReportUploadSessionResponse =
+  | BugReportUploadSessionSuccessResponse
+  | BugReportErrorResponse;
+
+export type BugReportUploadFinalizationResponse =
+  | BugReportUploadFinalizationSuccessResponse
+  | BugReportErrorResponse;
 
 export interface BugReportReplyRequest {
   message: string;

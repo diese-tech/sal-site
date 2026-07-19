@@ -10,6 +10,7 @@ import {
   parseBugReportPayload,
   validateBugReportAttachments,
 } from "@/lib/bug-reports/contracts";
+import { uploadBugReportAttachments } from "@/lib/bug-reports/client-upload";
 import type {
   BugReportErrorResponse,
   BugReportSubmissionPayload,
@@ -38,6 +39,7 @@ export function BugReportForm({
   submissionEnabled: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentRegionRef = useRef<HTMLDivElement>(null);
   const [report, setReport] = useState<BugReportSubmissionPayload>(INITIAL_REPORT);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -66,7 +68,7 @@ export function BugReportForm({
     setFieldErrors(nextErrors);
 
     if (!payloadResult.success || !attachmentResult.success) {
-      focusFirstInvalidField(nextErrors);
+      focusFirstInvalidField(nextErrors, attachmentRegionRef.current);
       return;
     }
 
@@ -79,13 +81,19 @@ export function BugReportForm({
     setSubmitting(true);
     setSubmitError(null);
 
-    const body = new FormData();
-    body.set("payload", JSON.stringify(report));
-    for (const attachment of attachments) body.append("attachments", attachment, attachment.name);
-
     try {
-      const response = await fetch("/api/bug-reports", { method: "POST", body });
-      const result = (await response.json()) as BugReportSubmissionResponse;
+      const uploadedAttachments = await uploadBugReportAttachments(attachments);
+      const response = await fetch("/api/bug-reports", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ payload: report, attachments: uploadedAttachments }),
+      });
+      let result: BugReportSubmissionResponse;
+      try {
+        result = (await response.json()) as BugReportSubmissionResponse;
+      } catch {
+        throw new Error("SAL returned an invalid submission response.");
+      }
       if (!response.ok || !result.ok) {
         const failure = result as BugReportErrorResponse;
         setFieldErrors(failure.fieldErrors ?? {});
@@ -96,8 +104,12 @@ export function BugReportForm({
 
       setReceipt(result.ticket);
       setConfirmationOpen(false);
-    } catch {
-      setSubmitError("The report could not reach SAL. Nothing was submitted, so please try again.");
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "The report could not reach SAL. Nothing was submitted, so please try again.",
+      );
       setConfirmationOpen(false);
     } finally {
       setSubmitting(false);
@@ -139,9 +151,12 @@ export function BugReportForm({
         <div className="space-y-8 p-5 sm:p-7">
           <FormSection number="01" title="Classify the problem" description="Help us route it without guessing.">
             <div className="grid gap-5 sm:grid-cols-2">
-              <Field label="Category" error={fieldErrors.category} required>
+              <Field controlId="category" label="Category" error={fieldErrors.category} required>
                 <select
                   id="category"
+                  required
+                  aria-invalid={Boolean(fieldErrors.category)}
+                  aria-describedby={`category-help${fieldErrors.category ? " category-error" : ""}`}
                   value={report.category}
                   onChange={(event) =>
                     updateField("category", event.target.value as BugReportSubmissionPayload["category"])
@@ -154,14 +169,17 @@ export function BugReportForm({
                     </option>
                   ))}
                 </select>
-                <p className="mt-1.5 text-xs text-slate-500">
+                <p id="category-help" className="mt-1.5 text-xs text-slate-500">
                   {BUG_REPORT_CATEGORY_OPTIONS.find((option) => option.value === report.category)?.description}
                 </p>
               </Field>
 
-              <Field label="Severity" error={fieldErrors.severity} required>
+              <Field controlId="severity" label="Severity" error={fieldErrors.severity} required>
                 <select
                   id="severity"
+                  required
+                  aria-invalid={Boolean(fieldErrors.severity)}
+                  aria-describedby={`severity-help${fieldErrors.severity ? " severity-error" : ""}`}
                   value={report.severity}
                   onChange={(event) =>
                     updateField("severity", event.target.value as BugReportSubmissionPayload["severity"])
@@ -174,15 +192,18 @@ export function BugReportForm({
                     </option>
                   ))}
                 </select>
-                <p className="mt-1.5 text-xs text-slate-500">
+                <p id="severity-help" className="mt-1.5 text-xs text-slate-500">
                   {BUG_REPORT_SEVERITY_OPTIONS.find((option) => option.value === report.severity)?.description}
                 </p>
               </Field>
             </div>
 
-            <Field label="Short subject" error={fieldErrors.subject} required>
+            <Field controlId="subject" label="Short subject" error={fieldErrors.subject} required>
               <input
                 id="subject"
+                required
+                aria-invalid={Boolean(fieldErrors.subject)}
+                aria-describedby={fieldErrors.subject ? "subject-error" : undefined}
                 value={report.subject}
                 onChange={(event) => updateField("subject", event.target.value)}
                 maxLength={120}
@@ -198,9 +219,12 @@ export function BugReportForm({
             title="Show us what happened"
             description="Specific steps make a report much faster to reproduce."
           >
-            <Field label="What happened?" error={fieldErrors.description} required>
+            <Field controlId="description" label="What happened?" error={fieldErrors.description} required>
               <textarea
                 id="description"
+                required
+                aria-invalid={Boolean(fieldErrors.description)}
+                aria-describedby={fieldErrors.description ? "description-error" : undefined}
                 value={report.description}
                 onChange={(event) => updateField("description", event.target.value)}
                 rows={5}
@@ -212,9 +236,12 @@ export function BugReportForm({
             </Field>
 
             <div className="grid gap-5 lg:grid-cols-2">
-              <Field label="Steps to reproduce" error={fieldErrors.reproductionSteps} required>
+              <Field controlId="reproductionSteps" label="Steps to reproduce" error={fieldErrors.reproductionSteps} required>
                 <textarea
                   id="reproductionSteps"
+                  required
+                  aria-invalid={Boolean(fieldErrors.reproductionSteps)}
+                  aria-describedby={fieldErrors.reproductionSteps ? "reproductionSteps-error" : undefined}
                   value={report.reproductionSteps}
                   onChange={(event) => updateField("reproductionSteps", event.target.value)}
                   rows={5}
@@ -224,9 +251,12 @@ export function BugReportForm({
                 />
               </Field>
 
-              <Field label="What should have happened?" error={fieldErrors.expectedBehavior} required>
+              <Field controlId="expectedBehavior" label="What should have happened?" error={fieldErrors.expectedBehavior} required>
                 <textarea
                   id="expectedBehavior"
+                  required
+                  aria-invalid={Boolean(fieldErrors.expectedBehavior)}
+                  aria-describedby={fieldErrors.expectedBehavior ? "expectedBehavior-error" : undefined}
                   value={report.expectedBehavior}
                   onChange={(event) => updateField("expectedBehavior", event.target.value)}
                   rows={5}
@@ -237,9 +267,11 @@ export function BugReportForm({
               </Field>
             </div>
 
-            <Field label="Device or environment" error={fieldErrors.environment} hint="Optional">
+            <Field controlId="environment" label="Device or environment" error={fieldErrors.environment} hint="Optional">
               <input
                 id="environment"
+                aria-invalid={Boolean(fieldErrors.environment)}
+                aria-describedby={fieldErrors.environment ? "environment-error" : undefined}
                 value={report.environment ?? ""}
                 onChange={(event) => updateField("environment", event.target.value)}
                 maxLength={500}
@@ -255,6 +287,10 @@ export function BugReportForm({
             description="Screenshots are optional, private, and often the quickest way to understand a problem."
           >
             <div
+              ref={attachmentRegionRef}
+              tabIndex={fieldErrors.attachments ? -1 : undefined}
+              aria-invalid={Boolean(fieldErrors.attachments)}
+              aria-describedby={fieldErrors.attachments ? "attachments-error" : "attachments-help"}
               className={`rounded-lg border border-dashed p-5 transition ${
                 fieldErrors.attachments
                   ? "border-red-400/50 bg-red-400/[0.06]"
@@ -264,7 +300,7 @@ export function BugReportForm({
               <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
                 <div>
                   <p className="text-sm font-bold text-white">JPEG, PNG, or WebP</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
+                  <p id="attachments-help" className="mt-1 text-xs leading-5 text-slate-500">
                     Up to {BUG_REPORT_ATTACHMENT_LIMITS.maxFiles} images, 20 MB each. Metadata is stripped
                     before private storage when intake goes live.
                   </p>
@@ -313,7 +349,9 @@ export function BugReportForm({
                 </ul>
               ) : null}
               {fieldErrors.attachments ? (
-                <p className="mt-3 text-xs font-semibold text-red-300">{fieldErrors.attachments}</p>
+                <p id="attachments-error" role="alert" className="mt-3 text-xs font-semibold text-red-300">
+                  {fieldErrors.attachments}
+                </p>
               ) : null}
             </div>
           </FormSection>
@@ -329,6 +367,8 @@ export function BugReportForm({
                   id="replyRelayConsent"
                   type="checkbox"
                   checked={report.replyRelayConsent}
+                  aria-invalid={Boolean(fieldErrors.replyRelayConsent)}
+                  aria-describedby={fieldErrors.replyRelayConsent ? "replyRelayConsent-error" : undefined}
                   onChange={(event) => updateField("replyRelayConsent", event.target.checked)}
                   className="mt-0.5 h-4 w-4 accent-indigo-400"
                 />
@@ -356,7 +396,9 @@ export function BugReportForm({
               </div>
             )}
             {fieldErrors.replyRelayConsent ? (
-              <p className="text-xs font-semibold text-red-300">{fieldErrors.replyRelayConsent}</p>
+              <p id="replyRelayConsent-error" role="alert" className="text-xs font-semibold text-red-300">
+                {fieldErrors.replyRelayConsent}
+              </p>
             ) : null}
           </FormSection>
         </div>
@@ -384,7 +426,7 @@ export function BugReportForm({
       <BugReportConfirmationModal
         open={confirmationOpen}
         report={report}
-        attachmentCount={attachments.length}
+        attachmentNames={attachments.map((attachment) => attachment.name)}
         submissionEnabled={submissionEnabled}
         submitting={submitting}
         onCancel={() => setConfirmationOpen(false)}
@@ -418,12 +460,14 @@ function FormSection({
 }
 
 function Field({
+  controlId,
   label,
   error,
   hint,
   required,
   children,
 }: {
+  controlId: string;
   label: string;
   error?: string;
   hint?: string;
@@ -431,14 +475,18 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block">
+    <label htmlFor={controlId} className="block">
       <span className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-wide text-slate-300">
         {label}
         {required ? <span className="text-cyan-400">Required</span> : null}
         {hint ? <span className="font-medium normal-case tracking-normal text-slate-600">{hint}</span> : null}
       </span>
       {children}
-      {error ? <span className="mt-1.5 block text-xs font-semibold text-red-300">{error}</span> : null}
+      {error ? (
+        <span id={`${controlId}-error`} role="alert" className="mt-1.5 block text-xs font-semibold text-red-300">
+          {error}
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -448,6 +496,7 @@ function CharacterCount({ value, max }: { value: string; max: number }) {
 }
 
 function BugReportReceipt({ receipt }: { receipt: BugReportSubmissionReceipt }) {
+  const anonymousAccess = receipt.reporterAccess.kind === "anonymous";
   return (
     <section className="rounded-[var(--sal-card-radius)] border border-emerald-300/25 bg-slate-950/84 p-6 shadow-2xl shadow-emerald-950/20 sm:p-8">
       <div className="grid h-12 w-12 place-items-center rounded-lg border border-emerald-300/35 bg-emerald-300/10 text-2xl text-emerald-300">
@@ -458,28 +507,33 @@ function BugReportReceipt({ receipt }: { receipt: BugReportSubmissionReceipt }) 
       </p>
       <h2 className="mt-2 font-display text-2xl font-black text-white">Report safely stored</h2>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
-        Save both items below. The private link contains your access token and lets you see status or
-        reply without revealing your identity to staff.
+        {anonymousAccess
+          ? "Save both items below. The private link carries a one-time fragment token that is not sent in the request path."
+          : "Use the link below while signed in with Discord to see status and reply privately."}
       </p>
-      <div className="mt-6 grid gap-3 sm:grid-cols-[1fr_auto]">
+      <div className={`mt-6 grid gap-3 ${anonymousAccess ? "sm:grid-cols-[1fr_auto]" : ""}`}>
         <a
           href={receipt.reporterAccess.accessUrl}
           className="min-w-0 truncate rounded-lg border border-cyan-300/25 bg-cyan-300/[0.07] px-4 py-3 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10"
         >
           {receipt.reporterAccess.accessUrl}
         </a>
-        <div className="rounded-lg border border-white/10 bg-white/[0.035] px-4 py-3 text-center font-mono text-sm font-bold text-white">
-          {receipt.reporterAccess.recoveryCode}
-        </div>
+        {receipt.reporterAccess.kind === "anonymous" ? (
+          <div className="rounded-lg border border-white/10 bg-white/[0.035] px-4 py-3 text-center font-mono text-sm font-bold text-white">
+            {receipt.reporterAccess.recoveryCode}
+          </div>
+        ) : null}
       </div>
-      <p className="mt-3 text-xs text-amber-200/80">
-        Anyone with the private link can access this ticket. Do not post it in Discord channels.
-      </p>
+      {anonymousAccess ? (
+        <p className="mt-3 text-xs text-amber-200/80">
+          Anyone with the private link can access this ticket. Do not post it in Discord channels.
+        </p>
+      ) : null}
     </section>
   );
 }
 
-function focusFirstInvalidField(errors: FieldErrors) {
+function focusFirstInvalidField(errors: FieldErrors, attachmentRegion: HTMLDivElement | null) {
   const order: Array<keyof FieldErrors> = [
     "category",
     "severity",
@@ -492,7 +546,11 @@ function focusFirstInvalidField(errors: FieldErrors) {
     "replyRelayConsent",
   ];
   const firstField = order.find((field) => errors[field]);
-  if (firstField && firstField !== "attachments") document.getElementById(firstField)?.focus();
+  if (firstField === "attachments") {
+    attachmentRegion?.focus();
+  } else if (firstField) {
+    document.getElementById(firstField)?.focus();
+  }
 }
 
 function formatBytes(bytes: number) {

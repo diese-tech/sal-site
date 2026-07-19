@@ -3,6 +3,7 @@ import {
   BUG_REPORT_CATEGORIES,
   BUG_REPORT_SEVERITIES,
   type BugReportAttachmentDescriptor,
+  type BugReportAttachmentReference,
   type BugReportErrorCode,
   type BugReportSubmissionPayload,
 } from "@/types/bug-report";
@@ -10,6 +11,9 @@ import {
 export const BUG_REPORT_ATTACHMENT_LIMITS = {
   maxFiles: 5,
   maxBytesPerFile: 20 * 1024 * 1024,
+  maxWidth: 16_384,
+  maxHeight: 16_384,
+  maxPixels: 40_000_000,
   acceptedMediaTypes: ["image/jpeg", "image/png", "image/webp"],
 } as const;
 
@@ -80,7 +84,7 @@ export interface BugReportFile {
   name: string;
   type: string;
   size: number;
-  arrayBuffer(): Promise<ArrayBuffer>;
+  slice(start?: number, end?: number): { arrayBuffer(): Promise<ArrayBuffer> };
 }
 
 export type BugReportAttachmentValidationResult =
@@ -114,7 +118,9 @@ export async function validateBugReportAttachments(
       };
     }
 
-    const bytes = new Uint8Array(await file.arrayBuffer()).slice(0, 12);
+    // Client-side UX check only. The upload finalizer must decode and re-encode
+    // the stored object before it can produce a consumable opaque reference.
+    const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
     if (!hasMatchingImageSignature(file.type, bytes)) {
       return {
         success: false,
@@ -125,6 +131,59 @@ export async function validateBugReportAttachments(
   }
 
   return { success: true };
+}
+
+const attachmentDescriptorSchema = z.object({
+  name: z.string().trim().min(1).max(255).refine(
+    (name) => !/[\u0000-\u001f\u007f]/.test(name),
+    "File names cannot contain control characters.",
+  ),
+  mediaType: z.enum(BUG_REPORT_ATTACHMENT_LIMITS.acceptedMediaTypes),
+  size: z.number().int().positive().max(BUG_REPORT_ATTACHMENT_LIMITS.maxBytesPerFile),
+});
+
+const attachmentReferenceSchema = z.object({
+  opaqueRef: z.string().min(32).max(512).regex(/^brup_[A-Za-z0-9_-]+$/),
+});
+
+export type BugReportAttachmentMetadataParseResult =
+  | { success: true; data: BugReportAttachmentDescriptor[] }
+  | { success: false; code: BugReportErrorCode; message: string };
+
+export function parseBugReportAttachmentMetadata(
+  input: unknown,
+): BugReportAttachmentMetadataParseResult {
+  const parsed = z.array(attachmentDescriptorSchema).min(1).max(
+    BUG_REPORT_ATTACHMENT_LIMITS.maxFiles,
+  ).safeParse(input);
+  if (parsed.success) return { success: true, data: parsed.data };
+  return {
+    success: false,
+    code: "invalid_request",
+    message: `Choose between 1 and ${BUG_REPORT_ATTACHMENT_LIMITS.maxFiles} valid images.`,
+  };
+}
+
+export type BugReportAttachmentReferencesParseResult =
+  | { success: true; data: BugReportAttachmentReference[] }
+  | { success: false; code: BugReportErrorCode; message: string };
+
+export function parseBugReportAttachmentReferences(
+  input: unknown,
+): BugReportAttachmentReferencesParseResult {
+  const parsed = z.array(attachmentReferenceSchema).max(
+    BUG_REPORT_ATTACHMENT_LIMITS.maxFiles,
+  ).superRefine((references, context) => {
+    if (new Set(references.map((reference) => reference.opaqueRef)).size !== references.length) {
+      context.addIssue({ code: "custom", message: "Attachment references must be unique." });
+    }
+  }).safeParse(input);
+  if (parsed.success) return { success: true, data: parsed.data };
+  return {
+    success: false,
+    code: "invalid_upload_reference",
+    message: "One or more uploaded image references are invalid or duplicated.",
+  };
 }
 
 export function describeBugReportAttachments(

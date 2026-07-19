@@ -1,8 +1,7 @@
-import type { BugReportFile } from "./contracts";
 import type {
-  BugReportAttachmentDescriptor,
+  BugReportAttachmentReference,
+  BugReportStatus,
   BugReportSubmissionPayload,
-  BugReportSubmissionReceipt,
 } from "@/types/bug-report";
 
 export type BugReportReporterContext =
@@ -15,29 +14,50 @@ export type BugReportReporterContext =
 
 export interface PersistBugReportCommand {
   payload: BugReportSubmissionPayload;
-  attachments: readonly BugReportFile[];
-  attachmentDescriptors: readonly BugReportAttachmentDescriptor[];
+  /** Finalized single-use claims. Raw image bytes never enter this command. */
+  attachments: readonly BugReportAttachmentReference[];
   reporter: BugReportReporterContext;
   /** Opaque receipt from the durable shared limiter. Safe to retain in the audit event. */
   abuseDecisionId: string;
 }
 
+export interface PersistedBugReportResult {
+  ticketId: string;
+  publicTicketId: string;
+  status: BugReportStatus;
+  reporterAccess:
+    | {
+        kind: "anonymous";
+        /** Returned once, stored only as a hash, and never placed in an outbox row. */
+        oneTimeAccessToken: string;
+        recoveryCode: string;
+      }
+    | {
+        kind: "signed_in";
+      };
+  relay: {
+    requested: boolean;
+    queued: boolean;
+  };
+}
+
 /**
  * Release B must provide this adapter. A successful resolution means the ticket,
- * access-token hash, attachment records, initial message, audit entry, and
+ * access-token hash, finalized attachment claims, initial message, audit entry, and
  * projection outbox rows committed durably in one transaction.
  *
  * The adapter owns these integration seams:
  * - `bug_report.admin_ticket.created` with the private channel payload and direct admin ticket URL
  * - `bug_report.admin_ticket.reply` for channel/thread updates
  * - `bug_report.reporter_dm.requested` and `bug_report.reporter_dm.reply` for the hidden relay
- * - a high-entropy anonymous access token returned only in the reporter receipt
+ * - a high-entropy anonymous access token returned once to the route mapper
  *
- * It must strip image metadata before private object storage and must never put
- * reporter identity or the raw access token in Discord projection payloads.
+ * It must atomically consume finalized attachment claims. Staff-channel
+ * projections must never contain reporter identity, and no projection may
+ * contain the raw anonymous access token.
  */
 export interface BugReportPersistence {
-  persist(command: PersistBugReportCommand): Promise<BugReportSubmissionReceipt>;
+  persist(command: PersistBugReportCommand): Promise<PersistedBugReportResult>;
 }
 
 /**

@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser, getDiscordId } from "@/lib/supabase-auth-server";
 import {
-  describeBugReportAttachments,
+  parseBugReportAttachmentReferences,
   parseBugReportPayload,
-  validateBugReportAttachments,
-  type BugReportFile,
 } from "@/lib/bug-reports/contracts";
-import type { BugReportPersistence, BugReportReporterContext } from "@/lib/bug-reports/persistence";
+import type {
+  BugReportPersistence,
+  BugReportReporterContext,
+  PersistedBugReportResult,
+} from "@/lib/bug-reports/persistence";
 import {
   type BugReportAbuseProtection,
 } from "@/lib/bug-reports/abuse-protection";
@@ -15,6 +17,7 @@ import type {
   BugReportErrorCode,
   BugReportErrorResponse,
   BugReportSubmissionPayload,
+  BugReportSubmissionReceipt,
   BugReportSubmissionResponse,
 } from "@/types/bug-report";
 
@@ -37,36 +40,6 @@ export function createBugReportPostHandler(dependencies: BugReportPostDependenci
       );
     }
 
-    const parsedRequest = await readSubmissionRequest(request);
-    if (!parsedRequest.success) return parsedRequest.response;
-
-    const payloadResult = parseBugReportPayload(parsedRequest.payload);
-    if (!payloadResult.success) {
-      return errorResponse(
-        400,
-        "invalid_request",
-        "Check the highlighted fields and try again.",
-        payloadResult.fieldErrors,
-      );
-    }
-
-    const attachmentResult = await validateBugReportAttachments(parsedRequest.attachments);
-    if (!attachmentResult.success) {
-      return errorResponse(400, attachmentResult.code, attachmentResult.message, {
-        attachments: attachmentResult.message,
-      });
-    }
-
-    const reporter = await dependencies.resolveReporter(request);
-    if (payloadResult.data.replyRelayConsent && reporter.kind !== "signed_in") {
-      return errorResponse(
-        400,
-        "invalid_request",
-        "Sign in with Discord before requesting private reply relay.",
-        { replyRelayConsent: "Discord sign-in is required for private replies." },
-      );
-    }
-
     if (!dependencies.persistence) {
       return errorResponse(
         503,
@@ -83,9 +56,46 @@ export function createBugReportPostHandler(dependencies: BugReportPostDependenci
       );
     }
 
+    const parsedRequest = await readSubmissionRequest(request);
+    if (!parsedRequest.success) return parsedRequest.response;
+
+    const payloadResult = parseBugReportPayload(parsedRequest.payload);
+    if (!payloadResult.success) {
+      return errorResponse(
+        400,
+        "invalid_request",
+        "Check the highlighted fields and try again.",
+        payloadResult.fieldErrors,
+      );
+    }
+
+    const attachmentResult = parseBugReportAttachmentReferences(parsedRequest.attachments);
+    if (!attachmentResult.success) {
+      return errorResponse(400, attachmentResult.code, attachmentResult.message, {
+        attachments: attachmentResult.message,
+      });
+    }
+
+    let reporter: BugReportReporterContext = { kind: "anonymous" };
+    if (payloadResult.data.replyRelayConsent) {
+      reporter = await dependencies.resolveReporter(request);
+      if (reporter.kind !== "signed_in" || !reporter.discordId) {
+        return errorResponse(
+          400,
+          "invalid_request",
+          "Sign in with Discord before requesting private reply relay.",
+          { replyRelayConsent: "A linked Discord identity is required for private replies." },
+        );
+      }
+    }
+
     let abuseDecision;
     try {
-      abuseDecision = await dependencies.abuseProtection.checkSubmission({ request, reporter });
+      abuseDecision = await dependencies.abuseProtection.checkSubmission({
+        request,
+        reporter,
+        action: "ticket_submission",
+      });
     } catch {
       return errorResponse(
         503,
@@ -105,17 +115,16 @@ export function createBugReportPostHandler(dependencies: BugReportPostDependenci
     }
 
     try {
-      const persistedReporter: BugReportReporterContext = payloadResult.data.replyRelayConsent
-        ? reporter
-        : { kind: "anonymous" };
       const ticket = await dependencies.persistence.persist({
         payload: payloadResult.data,
-        attachments: parsedRequest.attachments,
-        attachmentDescriptors: describeBugReportAttachments(parsedRequest.attachments),
-        reporter: persistedReporter,
+        attachments: attachmentResult.data,
+        reporter,
         abuseDecisionId: abuseDecision.decisionId,
       });
-      return NextResponse.json({ ok: true, ticket }, { status: 201 });
+      return NextResponse.json(
+        { ok: true, ticket: buildPublicBugReportReceipt(ticket, request.nextUrl.origin) },
+        { status: 201 },
+      );
     } catch {
       return errorResponse(
         503,
@@ -127,23 +136,31 @@ export function createBugReportPostHandler(dependencies: BugReportPostDependenci
 }
 
 async function readSubmissionRequest(request: NextRequest): Promise<
-  | { success: true; payload: unknown; attachments: BugReportFile[] }
+  | { success: true; payload: unknown; attachments: unknown }
   | { success: false; response: NextResponse<BugReportErrorResponse> }
 > {
-  if (!request.headers.get("content-type")?.toLowerCase().startsWith("multipart/form-data")) {
+  if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
     return {
       success: false,
       response: errorResponse(
         415,
         "invalid_request",
-        "Submit the report as multipart form data.",
+        "Submit the report as JSON using finalized upload references.",
       ),
     };
   }
 
-  let formData: FormData;
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > 64 * 1024) {
+    return {
+      success: false,
+      response: errorResponse(413, "invalid_request", "The report body is too large."),
+    };
+  }
+
+  let body: unknown;
   try {
-    formData = await request.formData();
+    body = await request.json();
   } catch {
     return {
       success: false,
@@ -151,45 +168,51 @@ async function readSubmissionRequest(request: NextRequest): Promise<
     };
   }
 
-  const rawPayload = formData.get("payload");
-  if (typeof rawPayload !== "string") {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
     return {
       success: false,
-      response: errorResponse(400, "invalid_request", "The report payload is required."),
+      response: errorResponse(400, "invalid_request", "The report body is invalid."),
     };
   }
 
-  let payload: unknown;
-  try {
-    payload = JSON.parse(rawPayload);
-  } catch {
+  const candidate = body as Record<string, unknown>;
+  if (!("payload" in candidate) || !("attachments" in candidate)) {
     return {
       success: false,
-      response: errorResponse(400, "invalid_request", "The report payload must be valid JSON."),
+      response: errorResponse(400, "invalid_request", "The payload and attachments are required."),
     };
   }
 
-  const attachmentEntries = formData.getAll("attachments");
-  if (attachmentEntries.some((entry) => typeof entry === "string" || !isBugReportFile(entry))) {
-    return {
-      success: false,
-      response: errorResponse(400, "invalid_request", "Attachments must be image files.", {
-        attachments: "Attachments must be image files.",
-      }),
-    };
-  }
-
-  return { success: true, payload, attachments: attachmentEntries as unknown as BugReportFile[] };
+  return { success: true, payload: candidate.payload, attachments: candidate.attachments };
 }
 
-function isBugReportFile(value: FormDataEntryValue): value is File {
-  return (
-    typeof value !== "string" &&
-    typeof value.name === "string" &&
-    typeof value.type === "string" &&
-    typeof value.size === "number" &&
-    typeof value.arrayBuffer === "function"
-  );
+export function buildPublicBugReportReceipt(
+  persisted: PersistedBugReportResult,
+  siteOrigin: string,
+): BugReportSubmissionReceipt {
+  const statusUrl = new URL(
+    `/report-a-bug/tickets/${encodeURIComponent(persisted.publicTicketId)}`,
+    siteOrigin,
+  ).toString();
+
+  return {
+    ticketId: persisted.ticketId,
+    status: persisted.status,
+    reporterAccess:
+      persisted.reporterAccess.kind === "anonymous"
+        ? {
+            kind: "anonymous",
+            accessUrl: `${statusUrl}#access=${encodeURIComponent(
+              persisted.reporterAccess.oneTimeAccessToken,
+            )}`,
+            recoveryCode: persisted.reporterAccess.recoveryCode,
+          }
+        : {
+            kind: "signed_in",
+            accessUrl: statusUrl,
+          },
+    relay: persisted.relay,
+  };
 }
 
 function errorResponse(
@@ -227,7 +250,7 @@ async function resolveReporter(): Promise<BugReportReporterContext> {
 const runtime = getBugReportRuntime();
 
 export const POST = createBugReportPostHandler({
-  isEnabled: () => runtime.featureEnabled,
+  isEnabled: () => runtime.ready,
   persistence: runtime.persistence,
   abuseProtection: runtime.abuseProtection,
   resolveReporter,
