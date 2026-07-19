@@ -453,7 +453,11 @@ export function AdminTicketsClient({
           {filtered.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-slate-950/84 py-16 text-center backdrop-blur">
               <p className="text-sm font-black uppercase text-slate-500">
-                {tickets.length === 0 ? "No tickets. All caught up." : "No tickets match your filters."}
+                {tickets.length > 0
+                  ? "No tickets match your filters."
+                  : failedSources.length > 0
+                    ? "No tickets loaded. Unavailable sources may still hold open work."
+                    : "No tickets. All caught up."}
               </p>
             </div>
           ) : (

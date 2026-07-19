@@ -6,23 +6,27 @@ import { getAdminTicketQueueFromClient } from "@/lib/admin-tickets";
 type FakeResult = { data: unknown[] | null; error: { message: string; code?: string } | null };
 
 /**
- * Minimal structural stand-in for the supabase query builder chain used by
- * the reader: from().select().order().limit() and from().select() awaited
- * directly for the name lookups.
+ * Minimal structural stand-in for the supabase query builder chains used by
+ * the reader. Each ticket source issues two queries: not(...in terminal) for
+ * unresolved rows (keyed by table name) and in(...terminal) for recent
+ * history (keyed by "<table>:history"). Name lookups await select() directly.
  */
 function fakeClient(results: Record<string, FakeResult | (() => Promise<FakeResult>)>) {
+  const resolve = async (key: string): Promise<FakeResult> => {
+    const result = results[key] ?? { data: [], error: null };
+    return typeof result === "function" ? result() : result;
+  };
   return {
     from(table: string) {
-      const resolve = async (): Promise<FakeResult> => {
-        const result = results[table] ?? { data: [], error: null };
-        return typeof result === "function" ? result() : result;
+      const chain = (key: string) => ({ order: () => ({ limit: () => resolve(key) }) });
+      return {
+        select: () => ({
+          not: () => chain(table),
+          in: () => chain(`${table}:history`),
+          then: (onFulfilled: (value: FakeResult) => unknown, onRejected?: (reason: unknown) => unknown) =>
+            resolve(table).then(onFulfilled, onRejected),
+        }),
       };
-      const thenable = {
-        order: () => ({ limit: () => resolve() }),
-        then: (onFulfilled: (value: FakeResult) => unknown, onRejected?: (reason: unknown) => unknown) =>
-          resolve().then(onFulfilled, onRejected),
-      };
-      return { select: () => thenable };
     },
   } as unknown as SupabaseClient<Database>;
 }
@@ -105,6 +109,39 @@ describe("getAdminTicketQueueFromClient", () => {
     expect(registrationHealth?.ok).toBe(false);
     expect(registrationHealth?.reason).toBe("Source unavailable, showing the rest of the queue.");
     expect(queue.sourceHealth.filter((s) => s.ok)).toHaveLength(3);
+  });
+
+  it("merges unresolved rows with recent terminal history for a source", async () => {
+    const queue = await getAdminTicketQueueFromClient(
+      fakeClient({
+        registrations: { data: [registrationRow], error: null },
+        "registrations:history": {
+          data: [
+            {
+              ...registrationRow,
+              id: "cccc1111-0000-0000-0000-000000000002",
+              status: "approved",
+              reviewed_at: "2026-07-05T12:00:00Z",
+            },
+          ],
+          error: null,
+        },
+      }),
+    );
+    expect(queue.tickets).toHaveLength(2);
+    expect(queue.tickets.map((t) => t.status).sort()).toEqual(["open", "resolved"]);
+    expect(queue.sourceHealth.find((s) => s.source === "registration")?.ok).toBe(true);
+  });
+
+  it("marks a source failed when its history query fails", async () => {
+    const queue = await getAdminTicketQueueFromClient(
+      fakeClient({
+        registrations: { data: [registrationRow], error: null },
+        "registrations:history": { data: null, error: { message: "timeout" } },
+      }),
+    );
+    expect(queue.tickets).toEqual([]);
+    expect(queue.sourceHealth.find((s) => s.source === "registration")?.ok).toBe(false);
   });
 
   it("survives a source that rejects outright", async () => {

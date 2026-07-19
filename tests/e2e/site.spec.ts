@@ -171,11 +171,14 @@ test("admin ticket queue renders filters and honest empty state", async ({ page 
     await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
   }
   await expect(page.getByPlaceholder("Search by ticket id, title, match, or summary...")).toBeVisible();
-  // The e2e server runs without Supabase, so every source reports unavailable.
+  // The e2e server runs without Supabase, so every source reports unavailable
+  // and the empty state must not claim the queue is caught up.
   await expect(
     page.getByRole("alert").filter({ hasText: "ticket sources" }),
   ).toContainText("Some ticket sources could not be read");
-  await expect(page.getByText("No tickets. All caught up.")).toBeVisible();
+  await expect(
+    page.getByText("No tickets loaded. Unavailable sources may still hold open work."),
+  ).toBeVisible();
 });
 
 for (const viewport of viewports) {
@@ -183,7 +186,7 @@ for (const viewport of viewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await adminLogin(page);
     await page.goto("/admin/tickets");
-    await expect(page.getByText("No tickets. All caught up.")).toBeVisible();
+    await expect(page.getByText("No tickets loaded.", { exact: false })).toBeVisible();
     await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
   });
 }

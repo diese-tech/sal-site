@@ -74,6 +74,30 @@ export type MatchReportSourceRow = Pick<
   | "screenshot_urls"
 >;
 
+// Raw statuses each source uses for finished work. The reader excludes these
+// when fetching unresolved rows, so open work is never crowded out of the
+// queue by newer terminal records; statuses not listed here (including
+// unknown ones) are treated as unresolved and normalize to "open".
+export const PENDING_ACTION_TERMINAL_STATUSES = [
+  "approved",
+  "applied",
+  "denied",
+  "rejected",
+  "cancelled",
+  "expired",
+] as const;
+export const PENDING_STAT_TERMINAL_STATUSES = [
+  "approved",
+  "corrected",
+  "applied",
+  "rejected",
+  "denied",
+  "discarded",
+  "cancelled",
+] as const;
+export const REGISTRATION_TERMINAL_STATUSES = ["approved", "rejected"] as const;
+export const MATCH_REPORT_TERMINAL_STATUSES = ["done"] as const;
+
 export const PENDING_ACTION_COLUMNS =
   "id,type,status,created_at,updated_at,division_id,match_id,admin_note,source_discord_message_url,approved_at";
 export const PENDING_STAT_RECORD_COLUMNS =
