@@ -7,29 +7,42 @@ export const RULING_DEEP_LINKS = {
   publicTicketStatusPathTemplate: null,
 } as const;
 
-export type AssistantIntent = "guidance" | "request_official_ruling";
+declare const publicSafeModelInputBrand: unique symbol;
+export type PublicSafeModelInput = string & { readonly [publicSafeModelInputBrand]: true };
+
 export type AssistantSourceType = "published_rule" | "sanitized_precedent" | "public_faq";
 
 export interface AssistantQuestionRequest {
   question: string;
-  intent: AssistantIntent;
-  rulingRequestConfirmed?: boolean;
 }
 
 export interface AssistantCitation {
   sourceId: string;
   sourceType: AssistantSourceType;
   title: string;
+  ruleSetId: string;
+  releaseId: string;
   version: string;
+  current: boolean;
+  conflictState: "none" | "detected" | "under_review" | "resolved";
   publicUrl: string;
 }
 
-export interface AssistantDeterminism {
-  classification: "deterministic" | "ambiguous" | "unresolved";
+export interface DeterministicAssessment {
+  classification: "deterministic";
   validator: "published-rules-engine";
-  verified: boolean;
-  ruleVersion: string | null;
+  verified: true;
+  ruleVersion: string;
 }
+
+export interface AmbiguousAssessment {
+  classification: "ambiguous";
+  validator: "published-rules-engine";
+  verified: false;
+  ruleVersion: null;
+}
+
+export type AssistantDeterminism = DeterministicAssessment | AmbiguousAssessment;
 
 export interface AssistantEscalation {
   available: boolean;
@@ -38,32 +51,38 @@ export interface AssistantEscalation {
   publicStatusPath: string | null;
 }
 
-export interface AssistantAnswerResponse {
+export interface DeterministicGuidanceResponse {
   ok: true;
   apiVersion: typeof PUBLIC_ASSISTANT_API_VERSION;
-  kind: "deterministic_guidance" | "ambiguous_guidance";
+  kind: "deterministic_guidance";
   authority: "advisory";
   answer: string;
   citations: AssistantCitation[];
-  determinism: AssistantDeterminism;
+  determinism: DeterministicAssessment;
+  modelConfidence: number;
+  model: typeof PUBLIC_ASSISTANT_MODEL;
+  escalation: AssistantEscalation;
+}
+
+export interface AmbiguousGuidanceResponse {
+  ok: true;
+  apiVersion: typeof PUBLIC_ASSISTANT_API_VERSION;
+  kind: "ambiguous_guidance";
+  authority: "advisory";
+  answer: string;
+  citations: AssistantCitation[];
+  determinism: AmbiguousAssessment;
   modelConfidence: number | null;
   model: typeof PUBLIC_ASSISTANT_MODEL;
   escalation: AssistantEscalation;
 }
 
-export interface AssistantTicketResponse {
-  ok: true;
-  apiVersion: typeof PUBLIC_ASSISTANT_API_VERSION;
-  kind: "ticket_created";
-  authority: "official_review_pending";
-  ticketId: string;
-  message: string;
-  escalation: AssistantEscalation;
-}
+export type AssistantAnswerResponse = DeterministicGuidanceResponse | AmbiguousGuidanceResponse;
 
 export type AssistantUnavailableReason =
   | "durable_feature_flag_missing"
   | "sanitized_sources_missing"
+  | "sanitized_source_version_mismatch"
   | "free_model_contract_mismatch";
 
 export interface AssistantUnavailableResponse {
@@ -90,6 +109,5 @@ export interface AssistantValidationErrorResponse {
 
 export type PublicAssistantResponse =
   | AssistantAnswerResponse
-  | AssistantTicketResponse
   | AssistantUnavailableResponse
   | AssistantValidationErrorResponse;

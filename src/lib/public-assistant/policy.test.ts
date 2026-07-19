@@ -8,6 +8,7 @@ describe("public assistant policy", () => {
       evaluateAssistantAvailability({
         durableFeatureFlagEnabled: false,
         sanitizedSourceRepositoryReady: false,
+        sanitizedSourceVersionVerified: false,
         model: PUBLIC_ASSISTANT_MODEL,
       }),
     ).toEqual({
@@ -21,12 +22,24 @@ describe("public assistant policy", () => {
       evaluateAssistantAvailability({
         durableFeatureFlagEnabled: true,
         sanitizedSourceRepositoryReady: true,
+        sanitizedSourceVersionVerified: true,
         model: "paid/provider-model",
       }),
     ).toEqual({
       enabled: false,
       reasons: ["free_model_contract_mismatch"],
     });
+  });
+
+  it("rejects a ready repository when its approved version is not verified", () => {
+    expect(
+      evaluateAssistantAvailability({
+        durableFeatureFlagEnabled: true,
+        sanitizedSourceRepositoryReady: true,
+        sanitizedSourceVersionVerified: false,
+        model: PUBLIC_ASSISTANT_MODEL,
+      }),
+    ).toEqual({ enabled: false, reasons: ["sanitized_source_version_mismatch"] });
   });
 
   it("classifies guidance as deterministic only after every non-model gate passes", () => {

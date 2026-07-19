@@ -7,12 +7,22 @@ import {
 export interface AssistantAvailabilityInput {
   durableFeatureFlagEnabled: boolean;
   sanitizedSourceRepositoryReady: boolean;
+  sanitizedSourceVersionVerified: boolean;
   model: string;
 }
 
 export interface AssistantAvailability {
   enabled: boolean;
   reasons: AssistantUnavailableReason[];
+}
+
+export interface DurablePublicAssistantFeatureGate {
+  enabled: boolean;
+  sourceContract: {
+    ruleSetId: string;
+    releaseId: string;
+    approvalVersion: string;
+  };
 }
 
 export interface DeterminismInput {
@@ -28,9 +38,17 @@ export function evaluateAssistantAvailability(input: AssistantAvailabilityInput)
 
   if (!input.durableFeatureFlagEnabled) reasons.push("durable_feature_flag_missing");
   if (!input.sanitizedSourceRepositoryReady) reasons.push("sanitized_sources_missing");
+  if (input.sanitizedSourceRepositoryReady && !input.sanitizedSourceVersionVerified) {
+    reasons.push("sanitized_source_version_mismatch");
+  }
   if (input.model !== PUBLIC_ASSISTANT_MODEL) reasons.push("free_model_contract_mismatch");
 
   return { enabled: reasons.length === 0, reasons };
+}
+
+/** Release B must replace this with an Owner-controlled, database-backed gate. */
+export function getDurablePublicAssistantFeatureGate(): DurablePublicAssistantFeatureGate | null {
+  return null;
 }
 
 /**
@@ -46,10 +64,19 @@ export function evaluateDeterminism(input: DeterminismInput): AssistantDetermini
     Boolean(input.exactRuleVersion) &&
     input.deterministicValidatorConfirmed;
 
+  if (verified) {
+    return {
+      classification: "deterministic",
+      validator: "published-rules-engine",
+      verified: true,
+      ruleVersion: input.exactRuleVersion as string,
+    };
+  }
+
   return {
-    classification: verified ? "deterministic" : "ambiguous",
+    classification: "ambiguous",
     validator: "published-rules-engine",
-    verified,
-    ruleVersion: verified ? input.exactRuleVersion : null,
+    verified: false,
+    ruleVersion: null,
   };
 }

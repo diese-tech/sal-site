@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { orderSanitizedSources, type SanitizedAssistantSource } from "./sources";
+import {
+  orderSanitizedSources,
+  sanitizedAssistantSourceSchema,
+  verifySanitizedSourceReadiness,
+  type SanitizedAssistantSource,
+} from "./sources";
 
 function source(
   id: string,
@@ -11,13 +16,26 @@ function source(
     sourceType,
     title: id,
     canonicalText: "Approved public-safe text.",
-    version: "v1",
+    ruleSetId: "rules-2026",
+    releaseId: "rules-2026.1",
+    sourceVersion: "1.0.0",
+    approvalVersion: "approval-4",
+    scope: { global: true, seasonIds: [], divisionIds: [] },
     effectiveAt,
-    publicUrl: `/rules#${id}`,
+    expiresAt: null,
     status: "published",
+    supersededBy: null,
+    conflictState: "none",
     visibility: "public_sanitized",
+    publicUrl: `/rules#${id}`,
   };
 }
+
+const expectedContract = {
+  ruleSetId: "rules-2026",
+  releaseId: "rules-2026.1",
+  approvalVersion: "approval-4",
+};
 
 describe("sanitized assistant sources", () => {
   it("always ranks current published rules ahead of precedent and FAQ material", () => {
@@ -28,5 +46,49 @@ describe("sanitized assistant sources", () => {
     ]);
 
     expect(ordered.map(({ id }) => id)).toEqual(["rule", "precedent", "faq"]);
+  });
+
+  it("rejects invalid scope, expiry, supersession, and unsafe source URLs", () => {
+    expect(
+      sanitizedAssistantSourceSchema.safeParse({
+        ...source("bad", "published_rule", "2026-07-18T12:00:00Z"),
+        scope: { global: false, seasonIds: [], divisionIds: [] },
+        expiresAt: "2026-07-17T12:00:00Z",
+        supersededBy: "rule-next",
+        publicUrl: "javascript:alert(1)",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("verifies exact rule-set, release, and approval versions before enablement", () => {
+    expect(
+      verifySanitizedSourceReadiness(
+        {
+          ready: true,
+          ruleSetId: "rules-2026",
+          releaseId: "rules-2026.1",
+          approvalVersion: "approval-4",
+          sourceCount: 12,
+          verifiedAt: "2026-07-18T12:00:00Z",
+        },
+        expectedContract,
+      ),
+    ).toEqual({ verified: true, reasons: [] });
+  });
+
+  it("fails readiness when the approved release drifts", () => {
+    expect(
+      verifySanitizedSourceReadiness(
+        {
+          ready: true,
+          ruleSetId: "rules-2026",
+          releaseId: "rules-2025.9",
+          approvalVersion: "approval-4",
+          sourceCount: 12,
+          verifiedAt: "2026-07-18T12:00:00Z",
+        },
+        expectedContract,
+      ),
+    ).toEqual({ verified: false, reasons: ["release_mismatch"] });
   });
 });

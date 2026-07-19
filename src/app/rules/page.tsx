@@ -154,8 +154,8 @@ export default function RulesPage() {
               <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                 <p className="text-sm font-black text-white">Privacy at launch</p>
                 <p className="mt-2 text-sm font-semibold leading-6 text-slate-400">
-                  General assistant transcripts are not stored. Public models may receive only published rules, approved
-                  sanitized findings, and redacted case facts.
+                  One-shot guidance is not stored as chat history. Confirmed official requests are separate tracked
+                  records. Public models may receive only published rules, approved sanitized findings, and redacted facts.
                 </p>
               </article>
             </section>

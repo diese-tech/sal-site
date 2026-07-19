@@ -79,7 +79,9 @@ export function SiteNav() {
             {/* Hamburger — mobile only */}
             <button
               onClick={() => setMenuOpen((o) => !o)}
-              aria-label="Toggle menu"
+              aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={menuOpen}
+              aria-controls="site-mobile-navigation"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:bg-white/[0.08] lg:hidden"
             >
               {menuOpen ? (
@@ -98,7 +100,10 @@ export function SiteNav() {
 
       {/* Mobile dropdown menu */}
       {menuOpen && (
-        <div className="fixed inset-x-0 top-24 z-40 border-b border-white/10 bg-[rgba(4,9,26,0.97)] px-4 py-3 shadow-2xl backdrop-blur-md lg:hidden">
+        <div
+          id="site-mobile-navigation"
+          className="fixed inset-x-0 top-24 z-40 max-h-[calc(100dvh-6rem)] overflow-y-auto overscroll-contain border-b border-white/10 bg-[rgba(4,9,26,0.97)] px-4 py-3 shadow-2xl backdrop-blur-md lg:hidden"
+        >
           <nav className="flex flex-col gap-1">
             {NAV_LINKS.map(({ href, label, exact }) => {
               const active = isActive(href, exact);
