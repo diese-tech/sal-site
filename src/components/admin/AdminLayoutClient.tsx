@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
 import { cn } from "@/lib/utils";
 
@@ -157,7 +157,15 @@ export function AdminLayoutClient({
   ticketBadgeCount?: number | null;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const previousPathname = useRef(pathname);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (previousPathname.current === pathname) return;
+    previousPathname.current = pathname;
+    router.refresh();
+  }, [pathname, router]);
   const isLogin = pathname === "/admin/login";
 
   if (isLogin) return <>{children}</>;

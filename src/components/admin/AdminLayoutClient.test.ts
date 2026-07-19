@@ -2,7 +2,12 @@ import { createElement, type ComponentType, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/admin/tickets" }));
+const navigationMocks = vi.hoisted(() => ({ refresh: vi.fn() }));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/admin/tickets",
+  useRouter: () => ({ refresh: navigationMocks.refresh }),
+}));
 vi.mock("next/link", () => ({
   default: ({ children, ...props }: { children: React.ReactNode }) =>
     createElement("a", props, children),
