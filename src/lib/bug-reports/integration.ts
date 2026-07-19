@@ -127,7 +127,9 @@ export type BugReportDeliveryAcknowledgement = BugReportOutboxEnvelope<
 >;
 
 export function buildAdminTicketUrl(siteBaseUrl: string, ticketId: string): string {
-  return new URL(`/admin/tickets/${encodeURIComponent(ticketId)}`, siteBaseUrl).toString();
+  const url = new URL("/admin/tickets", siteBaseUrl);
+  url.searchParams.set("ticket", ticketId);
+  return url.toString();
 }
 
 export function buildAdminTicketProjection(

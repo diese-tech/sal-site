@@ -5,6 +5,7 @@ import {
   type BugReportAttachmentDescriptor,
   type BugReportAttachmentReference,
   type BugReportErrorCode,
+  type BugReportStatusResponse,
   type BugReportSubmissionPayload,
   type BugReportUploadSessionReceipt,
 } from "@/types/bug-report";
@@ -270,10 +271,12 @@ export function parseBugReportFinalizationAdapterResult(
     : { success: false, message: "Private storage returned an invalid finalized reference." };
 }
 
+const anonymousAccessTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43,256}$/);
+
 const anonymousReporterAccessSchema = z.object({
   kind: z.literal("anonymous"),
   // 43 base64url characters carry at least 256 bits when generated uniformly.
-  oneTimeAccessToken: z.string().regex(/^[A-Za-z0-9_-]{43,256}$/),
+  oneTimeAccessToken: anonymousAccessTokenSchema,
   recoveryCode: z.string().regex(/^[A-Z0-9-]{8,64}$/),
 }).strict();
 
@@ -281,11 +284,13 @@ const signedInReporterAccessSchema = z.object({
   kind: z.literal("signed_in"),
 }).strict();
 
+const publicTicketIdSchema = z.string().regex(/^[A-Za-z0-9_-]{22,160}$/);
+
 const persistedBugReportResultSchema = z.object({
   ticketId: z.string().regex(/^[A-Z][A-Z0-9-]{7,63}$/),
   // Public route identifiers are opaque and must contain at least 128 bits
   // when generated uniformly as base64url.
-  publicTicketId: z.string().regex(/^[A-Za-z0-9_-]{22,160}$/),
+  publicTicketId: publicTicketIdSchema,
   status: z.enum([
     "open",
     "acknowledged",
@@ -345,6 +350,43 @@ export function parsePersistedBugReportResult(
   }
 
   return { success: true, data: parsed.data };
+}
+
+export function parsePublicBugReportTicketId(input: unknown): string | null {
+  const parsed = publicTicketIdSchema.safeParse(input);
+  return parsed.success ? parsed.data : null;
+}
+
+export function parseAnonymousBugReportAccessToken(input: unknown): string | null {
+  const parsed = anonymousAccessTokenSchema.safeParse(input);
+  return parsed.success ? parsed.data : null;
+}
+
+const bugReportStatusResponseSchema = z.object({
+  ticketId: z.string().regex(/^[A-Z][A-Z0-9-]{7,63}$/),
+  status: z.enum([
+    "open",
+    "acknowledged",
+    "waiting_on_reporter",
+    "investigating",
+    "resolved",
+    "no_response",
+  ]),
+  updatedAt: z.iso.datetime(),
+  messages: z.array(z.object({
+    id: z.string().min(1).max(160),
+    direction: z.enum(["reporter_to_admin", "admin_to_reporter"]),
+    message: z.string().min(1).max(5_000),
+    deliveryStatus: z.enum(["queued", "delivered", "failed"]),
+    createdAt: z.iso.datetime(),
+  }).strict()).max(500),
+}).strict();
+
+export function parseBugReportStatusResult(
+  input: unknown,
+): { success: true; data: BugReportStatusResponse } | { success: false } {
+  const parsed = bugReportStatusResponseSchema.safeParse(input);
+  return parsed.success ? { success: true, data: parsed.data } : { success: false };
 }
 
 export function normalizeCanonicalSiteOrigin(input: unknown): string | null {

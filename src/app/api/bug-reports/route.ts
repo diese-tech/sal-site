@@ -156,26 +156,14 @@ export function createBugReportPostHandler(dependencies: BugReportPostDependenci
       );
     }
 
+    let adapterResult: unknown;
     try {
-      const adapterResult = await dependencies.persistence.persist({
+      adapterResult = await dependencies.persistence.persist({
         payload: payloadResult.data,
         attachments: attachmentResult.data,
         reporter,
         abuseDecisionId: abuseDecision.decisionId,
       });
-      const persisted = parsePersistedBugReportResult(
-        adapterResult,
-        reporter,
-        payloadResult.data.replyRelayConsent,
-      );
-      if (!persisted.success) throw new Error(persisted.message);
-      return sensitiveJsonResponse(
-        {
-          ok: true as const,
-          ticket: buildPublicBugReportReceipt(persisted.data, canonicalSiteOrigin),
-        },
-        { status: 201 },
-      );
     } catch {
       return errorResponse(
         503,
@@ -183,6 +171,27 @@ export function createBugReportPostHandler(dependencies: BugReportPostDependenci
         "We could not save this report. Nothing was submitted, so please try again.",
       );
     }
+
+    const persisted = parsePersistedBugReportResult(
+      adapterResult,
+      reporter,
+      payloadResult.data.replyRelayConsent,
+    );
+    if (!persisted.success) {
+      return errorResponse(
+        503,
+        "submission_uncertain",
+        "Your report may have been submitted, but its receipt could not be verified. Do not submit it again. Contact a SAL admin if no confirmation appears.",
+      );
+    }
+
+    return sensitiveJsonResponse(
+      {
+        ok: true as const,
+        ticket: buildPublicBugReportReceipt(persisted.data, canonicalSiteOrigin),
+      },
+      { status: 201 },
+    );
   };
 }
 

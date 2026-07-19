@@ -118,7 +118,8 @@ export type BugReportErrorCode =
   | "rate_limited"
   | "rate_limit_unavailable"
   | "persistence_unavailable"
-  | "submission_failed";
+  | "submission_failed"
+  | "submission_uncertain";
 
 export interface BugReportSuccessResponse {
   ok: true;
@@ -167,3 +168,12 @@ export interface BugReportStatusResponse {
     createdAt: string;
   }>;
 }
+
+export interface BugReportStatusSuccessResponse {
+  ok: true;
+  ticket: BugReportStatusResponse;
+}
+
+export type BugReportStatusLookupResponse =
+  | BugReportStatusSuccessResponse
+  | BugReportErrorResponse;

@@ -10,7 +10,7 @@ import {
 describe("bug report SALbot integration contract", () => {
   it("builds a stable direct admin ticket URL", () => {
     expect(buildAdminTicketUrl("https://sal.example/", "BUG 190/one")).toBe(
-      "https://sal.example/admin/tickets/BUG%20190%2Fone",
+      "https://sal.example/admin/tickets?ticket=BUG+190%2Fone",
     );
   });
 
@@ -41,7 +41,7 @@ describe("bug report SALbot integration contract", () => {
         descriptionPreview: "@​everyone The current season remains blank after it is selected.",
         attachmentCount: 2,
         status: "open",
-        directTicketUrl: "https://sal.example/admin/tickets/BUG-190",
+        directTicketUrl: "https://sal.example/admin/tickets?ticket=BUG-190",
         mentionPolicy: "suppress_all",
       },
     });

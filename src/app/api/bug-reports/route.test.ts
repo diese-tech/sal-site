@@ -550,4 +550,35 @@ describe("POST /api/bug-reports", () => {
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({ ok: false, code: "submission_failed" });
   });
+
+  it("warns against duplicate retries when persistence commits but returns an invalid receipt", async () => {
+    const handler = createBugReportPostHandler({
+      isEnabled: () => true,
+      persistence: {
+        persist: vi.fn().mockResolvedValue({
+          ticketId: "BUG-0200",
+          publicTicketId: strongPublicTicketId,
+          status: "open",
+          reporterAccess: {
+            kind: "anonymous",
+            oneTimeAccessToken: "invalid",
+            recoveryCode: "SAL-200-A",
+          },
+          relay: { requested: false, queued: false },
+        }),
+      },
+      abuseProtection: allowedSubmission,
+      resolveReporter: anonymousReporter,
+    });
+
+    const response = await handler(requestFor());
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBeNull();
+    expect(body).toMatchObject({ ok: false, code: "submission_uncertain" });
+    expect(body.message).toMatch(/may have been submitted/i);
+    expect(body.message).toMatch(/do not submit/i);
+    expect(body.message).not.toMatch(/nothing was submitted|try again/i);
+  });
 });
