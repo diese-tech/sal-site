@@ -25,7 +25,7 @@ export default async function BugReportStatusPage({
         <p className="font-mono text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">
           League support
         </p>
-        <h1 className="mt-3 font-display text-4xl font-black tracking-tight text-white sm:text-5xl">
+        <h1 className="u-font-display mt-3 text-4xl font-black tracking-tight text-white sm:text-5xl">
           Private ticket status
         </h1>
         <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400">

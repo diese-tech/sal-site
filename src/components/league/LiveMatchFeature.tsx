@@ -117,7 +117,7 @@ function FeaturedLiveCard({
       <div className="flex items-center justify-between px-5 pt-4">
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5 rounded-lg border border-orange-300/50 bg-orange-400/15 px-2.5 py-1 text-[0.65rem] font-black uppercase text-orange-100">
-            <span className="h-1.5 w-1.5 rounded-full bg-orange-400 live-pulse" />
+            <span className="u-live-pulse h-1.5 w-1.5 rounded-full bg-orange-400" />
             Live Now
           </span>
           <span className={cn("text-[0.65rem] font-black uppercase", divText)}>{divLabel} · Wk {match.week}</span>

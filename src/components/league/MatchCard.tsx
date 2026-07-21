@@ -87,7 +87,7 @@ export function MatchCard({
               cfg.pill,
             )}
           >
-            <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot, cfg.pulse && "live-pulse")} />
+            <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot, cfg.pulse && "u-live-pulse")} />
             {cfg.label}
           </span>
           <span className="text-[0.65rem] font-bold text-slate-500">

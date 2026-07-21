@@ -451,7 +451,7 @@ function FormSection({
     <section className="grid gap-5 border-b border-white/[0.07] pb-8 last:border-0 last:pb-0 md:grid-cols-[10rem_minmax(0,1fr)]">
       <div>
         <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-cyan-400">{number}</p>
-        <h2 className="mt-1 font-display text-lg font-bold text-white">{title}</h2>
+        <h2 className="u-font-display mt-1 text-lg font-bold text-white">{title}</h2>
         <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p>
       </div>
       <div className="space-y-5">{children}</div>
@@ -505,7 +505,7 @@ function BugReportReceipt({ receipt }: { receipt: BugReportSubmissionReceipt }) 
       <p className="mt-6 font-mono text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
         Ticket {receipt.ticketId}
       </p>
-      <h2 className="mt-2 font-display text-2xl font-black text-white">Report safely stored</h2>
+      <h2 className="u-font-display mt-2 text-2xl font-black text-white">Report safely stored</h2>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
         {anonymousAccess
           ? "Save both items below. The private link carries a one-time fragment token that is not sent in the request path."

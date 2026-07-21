@@ -36,7 +36,7 @@ export default async function ReportABugPage() {
               {submissionEnabled ? "Intake online" : "Intake preparing"}
             </span>
           </div>
-          <h1 className="font-display text-4xl font-black tracking-tight text-white sm:text-5xl">
+          <h1 className="u-font-display text-4xl font-black tracking-tight text-white sm:text-5xl">
             Found something broken?
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
@@ -103,7 +103,7 @@ function InfoCard({
   return (
     <section className={`rounded-[var(--sal-card-radius)] border p-5 ${toneClasses}`}>
       <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.18em]">{eyebrow}</p>
-      <h2 className="mt-1 font-display text-lg font-bold text-white">{title}</h2>
+      <h2 className="u-font-display mt-1 text-lg font-bold text-white">{title}</h2>
       <ul className="mt-4 space-y-3">
         {items.map((item) => (
           <li key={item} className="flex gap-2.5 text-xs leading-5 text-slate-400">

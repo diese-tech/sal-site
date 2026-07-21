@@ -26,6 +26,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Verify frontend BEM compatibility
+        run: npm run check:bem
+
       - name: Typecheck
         run: npx tsc --noEmit
 
