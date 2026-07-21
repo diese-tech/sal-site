@@ -103,6 +103,21 @@ function RegistrationActions({
 
   return (
     <div className="mt-3 border-t border-white/8 pt-3">
+      {ticket.registrationIgn ? (
+        <div className="mb-3 rounded-lg border border-cyan-300/20 bg-cyan-300/8 px-3 py-2">
+          <p className="text-[0.6rem] font-black uppercase tracking-wider text-cyan-300/70">
+            Submitted IGN
+          </p>
+          <p className="font-mono text-sm font-black text-white">{ticket.registrationIgn}</p>
+          <p className="mt-1 text-[0.65rem] text-slate-400">
+            Approval creates or links the player profile using this exact in-game name.
+          </p>
+        </div>
+      ) : (
+        <p className="mb-3 text-xs font-semibold text-amber-300">
+          Submitted IGN is unavailable. Reject this registration or continue in Registrations.
+        </p>
+      )}
       <label className="block">
         <span className="mb-1 block text-[0.6rem] font-black uppercase tracking-wider text-slate-500">
           Reviewer note
@@ -120,7 +135,10 @@ function RegistrationActions({
       {decision ? (
         <div className="mt-2 rounded-lg border border-amber-300/25 bg-amber-300/8 p-3">
           <p className="text-xs font-semibold text-amber-100">
-            Confirm {decision === "approve" ? "approval" : "rejection"} for {ticket.displayId}.
+            Confirm {decision === "approve" ? "approval" : "rejection"} for {ticket.displayId}
+            {decision === "approve" && ticket.registrationIgn
+              ? ` using IGN ${ticket.registrationIgn}`
+              : ""}.
           </p>
           {decision === "reject" && !reviewerNote.trim() && (
             <p className="mt-1 text-[0.65rem] text-red-300">Add a reviewer note before rejecting.</p>
@@ -149,7 +167,8 @@ function RegistrationActions({
           <button
             type="button"
             onClick={() => setDecision("approve")}
-            className="rounded-lg border border-emerald-300/40 bg-emerald-300/15 px-3 py-1.5 text-xs font-black uppercase text-emerald-100"
+            disabled={!ticket.registrationIgn}
+            className="rounded-lg border border-emerald-300/40 bg-emerald-300/15 px-3 py-1.5 text-xs font-black uppercase text-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Approve Registration
           </button>

@@ -16,16 +16,16 @@ const extractedPlayerSchema = z.object({
 const extractedGameSchema = z.object({
   gameNumber: z.number().int().min(1),
   winningSide: z.enum(["home", "away"]),
-  players: z.array(extractedPlayerSchema).min(2).max(20).superRefine((players, context) => {
-    if (!players.some((player) => player.side === "home")) {
-      context.addIssue({ code: "custom", message: "A home player is required." });
+  players: z.array(extractedPlayerSchema).length(10).superRefine((players, context) => {
+    if (players.filter((player) => player.side === "home").length !== 5) {
+      context.addIssue({ code: "custom", message: "Exactly five home players are required." });
     }
-    if (!players.some((player) => player.side === "away")) {
-      context.addIssue({ code: "custom", message: "An away player is required." });
+    if (players.filter((player) => player.side === "away").length !== 5) {
+      context.addIssue({ code: "custom", message: "Exactly five away players are required." });
     }
-    const playerKeys = players.map((player) => `${player.side}:${player.ign.toLowerCase()}`);
+    const playerKeys = players.map((player) => player.ign.toLowerCase());
     if (new Set(playerKeys).size !== playerKeys.length) {
-      context.addIssue({ code: "custom", message: "Player rows must be unique within each side." });
+      context.addIssue({ code: "custom", message: "Player rows must be unique within a game." });
     }
   }),
 });
@@ -34,6 +34,11 @@ const extractedGamesSchema = z.array(extractedGameSchema).min(1).max(5).superRef
   const gameNumbers = games.map((game) => game.gameNumber);
   if (new Set(gameNumbers).size !== gameNumbers.length) {
     context.addIssue({ code: "custom", message: "Game numbers must be unique." });
+  }
+  const homeWins = games.filter((game) => game.winningSide === "home").length;
+  const awayWins = games.length - homeWins;
+  if (homeWins === awayWins) {
+    context.addIssue({ code: "custom", message: "A reviewed series cannot end in a tie." });
   }
 });
 
@@ -47,7 +52,7 @@ interface MatchReportSource {
 }
 
 interface MatchReportLeagueContext {
-  matches: Array<{ id: string; homeOrgId: string; awayOrgId: string }>;
+  matches: Array<{ id: string; homeOrgId: string; awayOrgId: string; status: string }>;
   orgs: Array<{ id: string; name: string; tag: string }>;
   players: Array<{ id: string; ign: string; orgId?: string; archivedAt?: string | null }>;
 }
@@ -89,7 +94,7 @@ const resolutionPlayerSchema = z.object({
 const resolutionGameSchema = z.object({
   gameNumber: z.number().int().min(1),
   winningSide: z.enum(["home", "away"]),
-  players: z.array(resolutionPlayerSchema).min(2).max(20),
+  players: z.array(resolutionPlayerSchema).length(10),
 }).strict();
 
 const safeHttpUrlSchema = z.string().url().refine((value) => {
@@ -140,7 +145,7 @@ export function buildMatchReportActionContext(
   }
 
   const match = league.matches.find((candidate) => candidate.id === source.match_id);
-  if (!match) return READ_ONLY_CONTEXT;
+  if (!match || !["scheduled", "live"].includes(match.status)) return READ_ONLY_CONTEXT;
   const homeOrg = league.orgs.find((org) => org.id === match.homeOrgId);
   const awayOrg = league.orgs.find((org) => org.id === match.awayOrgId);
   if (!homeOrg || !awayOrg) return READ_ONLY_CONTEXT;

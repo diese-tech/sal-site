@@ -180,6 +180,7 @@ function TicketDetail({
   if (ticket.seasonId) facts.push({ label: "Season", value: seasonNames[ticket.seasonId] ?? ticket.seasonId });
   if (ticket.divisionId) facts.push({ label: "Division", value: divisionNames[ticket.divisionId] ?? ticket.divisionId });
   if (ticket.matchId) facts.push({ label: "Match", value: ticket.matchId });
+  if (ticket.registrationIgn) facts.push({ label: "Submitted IGN", value: ticket.registrationIgn });
   if (ticket.claimedBy) facts.push({ label: "Claimed by", value: ticket.claimedBy });
   if (ticket.privacy === "anonymous") facts.push({ label: "Reporter", value: "Anonymous" });
 

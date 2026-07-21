@@ -283,7 +283,11 @@ export function normalizeRegistration(row: RegistrationSourceRow): AdminTicket {
   const formData = stringEntries(row.form_data);
   const name =
     formData.name?.trim() || row.discord_display_name?.trim() || row.discord_username;
-  const roles = [formData.role_primary, formData.role_secondary]
+  const registrationIgn = formData.ign?.trim() || undefined;
+  const roles = [
+    formData.primary_role ?? formData.role_primary,
+    formData.secondary_role ?? formData.role_secondary,
+  ]
     .filter((role): role is string => Boolean(role?.trim()))
     .join(" / ");
   const links: TicketLink[] = [];
@@ -301,6 +305,7 @@ export function normalizeRegistration(row: RegistrationSourceRow): AdminTicket {
     createdAt: row.created_at,
     updatedAt,
     seasonId: row.season_id ?? undefined,
+    registrationIgn,
     title: `Registration: ${name}`,
     summary: roles
       ? `Player registration from @${row.discord_username} (${roles}).`

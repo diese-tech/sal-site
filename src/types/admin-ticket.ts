@@ -120,6 +120,8 @@ export interface AdminTicket {
   seasonId?: string;
   divisionId?: string;
   matchId?: string;
+  /** Public registration value that approval uses to create or link a player. */
+  registrationIgn?: string;
   /** Public-safe claimant label; never a hidden identity. */
   claimedBy?: string;
   /** Public-safe. Must not contain hidden reporter or requester identities. */

@@ -34,10 +34,14 @@ describe("GET /api/admin/tickets/match-reports/[id]", () => {
         {
           gameNumber: 1,
           winningSide: "home" as const,
-          players: [
-            { playerIgn: "Home", side: "home" as const, won: true, kills: 2, deaths: 0, assists: 1 },
-            { playerIgn: "Away", side: "away" as const, won: false, kills: 0, deaths: 2, assists: 1 },
-          ],
+          players: Array.from({ length: 10 }, (_, index) => ({
+            playerIgn: `Player ${index + 1}`,
+            side: index < 5 ? ("home" as const) : ("away" as const),
+            won: index < 5,
+            kills: index,
+            deaths: 10 - index,
+            assists: index + 1,
+          })),
         },
       ],
     };

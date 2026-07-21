@@ -63,7 +63,13 @@ function registrationRow(overrides: Partial<RegistrationSourceRow> = {}): Regist
     player_id: null,
     discord_username: "newplayer",
     discord_display_name: "New Player",
-    form_data: { name: "Ada Vale", role_primary: "Mid", tracker_url: "https://tracker.gg/p/ada" },
+    form_data: {
+      name: "Ada Vale",
+      ign: "AdaSMITE",
+      primary_role: "Mid",
+      secondary_role: "Support",
+      tracker_url: "https://tracker.gg/p/ada",
+    },
     ...overrides,
   };
 }
@@ -188,7 +194,8 @@ describe("normalizeRegistration", () => {
   it("uses the form name and links the tracker profile", () => {
     const t = normalizeRegistration(registrationRow());
     expect(t.title).toBe("Registration: Ada Vale");
-    expect(t.summary).toBe("Player registration from @newplayer (Mid).");
+    expect(t.summary).toBe("Player registration from @newplayer (Mid / Support).");
+    expect(t.registrationIgn).toBe("AdaSMITE");
     expect(t.privacy).toBe("public");
     expect(t.links).toEqual([
       { label: "Tracker profile", href: "https://tracker.gg/p/ada", external: true },
