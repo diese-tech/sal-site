@@ -48,7 +48,7 @@ export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatc
           {/* Identity — left-anchored, max half-width */}
           <div className="flex max-w-xl flex-col">
             {/* Main title — solid white + single solar accent; video is the color */}
-            <h1 className="mb-2 font-display text-5xl font-bold leading-[0.95] tracking-tight text-white sm:text-6xl lg:text-7xl">
+            <h1 className="u-font-display mb-2 text-5xl font-bold leading-[0.95] tracking-tight text-white sm:text-6xl lg:text-7xl">
               Serpent{" "}
               <span className="italic text-orange-400">Ascension</span>
               {" "}League
@@ -61,7 +61,7 @@ export function LeagueHero({ season, liveMatchName }: { season: Season; liveMatc
             <div className="flex flex-wrap items-center gap-4">
               <Link
                 href={liveMatchName ? "/watch" : "/standings"}
-                className="sal-button sal-btn-ember inline-flex items-center gap-2 rounded-[var(--sal-button-radius)] px-6 py-2.5 text-sm font-bold"
+                className="sal-button sal-button--ember inline-flex items-center gap-2 rounded-[var(--sal-button-radius)] px-6 py-2.5 text-sm font-bold"
               >
                 {liveMatchName ? "▶ Watch Live" : "View Standings"}
               </Link>

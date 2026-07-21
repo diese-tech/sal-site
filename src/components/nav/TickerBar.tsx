@@ -68,7 +68,7 @@ export async function TickerBar() {
 
         {/* Live dot */}
         {m.status === "live" && (
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400 live-pulse" />
+          <span className="u-live-pulse h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400" />
         )}
 
         {/* Teams + score/vs */}

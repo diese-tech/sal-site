@@ -67,7 +67,7 @@ export function GlowPanel({
     <div
       data-testid={dataTestId}
       className={cn(
-        "sal-glowpanel group relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-cyan-950/30 backdrop-blur",
+        "sal-glow-panel group relative overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-cyan-950/30 backdrop-blur",
         "transition duration-300 hover:border-cyan-200/25 hover:shadow-cyan-500/10",
         active && "border-orange-300/45 shadow-orange-500/15",
         className,

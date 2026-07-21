@@ -264,13 +264,13 @@ function SkeletonBlock({
   className?: string;
   variant?: "default" | "solar" | "terra";
 }) {
-  const shimmerClass =
+  const shimmerModifier =
     variant === "solar"
-      ? "skeleton-shimmer-solar"
+      ? "sal-skeleton--solar"
       : variant === "terra"
-        ? "skeleton-shimmer-terra"
-        : "skeleton-shimmer";
-  return <div className={cn("rounded-[var(--sal-card-radius)]", shimmerClass, className)} />;
+        ? "sal-skeleton--terra"
+        : undefined;
+  return <div className={cn("sal-skeleton rounded-[var(--sal-card-radius)]", shimmerModifier, className)} />;
 }
 
 function SkeletonHeader({ eyebrow, variant = "default" }: { eyebrow: string; variant?: "default" | "solar" | "terra" }) {
@@ -359,7 +359,7 @@ function SectionHeader({
     <div className="mb-5 flex items-end justify-between gap-4">
       <div>
         <p className="mb-1 font-mono text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">{eyebrow}</p>
-        <h2 className="font-display text-[26px] font-bold leading-tight tracking-tight text-white">{title}</h2>
+        <h2 className="u-font-display text-[26px] font-bold leading-tight tracking-tight text-white">{title}</h2>
       </div>
       {action && (
         <Link href={action.href} className="shrink-0 font-mono text-xs font-semibold uppercase tracking-wider text-emerald-400 transition-colors hover:text-emerald-200">

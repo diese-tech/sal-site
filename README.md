@@ -48,6 +48,7 @@ npm run test          # Unit tests (Vitest; the runner reports the current count
 npm run test:e2e      # E2E tests (Playwright) — requires ADMIN_PASSWORD set
 npm run test:integration  # RLS integration tests — requires Supabase credentials
 npm run test:load     # Load tests (Vitest in-process)
+npm run check:bem     # Authored global CSS naming and usage contract
 ```
 
 **CI pipeline** (`.github/workflows/ci.yml`) runs on every push and PR:
@@ -63,6 +64,9 @@ Database-local and contract-drift gates remain recovery-gated; see [`docs/ci.md`
 
 Current repository findings and their issue links are maintained in
 [`docs/audit-status.md`](docs/audit-status.md).
+
+Frontend layout and styling work should follow the Tailwind/BEM contract in
+[`docs/frontend-styling.md`](docs/frontend-styling.md).
 
 ---
 

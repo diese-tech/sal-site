@@ -54,7 +54,7 @@ export function WatchLiveClient({
         <div className="rounded-xl border border-orange-300/25 bg-orange-400/8 px-4 py-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 rounded-lg border border-orange-300/50 bg-orange-400/15 px-2 py-0.5 text-[0.6rem] font-black uppercase text-orange-100">
-              <span className="h-1.5 w-1.5 rounded-full bg-orange-400 live-pulse" />
+              <span className="u-live-pulse h-1.5 w-1.5 rounded-full bg-orange-400" />
               Live
             </span>
             {viewerCount > 0 && (

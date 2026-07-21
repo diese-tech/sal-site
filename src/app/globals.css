@@ -18,23 +18,12 @@ html {
 /* --- Design tokens --- */
 :root {
   --font-display: "Space Grotesk", var(--font-sans);
-  --sal-nav-height: 4rem;
-  --sal-ticker-height: 2.5rem;
   /* Motion — three tiers replacing uniform 969ms */
   --motion-tap: 100ms;
   --motion-snap: 180ms;
-  --motion-cinematic: 720ms;
-  --sal-motion: var(--motion-snap); /* backwards-compat alias */
   /* Hover lifts — snap not bob */
   --sal-hover-lift: 2px;
   --sal-button-hover-lift: 2px;
-  /* Glow — calibrated; 0.88 reserved for live-state only */
-  --sal-glow-opacity: 0.5;
-  --sal-glow-opacity-live: 0.88;
-  --sal-glow-blur: 28px;
-  /* Borders — subtle chrome; accent keeps 0.45 */
-  --sal-border-opacity: 0.25;
-  --sal-border-opacity-accent: 0.45;
   /* Radius — sharp, not pillowy */
   --sal-card-radius: 10px;
   --sal-button-radius: 10px;
@@ -74,39 +63,23 @@ body {
   }
 }
 
-@keyframes sal-glow-flare {
-  0%, 100% {
-    filter: brightness(1) saturate(1);
-    box-shadow: var(--sal-glow-flare-shadow-base, none);
-  }
-  50% {
-    filter: brightness(1.18) saturate(1.25);
-    box-shadow: var(--sal-glow-flare-shadow-peak, none);
-  }
-}
-
-@keyframes sal-float {
-  0%, 100% { transform: translateY(0px); }
-  50%       { transform: translateY(-6px); }
-}
-
 @keyframes live-pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.4; }
 }
 
 /* --- Active pulse — snap tier --- */
-.sal-active-pulse {
+.u-active-pulse {
   animation: sal-pulse var(--motion-snap, 180ms) ease-in-out infinite;
 }
 
 /* --- Panel hover — 2px snap + border brighten instead of 18px bob --- */
-.sal-glowpanel {
+.sal-glow-panel {
   transition: transform var(--motion-snap, 180ms) cubic-bezier(0.22, 1, 0.36, 1),
               box-shadow var(--motion-snap, 180ms) ease,
               filter var(--motion-snap, 180ms) ease;
 }
-.sal-glowpanel:hover {
+.sal-glow-panel:hover {
   transform: translateY(calc(-1 * var(--sal-hover-lift, 2px)));
   filter: brightness(1.08);
 }
@@ -129,98 +102,19 @@ body {
 }
 
 /* --- Ember button (primary) — orange/amber gradient --- */
-.sal-btn-ember {
+.sal-button--ember {
   background: linear-gradient(135deg, #f97316 0%, #fb923c 40%, #fbbf24 100%);
   border: 1px solid rgba(251, 146, 60, 0.45);
   color: #fff;
   box-shadow: 0 0 18px rgba(249, 115, 22, 0.35), 0 0 48px rgba(249, 115, 22, 0.18);
-  --sal-glow-flare-shadow-base: 0 0 18px rgba(249, 115, 22, 0.45), 0 0 48px rgba(249, 115, 22, 0.22);
-  --sal-glow-flare-shadow-peak: 0 0 32px rgba(249, 115, 22, 0.88), 0 0 72px rgba(251, 191, 36, 0.45);
 }
-.sal-btn-ember:hover:not(:disabled) {
+.sal-button--ember:hover:not(:disabled) {
   box-shadow: 0 0 32px rgba(249, 115, 22, 0.88), 0 0 72px rgba(251, 191, 36, 0.45);
   filter: brightness(1.12) saturate(1.2);
 }
 
-/* --- White-hot button (draft action) — intense bright gradient --- */
-.sal-btn-white-hot {
-  background: linear-gradient(135deg, #fff 0%, #fef3c7 35%, #fed7aa 65%, #ff6b35 100%);
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  color: #18181b;
-  font-weight: 900;
-  box-shadow: 0 0 24px rgba(255, 255, 255, 0.45), 0 0 56px rgba(249, 115, 22, 0.30);
-  --sal-glow-flare-shadow-base: 0 0 24px rgba(255, 255, 255, 0.55), 0 0 56px rgba(249, 115, 22, 0.35);
-  --sal-glow-flare-shadow-peak: 0 0 48px rgba(255, 255, 255, 0.95), 0 0 100px rgba(249, 115, 22, 0.65);
-}
-.sal-btn-white-hot:hover:not(:disabled) {
-  box-shadow: 0 0 48px rgba(255, 255, 255, 0.95), 0 0 100px rgba(249, 115, 22, 0.65);
-  filter: brightness(1.08);
-}
-
-/* --- Glow division utilities — calibrated default, live variant at full --- */
-.glow-solar {
-  box-shadow:
-    0 0 var(--sal-glow-blur, 28px) rgba(249, 115, 22, var(--sal-glow-opacity, 0.5)),
-    0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(249, 115, 22, 0.22),
-    0 0 6px rgba(251, 191, 36, 0.30);
-}
-.glow-lunar {
-  box-shadow:
-    0 0 var(--sal-glow-blur, 28px) rgba(34, 211, 238, var(--sal-glow-opacity, 0.5)),
-    0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(34, 211, 238, 0.22),
-    0 0 6px rgba(124, 58, 237, 0.25);
-}
-.glow-terra {
-  box-shadow:
-    0 0 var(--sal-glow-blur, 28px) rgba(52, 211, 153, var(--sal-glow-opacity, 0.5)),
-    0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(52, 211, 153, 0.22),
-    0 0 6px rgba(45, 212, 191, 0.25);
-}
-
-/* Live-state variants — full 0.88 opacity reserved for on-air elements */
-.glow-solar-live {
-  box-shadow:
-    0 0 var(--sal-glow-blur, 28px) rgba(249, 115, 22, var(--sal-glow-opacity-live, 0.88)),
-    0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(249, 115, 22, 0.45),
-    0 0 8px rgba(251, 191, 36, 0.55);
-}
-.glow-lunar-live {
-  box-shadow:
-    0 0 var(--sal-glow-blur, 28px) rgba(34, 211, 238, var(--sal-glow-opacity-live, 0.88)),
-    0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(34, 211, 238, 0.45),
-    0 0 8px rgba(124, 58, 237, 0.50);
-}
-.glow-terra-live {
-  box-shadow:
-    0 0 var(--sal-glow-blur, 28px) rgba(52, 211, 153, var(--sal-glow-opacity-live, 0.88)),
-    0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(52, 211, 153, 0.45),
-    0 0 8px rgba(45, 212, 191, 0.50);
-}
-
-.hover\:glow-solar:hover {
-  box-shadow:
-    0 0 var(--sal-glow-blur, 28px) rgba(249, 115, 22, var(--sal-glow-opacity, 0.5)),
-    0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(249, 115, 22, 0.22);
-}
-.hover\:glow-lunar:hover {
-  box-shadow:
-    0 0 var(--sal-glow-blur, 28px) rgba(34, 211, 238, var(--sal-glow-opacity, 0.5)),
-    0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(34, 211, 238, 0.22);
-}
-.hover\:glow-terra:hover {
-  box-shadow:
-    0 0 var(--sal-glow-blur, 28px) rgba(52, 211, 153, var(--sal-glow-opacity, 0.5)),
-    0 0 calc(var(--sal-glow-blur, 28px) * 2) rgba(52, 211, 153, 0.22);
-}
-
-/* --- Division border accent utilities --- */
-/* Default (chrome) at 0.25; pass var(--sal-border-opacity-accent) for division accents */
-.border-solar { border-color: rgba(249, 115, 22,  var(--sal-border-opacity, 0.25)); }
-.border-lunar  { border-color: rgba(34,  211, 238, var(--sal-border-opacity, 0.25)); }
-.border-terra   { border-color: rgba(52,  211, 153, var(--sal-border-opacity, 0.25)); }
-
 /* --- Live pulse animation --- */
-.live-pulse {
+.u-live-pulse {
   animation: live-pulse 1.6s ease-in-out infinite;
 }
 
@@ -242,7 +136,7 @@ body {
   from { background-position: -600px 0; }
   to   { background-position: 600px 0; }
 }
-.skeleton-shimmer {
+.sal-skeleton {
   background: linear-gradient(
     90deg,
     rgba(34, 211, 238, 0.04) 0%,
@@ -252,28 +146,24 @@ body {
   background-size: 1200px 100%;
   animation: skeleton-shimmer 1.8s ease-in-out infinite;
 }
-.skeleton-shimmer-solar {
+.sal-skeleton--solar {
   background: linear-gradient(
     90deg,
     rgba(249, 115, 22, 0.04) 0%,
     rgba(249, 115, 22, 0.11) 50%,
     rgba(249, 115, 22, 0.04) 100%
   );
-  background-size: 1200px 100%;
-  animation: skeleton-shimmer 1.8s ease-in-out infinite;
 }
-.skeleton-shimmer-terra {
+.sal-skeleton--terra {
   background: linear-gradient(
     90deg,
     rgba(52, 211, 153, 0.04) 0%,
     rgba(52, 211, 153, 0.11) 50%,
     rgba(52, 211, 153, 0.04) 100%
   );
-  background-size: 1200px 100%;
-  animation: skeleton-shimmer 1.8s ease-in-out infinite;
 }
 
 /* --- font-display utility --- */
-.font-display {
+.u-font-display {
   font-family: var(--font-display, "Space Grotesk", "Geist", system-ui, sans-serif);
 }

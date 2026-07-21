@@ -109,7 +109,7 @@ export function BugReportStatusClient({ publicTicketId }: { publicTicketId: stri
           <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">
             Ticket {ticket.ticketId}
           </p>
-          <h2 className="mt-2 font-display text-2xl font-black text-white">
+          <h2 className="u-font-display mt-2 text-2xl font-black text-white">
             {STATUS_LABELS[ticket.status]}
           </h2>
         </div>
@@ -206,7 +206,7 @@ function StatusCard({
       <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">
         {eyebrow}
       </p>
-      <h2 className="mt-2 font-display text-2xl font-black text-white">{title}</h2>
+      <h2 className="u-font-display mt-2 text-2xl font-black text-white">{title}</h2>
       {children ? <div className="mt-4">{children}</div> : null}
     </section>
   );

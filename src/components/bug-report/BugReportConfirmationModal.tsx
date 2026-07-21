@@ -70,7 +70,7 @@ export function BugReportConfirmationModal({
           <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-cyan-300">
             Final check
           </p>
-          <h2 id="bug-report-confirm-title" className="mt-2 font-display text-2xl font-black text-white">
+          <h2 id="bug-report-confirm-title" className="u-font-display mt-2 text-2xl font-black text-white">
             Ready to send this report?
           </h2>
           <p id="bug-report-confirm-description" className="mt-2 text-sm leading-6 text-slate-400">

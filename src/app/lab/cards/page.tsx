@@ -29,7 +29,7 @@ export default function CardLabPage() {
           <div className="rounded-2xl border border-orange-300/25 bg-orange-400/10 px-4 py-3 shadow-lg shadow-orange-500/10">
             <p className="text-xs font-black uppercase text-orange-100">On the clock</p>
             <p className="mt-1 text-2xl font-black text-white">Helix Reign</p>
-            <div className="sal-active-pulse mt-3 h-1 rounded-full bg-gradient-to-r from-orange-300 via-white to-fuchsia-300" />
+            <div className="u-active-pulse mt-3 h-1 rounded-full bg-gradient-to-r from-orange-300 via-white to-fuchsia-300" />
           </div>
         </header>
 
