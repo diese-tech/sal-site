@@ -17,11 +17,12 @@ export default async function AdminTicketsPage() {
         <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">Admin · Operations</p>
         <h1 className="text-2xl font-black text-white">Tickets</h1>
         <p className="mt-1 text-xs text-slate-500">
-          One queue for review work across the league. This view is read-only; each ticket links to the workflow that owns it.
+          One queue for review work across the league. Safe actions are available here, with owning workflows linked for everything else.
         </p>
       </div>
       <Suspense>
         <AdminTicketsClient
+          key={queue.tickets.map((ticket) => `${ticket.id}:${ticket.sourceStatus}:${ticket.updatedAt}`).join("|")}
           tickets={queue.tickets}
           sourceHealth={queue.sourceHealth}
           seasonNames={queue.seasonNames}

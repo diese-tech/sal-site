@@ -1,10 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { isAdminRequest, getAdminRequestSession } from "@/lib/admin-auth";
-import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { saveMatch, recalculateAndPersistStandings, writeAuditLog, getAdminLeagueData, LeagueDataUnavailableError } from "@/lib/league-data";
+import { getAdminRequestSession } from "@/lib/admin-auth";
 import { errorMessage, reportError } from "@/lib/error-monitor";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 const playerStatSchema = z.object({
   playerIgn: z.string().min(1),
@@ -31,132 +30,117 @@ const submitSchema = z.object({
   games: z.array(gameSchema).min(1).max(5),
 });
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!isAdminRequest(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  const session = getAdminRequestSession(request);
+const resultSchema = z.object({
+  code: z.enum(["applied", "already_processed"]),
+  reportId: z.string().uuid(),
+  matchId: z.string(),
+  finalStatus: z.literal("done"),
+  applied: z.boolean(),
+  homeScore: z.number().int().min(0),
+  awayScore: z.number().int().min(0),
+  totalGames: z.number().int().min(1).max(5),
+  outboxIds: z.array(z.string()),
+});
 
-  const { id } = await params;
-  const supabase = getSupabaseServerClient();
-  if (!supabase) return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+type ReviewedGames = z.infer<typeof submitSchema>["games"];
+type RouteContext = { params: Promise<{ id: string }> };
 
-  const body = await request.json().catch(() => null);
-  const result = submitSchema.safeParse(body);
-  if (!result.success) {
-    return NextResponse.json({ error: result.error.issues.map((i) => i.message).join("; ") }, { status: 400 });
-  }
-
-  const { games } = result.data;
-
-  // Load report
-  const { data: report, error: reportErr } = await supabase
-    .from("match_reports")
-    .select("*")
-    .eq("id", id)
-    .single();
-  if (reportErr || !report) return NextResponse.json({ error: "Report not found." }, { status: 404 });
-
-  const r = report as {
-    match_id: string;
-    season_id: string;
-    division_id: string;
-    status: string;
-  };
-
-  // Calculate scores from game winners
-  const homeWins = games.filter((g) => g.winningSide === "home").length;
-  const awayWins = games.filter((g) => g.winningSide === "away").length;
-  const totalGames = games.length;
-
-  // Load match to update it
-  let leagueData;
-  try {
-    leagueData = await getAdminLeagueData();
-  } catch (err) {
-    if (err instanceof LeagueDataUnavailableError) {
-      return NextResponse.json({ error: "League data is temporarily unavailable — please check back shortly." }, { status: 503 });
-    }
-    throw err;
-  }
-  const match = leagueData.matches.find((m) => m.id === r.match_id);
-  if (!match) return NextResponse.json({ error: "Match not found in league data." }, { status: 404 });
-
-  const homeOrg = leagueData.orgs.find((o) => o.id === match.homeOrgId);
-  const awayOrg = leagueData.orgs.find((o) => o.id === match.awayOrgId);
-
-  try {
-    // Insert player_match_stats
-    const statsRows = games.flatMap((game) =>
-      game.players.map((p) => {
-        const orgId = p.side === "home" ? match.homeOrgId : match.awayOrgId;
-        return {
-          match_id: r.match_id,
-          player_id: p.playerId ?? null,
-          player_ign: p.playerIgn,
-          game_number: game.gameNumber,
-          org_id: orgId,
-          won: p.won,
-          kills: p.kills,
-          deaths: p.deaths,
-          assists: p.assists,
-          god_played: p.godPlayed ?? null,
-          role: p.role ?? null,
-          damage_dealt: p.damageDealt ?? null,
-          damage_mitigated: p.damageMitigated ?? null,
-          season_id: r.season_id,
-          division_id: r.division_id,
-        };
-      }),
-    );
-
-    if (statsRows.length > 0) {
-      // Atomic delete + insert with a lock on the report row (migration 016)
-      // so concurrent submissions cannot interleave and double the stat rows.
-      const { error: statsErr } = await supabase.rpc("replace_match_report_stats", {
-        p_match_report_id: id,
-        p_rows: statsRows,
-      });
-      if (statsErr) throw statsErr;
-    }
-
-    // Update match to completed with scores
-    const updatedMatch = {
-      ...match,
-      status: "completed" as const,
-      homeScore: homeWins,
-      awayScore: awayWins,
-    };
-    await saveMatch(updatedMatch);
-
-    // Update report to done
-    const now = new Date().toISOString();
-    await supabase
-      .from("match_reports")
-      .update({
-        status: "done",
-        home_score: homeWins,
-        away_score: awayWins,
-        total_games: totalGames,
-        reviewed_at: now,
-        reviewed_by: session?.discordId ?? "admin",
-      })
-      .eq("id", id);
-
-    await writeAuditLog("match_report_submitted", "match_report", id, {
-      matchId: r.match_id,
-      homeOrg: homeOrg?.name,
-      awayOrg: awayOrg?.name,
-      homeScore: homeWins,
-      awayScore: awayWins,
-      totalGames,
-      playerCount: statsRows.length,
-    });
-
-    revalidateTag("league-data", {});
-
-    return NextResponse.json({ ok: true, homeScore: homeWins, awayScore: awayWins, totalGames });
-  } catch (err) {
-    const message = errorMessage(err, "Submit failed.");
-    reportError("match-report submit failed", err, { reportId: id });
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+interface MatchReportReviewDependencies {
+  getSession: (request: NextRequest) => { discordId: string } | null;
+  resolveMatchReport: (input: {
+    reportId: string;
+    actorDiscordId: string;
+    games: ReviewedGames;
+  }) => Promise<unknown>;
+  revalidateLeagueData: () => void;
 }
+
+export function createMatchReportReviewHandler(dependencies: MatchReportReviewDependencies) {
+  return async function POST(request: NextRequest, { params }: RouteContext) {
+    const session = dependencies.getSession(request);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
+    const { id } = await params;
+    if (!z.string().uuid().safeParse(id).success) {
+      return NextResponse.json({ error: "Invalid report id." }, { status: 400 });
+    }
+
+    const body = await request.json().catch(() => null);
+    const parsed = submitSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues.map((issue) => issue.message).join("; ") },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const rawResult = await dependencies.resolveMatchReport({
+        reportId: id,
+        actorDiscordId: session.discordId,
+        games: parsed.data.games,
+      });
+      const result = resultSchema.safeParse(rawResult);
+      if (!result.success) {
+        console.error("Match report review returned an invalid database response.", {
+          reportId: id,
+        });
+        return NextResponse.json(
+          { error: "Match report review returned an invalid database response." },
+          { status: 502 },
+        );
+      }
+
+      dependencies.revalidateLeagueData();
+      return NextResponse.json({
+        ok: true,
+        homeScore: result.data.homeScore,
+        awayScore: result.data.awayScore,
+        totalGames: result.data.totalGames,
+      });
+    } catch (error) {
+      const message = errorMessage(error, "Submit failed.");
+      reportError("match-report submit failed", error, { reportId: id });
+      return NextResponse.json({ error: message }, { status: databaseErrorStatus(error) });
+    }
+  };
+}
+
+function databaseErrorStatus(error: unknown) {
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String(error.code)
+      : undefined;
+  if (code === "P0002") return 404;
+  if (code === "42501") return 403;
+  if (code === "22023") return 400;
+  if (code === "55000" || code === "23503" || code === "23505" || code === "23514") {
+    return 409;
+  }
+  return 500;
+}
+
+async function resolveMatchReport(input: {
+  reportId: string;
+  actorDiscordId: string;
+  games: ReviewedGames;
+}) {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase not configured.");
+
+  const { data, error } = await supabase.rpc("resolve_match_report_review", {
+    p_match_report_id: input.reportId,
+    p_actor_discord_id: input.actorDiscordId,
+    p_games: input.games,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export const POST = createMatchReportReviewHandler({
+  getSession: getAdminRequestSession,
+  resolveMatchReport,
+  revalidateLeagueData: () => revalidateTag("league-data", {}),
+});

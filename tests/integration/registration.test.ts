@@ -34,6 +34,7 @@ vi.mock("@/lib/supabase-auth-server", () => ({
 
 vi.mock("@/lib/league-data", () => ({
   createRegistration: vi.fn().mockResolvedValue(undefined),
+  getCurrentSeasonId: vi.fn().mockResolvedValue("season-current"),
   getRegistrationByDiscordId: vi.fn().mockResolvedValue(null),
   claimPlayerByDiscordUsername: vi.fn(),
   getPlayerByDiscordId: vi.fn().mockResolvedValue(null),
@@ -86,6 +87,7 @@ import {
 } from "@/lib/supabase-auth-server";
 import {
   createRegistration,
+  getCurrentSeasonId,
   getRegistrationByDiscordId,
   claimPlayerByDiscordUsername,
   getPlayerByDiscordId,
@@ -97,6 +99,7 @@ const mockGetDiscordId = vi.mocked(getDiscordId);
 const mockGetDiscordUsername = vi.mocked(getDiscordUsername);
 const mockGetRegistrationByDiscordId = vi.mocked(getRegistrationByDiscordId);
 const mockCreateRegistration = vi.mocked(createRegistration);
+const mockGetCurrentSeasonId = vi.mocked(getCurrentSeasonId);
 const mockClaimPlayer = vi.mocked(claimPlayerByDiscordUsername);
 const mockGetPlayerByDiscordId = vi.mocked(getPlayerByDiscordId);
 const mockCheckRateLimit = vi.mocked(checkRateLimit);
@@ -128,6 +131,7 @@ function claimRequest(): NextRequest {
 beforeEach(() => {
   vi.clearAllMocks();
   mockCheckRateLimit.mockReturnValue({ allowed: true, remaining: 9, resetAt: Date.now() + 60_000 });
+  mockGetCurrentSeasonId.mockResolvedValue("season-current");
   mockGetAuthUser.mockResolvedValue(FAKE_USER);
   mockGetDiscordId.mockReturnValue(DISCORD_ID);
   mockGetDiscordUsername.mockReturnValue(DISCORD_USERNAME);
@@ -209,6 +213,19 @@ describe("POST /api/auth/register — Flow A", () => {
     expect(body.ok).toBe(true);
     expect(typeof body.id).toBe("string");
     expect(mockCreateRegistration).toHaveBeenCalledOnce();
+    expect(mockCreateRegistration).toHaveBeenCalledWith(
+      expect.objectContaining({ seasonId: "season-current" }),
+    );
+  });
+
+  it("fails safely instead of creating an unscoped registration when no current season exists", async () => {
+    mockGetCurrentSeasonId.mockResolvedValueOnce(null);
+
+    const { POST } = await import("@/app/api/auth/register/route");
+    const res = await POST(registerRequest({ formData: { ign: "HeroPlayer" } }));
+
+    expect(res.status).toBe(503);
+    expect(mockCreateRegistration).not.toHaveBeenCalled();
   });
 
   it("calls createRegistration exactly once — no duplicate rows on success", async () => {

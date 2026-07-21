@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { createRegistration, getRegistrationByDiscordId } from "@/lib/league-data";
+import { createRegistration, getCurrentSeasonId, getRegistrationByDiscordId } from "@/lib/league-data";
 import { getAuthUser, getDiscordId, getDiscordUsername, getDiscordDisplayName } from "@/lib/supabase-auth-server";
 import { checkRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
 
@@ -36,12 +36,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const seasonId = await getCurrentSeasonId();
+  if (!seasonId) {
+    return NextResponse.json(
+      { error: "Registration is temporarily unavailable because no current season is configured." },
+      { status: 503 },
+    );
+  }
+
   const id = `reg-${crypto.randomUUID()}`;
   await createRegistration({
     id,
     discordId,
     discordUsername: getDiscordUsername(user),
     discordDisplayName: getDiscordDisplayName(user),
+    seasonId,
     formData: parsed.data.formData,
   });
 
