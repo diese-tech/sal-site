@@ -65,6 +65,10 @@ Database-local and contract-drift gates remain recovery-gated; see [`docs/ci.md`
 Current repository findings and their issue links are maintained in
 [`docs/audit-status.md`](docs/audit-status.md).
 
+The accepted draft-platform behavior, audience views, and repository boundaries
+are summarized in plain English in
+[`docs/draft-platform-guide.md`](docs/draft-platform-guide.md).
+
 Frontend layout and styling work should follow the Tailwind/BEM contract in
 [`docs/frontend-styling.md`](docs/frontend-styling.md).
 
