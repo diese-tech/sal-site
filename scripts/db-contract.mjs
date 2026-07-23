@@ -30,15 +30,40 @@ if (!/^sha256:[0-9a-f]{64}$/.test(lock.typesSha256)) {
 }
 
 const rawBase = 'https://raw.githubusercontent.com/diese-tech/sal-database';
+const fetchAttempts = 3;
+const fetchTimeoutMs = 30_000;
+
+const isRetryableStatus = (status) => status === 408 || status === 429 || status >= 500;
+const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+
 const fetchText = async (revision, path) => {
-  const response = await fetch(`${rawBase}/${revision}/${path}`, {
-    headers: { 'user-agent': 'diese-tech-db-contract-verifier' },
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) {
-    throw new Error(`Unable to fetch ${path} at ${revision}: HTTP ${response.status}`);
+  const url = `${rawBase}/${revision}/${path}`;
+  let lastError;
+
+  for (let attempt = 1; attempt <= fetchAttempts; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: { 'user-agent': 'diese-tech-db-contract-verifier' },
+        signal: AbortSignal.timeout(fetchTimeoutMs),
+      });
+      if (response.ok) return response.text();
+
+      const error = new Error(`Unable to fetch ${path} at ${revision}: HTTP ${response.status}`);
+      if (!isRetryableStatus(response.status)) throw error;
+      lastError = error;
+    } catch (error) {
+      lastError = error;
+      const retryable = error?.name === 'TimeoutError' || error?.name === 'TypeError';
+      if (!retryable) throw error;
+    }
+
+    if (attempt < fetchAttempts) await wait(1_000 * attempt);
   }
-  return response.text();
+
+  throw new Error(
+    `Unable to fetch ${path} at ${revision} after ${fetchAttempts} attempts`,
+    { cause: lastError },
+  );
 };
 
 const [contractText, commitTypes, releaseContractText, releaseTypes] = await Promise.all([
@@ -70,7 +95,8 @@ if (mode === 'sync') {
 }
 
 const vendoredTypes = await readFile(vendoredTypesPath, 'utf8');
-if (vendoredTypes !== commitTypes) {
+const normalizeLineEndings = (text) => text.replaceAll('\r\n', '\n');
+if (normalizeLineEndings(vendoredTypes) !== normalizeLineEndings(commitTypes)) {
   throw new Error(`Vendored types drifted from ${lock.release} at ${lock.commit}`);
 }
 

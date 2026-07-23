@@ -148,8 +148,8 @@ reach the roster either way — but the double `draft_picks` record and the
 double "drafted" UX for two captains is the DE-01-specific damage,
 independent of DE-00.)
 
-**Recommendation:** application-layer fix, no migration needed, but **not**
-a global `players.status === 'drafted'` flag — that field isn't
+**Recommendation:** do **not** use a global `players.status === 'drafted'`
+flag — that field isn't
 season-scoped (a player drafted last season and returning as a free agent
 this season would be wrongly excluded forever). Instead, scope the
 "already drafted" check to the *current season*: exclude a player if any
@@ -161,6 +161,17 @@ the pick route, GET timeout-handler, and shortlist auto-pick. Until that
 lands, treat "only one division draft room active at a time per season" as
 an operational rule and say so explicitly in the admin UI (currently
 unstated).
+
+That application-layer lookup is necessary but **not sufficient as a
+concurrency guarantee**: two picks submitted simultaneously in different
+rooms can both observe the player as available before either insert commits,
+and the existing unique constraint only covers `(draft_room_id, player_id)`.
+Within `sal-site`, enforce one active-or-paused draft room per season and keep
+the season-wide lookup to protect sequential rooms. A durable guarantee under
+arbitrary concurrent database writers requires a transaction-level invariant
+owned by `sal-database` (for example, an atomic pick RPC with a season-scoped
+lock or uniqueness model); do not claim the application check alone closes
+that race.
 
 ### DE-02 — Admin Skip is not concurrency-safe (P2) — [#207](https://github.com/diese-tech/sal-site/issues/207)
 
@@ -304,9 +315,12 @@ room.
    at `saveSeasonRosterAssignment` instead of (or in addition to) the direct
    `players` table write. Blocks the draft engine from accomplishing its
    purpose at all, independent of everything else on this list.
-2. DE-01 (P1, application-layer, no migration) — season-scoped "already
-   drafted" exclusion, keyed off `draft_rooms.season_id`, not a global
-   player status flag.
+2. DE-01 (P1) — enforce one active-or-paused room per season in `sal-site`
+   and add season-scoped "already drafted" exclusion keyed off
+   `draft_rooms.season_id`, not a global player status flag. Track the
+   database-level atomic guarantee separately with the canonical schema
+   owner; application-only read-before-write checks cannot prove uniqueness
+   across simultaneous room requests.
 3. DE-03 (P2, one-line guard) — cheapest fix in this list.
 4. DE-02 (P2) — optimistic-concurrency guard on skip, no migration needed
    if done via conditional `.eq()` update.
