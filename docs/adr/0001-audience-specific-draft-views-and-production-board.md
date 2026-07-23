@@ -343,6 +343,72 @@ reminders.
 Recovery finalization uses the same function and never creates a second
 publication path.
 
+## Verification contract
+
+This ADR follows the three-layer verification boundary in SAL Database ADR-0003.
+
+### Site contract tests
+
+`sal-site` tests its published database contract, server authorization, audience
+projections, privacy filtering, state handling, and responsive interactions.
+
+Tests that mock the database boundary are labeled as contract, route, component,
+or interface tests. They do not claim to verify Postgres transactions or locking.
+
+Required coverage includes:
+
+- pick-sequence generation;
+- turn-ownership rejection;
+- same-division and one-tier-up eligibility;
+- staged selection creation, replacement, clearing, and reconnect restoration;
+- explicit pick confirmation;
+- timeout auto-pick and timeout skip presentation;
+- stale room-version and slot conflicts;
+- repeatable undo and redo controls;
+- completion review and End Draft confirmation;
+- administrator-submitted emergency picks;
+- Discord captain, organization, Caster, and Production role authorization;
+- ambiguous organization-role rejection;
+- spectator, captain, administrator, production, and overlay field filtering;
+- ghost-pick, shortlist, search, audit, and private-reason isolation;
+- realtime degradation and polling recovery;
+- disconnected and recovered captain presentation;
+- verified platform-outage presentation;
+- production-board fit, zoom, pan, and narrow-mobile fallback;
+- keyboard, pointer, touch, and screen-reader behavior; and
+- hashed overlay creation, rotation, revocation, expiration, and room scoping.
+
+### Cross-repository end-to-end tests
+
+The built site runs against a disposable database containing the complete
+`sal-database` migration sequence.
+
+The end-to-end suite verifies:
+
+1. An administrator creates and configures a room.
+2. Captains authenticate through mapped Discord-role fixtures.
+3. Every organization becomes ready.
+4. The administrator starts the room.
+5. A captain stages and confirms a player.
+6. A staged player commits automatically at timeout.
+7. An unstaged slot becomes a timeout skip.
+8. An administrator pauses and resumes.
+9. An administrator repeatedly undoes and redoes resolutions.
+10. An administrator submits an emergency pick.
+11. The final slot enters completion review.
+12. Spectator and production projections contain only broadcast-safe state.
+13. End Draft publishes canonical season rosters atomically.
+14. The durable draft-conclusion event is created exactly once.
+
+### Production safety
+
+Site verification configured against production is read-only.
+
+Test and verification commands reject production-mutating draft operations.
+Production smoke checks may inspect safe routes, schema contracts, and health
+state but never create rooms, stage players, resolve slots, alter rosters, or
+conclude drafts.
+
 ## Consequences
 
 ### Positive
@@ -390,6 +456,10 @@ publication path.
 - Implement the completion-review and End Draft interfaces.
 - Add authorization, privacy, accessibility, responsive, zoom, overlay,
   correction, and end-to-end tests.
+- Label mocked database tests accurately as contract or interface coverage.
+- Run the built site against the disposable migrated database for complete draft
+  E2E workflows.
+- Enforce read-only production verification.
 - Link the draft audit and implementation documentation to this ADR and the
   canonical database ADRs.
 
@@ -470,3 +540,15 @@ publication path.
 34. The draft-conclusion event is emitted only after successful publication.
 35. Rooms remaining in completion review produce private administrative
     reminders.
+36. Site tests cover every audience projection and prove privileged fields are
+    absent from unauthorized responses.
+37. Site tests cover staged selection, confirmation, timeout, skip, undo, redo,
+    completion review, and End Draft interactions.
+38. Production-board tests cover fit, zoom, pan, keyboard, touch, and the
+    `375px` layout boundary.
+39. Cross-repository E2E runs the built site against the complete disposable
+    database migration sequence.
+40. E2E verifies exactly-once roster publication and draft-conclusion event
+    creation.
+41. Mocked site tests do not claim to verify database concurrency.
+42. Production verification remains read-only and rejects draft mutations.
