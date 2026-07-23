@@ -309,7 +309,31 @@ room.
   path** (DE-05) — the timeout auto-pick conflict test (#141) is a good
   model for what coverage of the other RPCs should look like.
 
-## Suggested order of work
+## Approved remediation direction (2026-07-23)
+
+The findings in this audit have now been resolved at the architecture and
+product-decision level. Implementation remains outstanding.
+
+Canonical decisions:
+
+- [SAL Database ADR-0001: Season-Scoped Captain-Roster Draft Eligibility](https://github.com/diese-tech/sal-database/blob/main/docs/adr/0001-season-scoped-captain-roster-draft-eligibility.md)
+- [SAL Database ADR-0002: Roster Transactions and Public Bulletin](https://github.com/diese-tech/sal-database/blob/main/docs/adr/0002-roster-transactions-and-public-bulletin.md)
+- [SAL Database ADR-0003: Draft Room Lifecycle, Authorization, and Failure Recovery](https://github.com/diese-tech/sal-database/blob/main/docs/adr/0003-draft-room-lifecycle-authorization-and-failure-recovery.md)
+- [SAL Site ADR-0001: Audience-Specific Draft Views and Production Board](adr/0001-audience-specific-draft-views-and-production-board.md)
+- [SALBot ADR-009: Roster Transactions Discord Workflow](https://github.com/diese-tech/lab-salbot/blob/main/docs/adrs/ADR-009-roster-transactions-discord-workflow.md)
+
+The dependency-ordered implementation and parallel workbranch plan is:
+
+- [SAL Draft Platform Remediation Plan](plans/draft-platform-remediation-plan-2026-07-23.md)
+
+The plan maps DE-00 through DE-06 to an immediate containment branch, canonical
+database work, consumer work, real concurrency tests, cross-repository E2E, and
+production rollout gates.
+
+## Historical suggested order of work
+
+The list below records the audit's pre-ADR recommendation. It is superseded by
+the approved remediation plan above.
 
 1. DE-00 (P1, application-layer, no migration) — point `finalizeDraftRosters`
    at `saveSeasonRosterAssignment` instead of (or in addition to) the direct
