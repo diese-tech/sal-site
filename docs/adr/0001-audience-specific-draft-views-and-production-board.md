@@ -273,8 +273,10 @@ spectator and captain interfaces continue using normal responsive reflow.
 
 ### Read-only broadcast overlays
 
-Authorized production staff may generate a read-only overlay URL for browser
-capture software such as OBS.
+Authorized administrators may generate a read-only overlay URL for browser
+capture software such as OBS. Caster and Production roles may consume an issued
+overlay URL but cannot create, rotate, or revoke overlay credentials unless the
+same user is separately authorized as an administrator.
 
 Each overlay credential is:
 
@@ -434,7 +436,7 @@ conclude drafts.
   accessibility testing.
 - Database-backed staff role mappings and overlay tokens require new schema and
   administrative tooling.
-- Production users must rotate leaked overlay URLs.
+- Administrators must rotate leaked overlay URLs reported by production staff.
 - Explicit final publication requires administrators to complete the End Draft
   action.
 

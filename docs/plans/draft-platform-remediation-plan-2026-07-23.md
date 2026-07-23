@@ -115,6 +115,8 @@ Scope:
 
 - DE-00: publish completed picks through the current season-roster assignment
   path rather than relying on global player state;
+- DE-01: exclude players already confirmed anywhere in the active season and
+  reject creation or activation of another live room for that season;
 - DE-02: require expected slot/index when skipping and reject stale updates;
 - DE-03: reject rounds, order, and timer changes after the room leaves `pending`;
 - DE-06: validate a captain token's room before consuming it;
@@ -124,6 +126,8 @@ Scope:
 Exit gate:
 
 - current drafts cannot silently miss `season_rosters`;
+- the current engine cannot show or accept a season-confirmed player in another
+  room, and only one room can be active or paused for the season;
 - skip cannot advance a stale slot;
 - active configuration cannot mutate;
 - a wrong-room URL cannot burn a valid token; and
@@ -240,6 +244,7 @@ Scope:
 
 - claims, drops, uneven trades, Draft Position Swaps, and reversals;
 - proposal revisions, counteroffers, consent revocation, and admin approval;
+- linked `pending_actions` orchestration through the shared approval pipeline;
 - roster-capacity enforcement;
 - waiver evidence without automatic winner selection;
 - post-drop eligibility and private sanctions;
@@ -350,7 +355,9 @@ Scope:
 - explicit Post Proposal;
 - public Accept, Counter, and Decline controls;
 - private administrator review;
+- shared pending-action claim and dispatch;
 - durable lease-based outbox worker;
+- stable-marker reconciliation for ambiguous Discord posts;
 - consolidated transactions-channel delivery;
 - organization-role reconciliation after roster mutations;
 - private failure alerts;
