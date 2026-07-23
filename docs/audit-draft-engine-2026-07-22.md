@@ -11,6 +11,12 @@ Out of scope: the unrelated "god draft" (in-match god/character pick-ban,
 `src/app/draft/god`, `src/lib/god-draft-*`) — a different feature that
 happens to share the `/draft` URL prefix.
 
+> **Decision status (2026-07-23):** The audit remains a snapshot of the current
+> implementation gaps. The resulting ADRs and remediation plan are merged, but
+> the implementation waves are not thereby complete. For the accepted behavior
+> in plain English, read
+> [`draft-platform-guide.md`](draft-platform-guide.md).
+
 This is a code-level correctness review, not a live/runtime verification —
 findings are proven by direct trace of the request handlers and SQL
 functions, cross-checked against the atomic-RPC migrations already in the

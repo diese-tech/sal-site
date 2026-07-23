@@ -92,11 +92,13 @@ parallel.
 
 ### DOC-1 — ADR and audit merge
 
-Merge:
+**Status: complete on 2026-07-23.**
 
-- `sal-database/codex/adr-season-draft-eligibility`;
-- `sal-site/codex/adr-audience-draft-views`; and
-- `lab-salbot/codex/adr-roster-transactions-discord`.
+Merged:
+
+- [`sal-database#55`](https://github.com/diese-tech/sal-database/pull/55);
+- [`sal-site#211`](https://github.com/diese-tech/sal-site/pull/211); and
+- [`lab-salbot#61`](https://github.com/diese-tech/lab-salbot/pull/61).
 
 Exit gate:
 
@@ -104,6 +106,9 @@ Exit gate:
 - the audit points to this plan and the canonical ADRs; and
 - no implementation branch changes an approved invariant without a reviewed ADR
   amendment.
+
+The remaining waves are planned implementation work. DOC-1 completion does not
+mark any SITE, DB, BOT, E2E, release, or rollout branch complete.
 
 ## Wave 1: contain current risk and establish the database foundation
 

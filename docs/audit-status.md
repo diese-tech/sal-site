@@ -3,12 +3,18 @@
 **Repository:** `diese-tech/sal-site`  
 **Audit baseline:** `8096b1498c5aac9aa4b84044fee7df4a045af538`  
 **Remediation main:** `73824f977c7f3f298a194ea4b004b8fc58215b71`  
-**Last refreshed:** 2026-07-18
+**Last refreshed:** 2026-07-23
 
 This file tracks repository-specific SAL Site findings and their GitHub issues.
 It does not replace the issue tracker, claim platform-wide authority, or record
 comparison-system security details. The July 14 cross-repository audit is retained
 only as a [historical snapshot](audit-production-readiness-2026-07-14.md).
+
+The captain-roster draft audit and all five cross-repository ADRs are now merged.
+They define accepted behavior, not completed remediation. See the
+[plain-English draft platform guide](draft-platform-guide.md), the
+[draft-engine audit](audit-draft-engine-2026-07-22.md), and the
+[dependency-ordered implementation plan](plans/draft-platform-remediation-plan-2026-07-23.md).
 
 ## Repository boundary
 
