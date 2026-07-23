@@ -160,9 +160,11 @@ Possessing a broadcast role does not grant draft mutation controls.
 
 ### Overlay links
 
-Only admins may issue, rotate, or revoke overlay credentials. Links are hashed,
-room-specific, expiring, and read-only. Production staff consume the links but
-cannot create credentials unless they are separately authorized administrators.
+Only admins may issue, rotate, or revoke overlay credentials. The plaintext
+credential appears in the generated URL and is shown only when issued; the
+server stores only its hash. Credentials are room-specific, expiring, revocable,
+and read-only. Production staff consume the links but cannot create credentials
+unless they are separately authorized administrators.
 
 ## Responsive production board
 
@@ -171,8 +173,8 @@ live ledger visible without scrolling.
 
 At viewport widths of 375px and above, the complete board fits the screen by
 scaling down. Users may zoom and pan with keyboard, pointer, pinch, or explicit
-controls and can reset to fit. Below 375px, the layout may switch to a stacked
-mobile view.
+controls and can reset to fit. Below 375px, the production view uses a stacked,
+scrolling mobile layout.
 
 Mobile transaction entries use canonical organization tags to wrap cleanly,
 while larger layouts may show full names.
