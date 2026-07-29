@@ -162,6 +162,46 @@ export async function updateDraftRoom(id: string, patch: Partial<{
 }
 
 /**
+ * Optimistic-concurrency variant of updateDraftRoom: the update only applies
+ * while the room still matches every provided expectation (current_pick_index
+ * and/or status), so a concurrent pick, timeout auto-advance, or lifecycle
+ * action (start/pause/resume) cannot be silently overwritten.
+ * Returns null if the guard failed (caller lost the race).
+ */
+export async function updateDraftRoomGuarded(id: string, expected: {
+  currentPickIndex?: number;
+  status?: DraftRoom["status"];
+}, patch: Partial<{
+  status: DraftRoom["status"];
+  baseOrder: string[];
+  currentPickIndex: number;
+  pickStartedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  rounds: number;
+  pickTimerSeconds: number;
+}>): Promise<DraftRoom | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const dbPatch: Database["public"]["Tables"]["draft_rooms"]["Update"] = {};
+  if (patch.status !== undefined) dbPatch.status = patch.status;
+  if (patch.baseOrder !== undefined) dbPatch.base_order = patch.baseOrder;
+  if (patch.currentPickIndex !== undefined) dbPatch.current_pick_index = patch.currentPickIndex;
+  if (Object.prototype.hasOwnProperty.call(patch, "pickStartedAt")) dbPatch.pick_started_at = patch.pickStartedAt;
+  if (Object.prototype.hasOwnProperty.call(patch, "startedAt")) dbPatch.started_at = patch.startedAt;
+  if (Object.prototype.hasOwnProperty.call(patch, "completedAt")) dbPatch.completed_at = patch.completedAt;
+  if (patch.rounds !== undefined) dbPatch.rounds = patch.rounds;
+  if (patch.pickTimerSeconds !== undefined) dbPatch.pick_timer_seconds = patch.pickTimerSeconds;
+  let q = supabase.from("draft_rooms").update(dbPatch).eq("id", id);
+  if (expected.currentPickIndex !== undefined) q = q.eq("current_pick_index", expected.currentPickIndex);
+  if (expected.status !== undefined) q = q.eq("status", expected.status);
+  const { data, error } = await q.select().maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return fromDbRoom(data as DbDraftRoom);
+}
+
+/**
  * Atomically records a pick and advances the draft (migration 015): locks the
  * room row, re-validates that current_pick_index still equals
  * expectedPickIndex, inserts the pick, and updates index/status/timers in one
