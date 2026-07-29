@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
-import { updateDraftRoom } from "@/lib/draft-data";
+import { getDraftRoom, updateDraftRoomGuarded } from "@/lib/draft-data";
 import { errorMessage } from "@/lib/error-monitor";
 
 const patchSchema = z.object({
@@ -17,7 +17,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const result = patchSchema.safeParse(body);
   if (!result.success) return NextResponse.json({ error: result.error.issues.map((i) => i.message).join("; ") }, { status: 400 });
   try {
-    const room = await updateDraftRoom(id, result.data);
+    // Room config is immutable once the draft leaves "pending": the atomic
+    // pick RPC (migration 015) assumes baseOrder/rounds/timer never change
+    // while the draft is active.
+    const existing = await getDraftRoom(id);
+    if (!existing) return NextResponse.json({ error: "Draft room not found." }, { status: 404 });
+    if (existing.status !== "pending") return NextResponse.json({ error: `Cannot modify a draft with status "${existing.status}".` }, { status: 400 });
+    // The status re-check is enforced inside the update itself: a start
+    // request landing between the read above and this write would otherwise
+    // let the config change on an already-active draft.
+    const room = await updateDraftRoomGuarded(id, { status: "pending" }, result.data);
+    if (!room) return NextResponse.json({ error: "Draft is no longer pending. Refresh and retry." }, { status: 409 });
     return NextResponse.json({ room });
   } catch (err) {
     const message = errorMessage(err, "Failed to update draft room.");

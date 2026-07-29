@@ -147,17 +147,39 @@ export interface TicketViewerCapabilities {
   canViewRestrictedIdentities: boolean;
 }
 
+/**
+ * Staged per-role mapping (SITE-05). The planned Owner/Moderator/Division-
+ * Commissioner roles are blocked on the sal-database RBAC release; until then
+ * the auth model only issues super_admin and admin, and new roles slot in here
+ * additively without reshaping TicketViewerCapabilities.
+ *
+ * Capabilities are a UX hint; the action endpoints are the source of truth.
+ * Both Wave 1 action endpoints (/api/admin/registrations/[id] and
+ * /api/admin/match-reports/[id]/submit) accept any valid admin session, so
+ * both current roles get canActOnTickets. Accepts `string` so a stale or
+ * unrecognized role value degrades to deny-by-default instead of failing.
+ */
 export function capabilitiesForAdminRole(
-  role: "super_admin" | "admin",
+  role: string | null | undefined,
 ): TicketViewerCapabilities {
-  void role;
-  return {
-    canViewQueue: true,
-    // SITE-05 replaces this temporary all-admin mapping with database-backed
-    // role capabilities and matching server-side scope enforcement.
-    canActOnTickets: true,
-    canViewRestrictedIdentities: false,
-  };
+  switch (role) {
+    case "super_admin":
+    case "admin":
+      return {
+        canViewQueue: true,
+        canActOnTickets: true,
+        // Restricted identities stay off for every role until an audited
+        // reveal path exists; they remain in the owning workflows.
+        canViewRestrictedIdentities: false,
+      };
+    default:
+      // Deny by default: an unknown or absent role gets nothing.
+      return {
+        canViewQueue: false,
+        canActOnTickets: false,
+        canViewRestrictedIdentities: false,
+      };
+  }
 }
 
 /** Health of one upstream source read; failures must not sink the queue. */

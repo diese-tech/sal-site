@@ -5,31 +5,40 @@ vi.mock("@/lib/draft-data", () => ({
   advancePickOnTimeout: vi.fn(),
   buildDraftState: vi.fn(),
   finalizeDraftRosters: vi.fn(),
-  getDraftPicks: vi.fn(),
+  getSeasonDraftedPlayerIds: vi.fn(),
   getShortlist: vi.fn(),
   getTopShortlistPick: vi.fn(),
   removePlayerFromAllShortlists: vi.fn(),
   submitPickAtomic: vi.fn(),
 }));
 vi.mock("@/lib/captain-auth", () => ({ getCaptainSessionFromRequest: vi.fn(() => null) }));
-vi.mock("@/lib/league-data", () => ({ writeAuditLog: vi.fn() }));
+vi.mock("@/lib/league-data", () => {
+  class LeagueDataUnavailableError extends Error {}
+  return { writeAuditLog: vi.fn(), getLeagueData: vi.fn(), LeagueDataUnavailableError };
+});
 
 import {
   advancePickOnTimeout,
   buildDraftState,
   finalizeDraftRosters,
-  getDraftPicks,
+  getSeasonDraftedPlayerIds,
   getTopShortlistPick,
   removePlayerFromAllShortlists,
   submitPickAtomic,
 } from "@/lib/draft-data";
-import { writeAuditLog } from "@/lib/league-data";
+import { getLeagueData, writeAuditLog, LeagueDataUnavailableError } from "@/lib/league-data";
 import { GET } from "./route";
+
+function mockLeaguePlayers(players: Array<{ id: string; divisionId?: string }>) {
+  vi.mocked(getLeagueData).mockResolvedValue({ players } as unknown as Awaited<ReturnType<typeof getLeagueData>>);
+}
 
 // Expired-timer active room: org-a on the clock for pick 1 of 4.
 const state = {
   room: {
     status: "active",
+    seasonId: "season-1",
+    divisionId: "solar",
     pickStartedAt: new Date(Date.now() - 60_000).toISOString(),
     pickTimerSeconds: 10,
     baseOrder: ["org-a", "org-b"],
@@ -45,9 +54,10 @@ describe("auto-pick conflict logging (#141)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(buildDraftState).mockResolvedValue(state);
+    mockLeaguePlayers([{ id: "player-1", divisionId: "solar" }]);
     vi.mocked(getTopShortlistPick).mockResolvedValue("player-1");
-    // Both racers read picks before the winner's insert lands.
-    vi.mocked(getDraftPicks).mockResolvedValue([]);
+    // Both racers read the season drafted set before the winner's insert lands.
+    vi.mocked(getSeasonDraftedPlayerIds).mockResolvedValue(new Set());
   });
 
   it("two concurrent timer-expiry polls log one auto_pick and one auto_pick_conflict", async () => {
@@ -88,11 +98,64 @@ describe("auto-pick conflict logging (#141)", () => {
   });
 });
 
+describe("auto-pick uses the season-wide drafted set (#206)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(buildDraftState).mockResolvedValue(state);
+    mockLeaguePlayers([{ id: "player-1", divisionId: "solar" }]);
+    vi.mocked(getTopShortlistPick).mockResolvedValue("player-1");
+  });
+
+  it("passes the room's seasonId and a division-lock predicate to getTopShortlistPick", async () => {
+    vi.mocked(getSeasonDraftedPlayerIds).mockResolvedValue(new Set());
+    vi.mocked(submitPickAtomic).mockResolvedValue({ ok: true, isComplete: false });
+    mockLeaguePlayers([
+      { id: "player-1", divisionId: "solar" },
+      { id: "player-2", divisionId: "terra" },
+      { id: "player-3" },
+    ]);
+
+    await GET(req(), ctx);
+
+    expect(getTopShortlistPick).toHaveBeenCalledWith("room-1", "org-a", "season-1", expect.any(Function));
+    const isEligible = vi.mocked(getTopShortlistPick).mock.calls[0][3]!;
+    expect(isEligible("player-1")).toBe(true);   // room's division
+    expect(isEligible("player-2")).toBe(false);  // other division
+    expect(isEligible("player-3")).toBe(false);  // no division
+    expect(isEligible("player-x")).toBe(false);  // unknown player
+  });
+
+  it("neither picks nor skips when league data is unavailable", async () => {
+    vi.mocked(getLeagueData).mockRejectedValue(new LeagueDataUnavailableError("down"));
+
+    const res = await GET(req(), ctx);
+
+    expect(res.status).toBe(200);
+    expect(getTopShortlistPick).not.toHaveBeenCalled();
+    expect(submitPickAtomic).not.toHaveBeenCalled();
+    expect(advancePickOnTimeout).not.toHaveBeenCalled();
+  });
+
+  it("does not auto-pick a shortlisted player drafted in another room of the season", async () => {
+    vi.mocked(getSeasonDraftedPlayerIds).mockResolvedValue(new Set(["player-1"]));
+    vi.mocked(advancePickOnTimeout).mockResolvedValue(true);
+
+    await GET(req(), ctx);
+
+    expect(getSeasonDraftedPlayerIds).toHaveBeenCalledWith("season-1");
+    expect(submitPickAtomic).not.toHaveBeenCalled();
+    // Falls through to the timer skip instead of picking a drafted player.
+    expect(advancePickOnTimeout).toHaveBeenCalled();
+  });
+});
+
 describe("draft completion does not auto-publish rosters (#210)", () => {
   // Same room at the final slot: pick 4 of 4, org-a on the clock.
   const finalSlotState = {
     room: {
       status: "active",
+      seasonId: "season-1",
+      divisionId: "solar",
       pickStartedAt: new Date(Date.now() - 60_000).toISOString(),
       pickTimerSeconds: 10,
       baseOrder: ["org-a", "org-b"],
@@ -104,7 +167,8 @@ describe("draft completion does not auto-publish rosters (#210)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(buildDraftState).mockResolvedValue(finalSlotState);
-    vi.mocked(getDraftPicks).mockResolvedValue([]);
+    mockLeaguePlayers([{ id: "player-1", divisionId: "solar" }]);
+    vi.mocked(getSeasonDraftedPlayerIds).mockResolvedValue(new Set());
   });
 
   it("a completing shortlist auto-pick does not call finalizeDraftRosters", async () => {
