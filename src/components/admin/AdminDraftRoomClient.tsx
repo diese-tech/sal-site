@@ -142,6 +142,7 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
           {isPaused && <AdminBtn onClick={() => call("resume")} disabled={busy}>Resume</AdminBtn>}
           {(isActive || isPaused) && <AdminBtn onClick={() => call("skip")} disabled={busy} variant="red">Skip Pick</AdminBtn>}
           {isActive && liveState.picks.length > 0 && <AdminBtn onClick={() => callUndo()} disabled={busy} variant="yellow">Undo Pick</AdminBtn>}
+          {isComplete && <AdminBtn onClick={() => call("finalize")} disabled={busy}>End Draft &amp; Publish Rosters</AdminBtn>}
         </div>
       </div>
       {message && <p className="text-sm font-semibold text-orange-200">{message}</p>}
