@@ -24,10 +24,10 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const result = createSchema.safeParse(body);
   if (!result.success) return NextResponse.json({ error: result.error.issues.map((i) => i.message).join("; ") }, { status: 400 });
-  // Guard: prevent two active/pending rooms for the same division
+  // Guard: prevent two active/pending/paused rooms for the same division
   const existingRooms = await getDraftRooms(result.data.seasonId);
   const conflict = existingRooms.find(
-    (r) => r.divisionId === result.data.divisionId && (r.status === "active" || r.status === "pending")
+    (r) => r.divisionId === result.data.divisionId && (r.status === "active" || r.status === "pending" || r.status === "paused")
   );
   if (conflict) {
     return NextResponse.json(
