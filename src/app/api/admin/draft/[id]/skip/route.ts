@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/admin-auth";
-import { buildDraftState, updateDraftRoomIfPickIndex } from "@/lib/draft-data";
+import { buildDraftState, updateDraftRoomGuarded } from "@/lib/draft-data";
 import { buildPickSequence } from "@/types/draft";
 import { writeAuditLog } from "@/lib/league-data";
 
@@ -17,10 +17,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const nextIndex = room.currentPickIndex + 1;
   const isComplete = nextIndex >= sequence.length;
   const now = new Date().toISOString();
-  // Guarded on the pick index read above: a concurrent captain pick or
-  // timeout auto-advance changes current_pick_index, and skipping on top of
-  // that stale snapshot would silently drop their advance.
-  const updated = await updateDraftRoomIfPickIndex(id, room.currentPickIndex, {
+  // Guarded on the pick index AND status read above: a concurrent captain
+  // pick or timeout auto-advance changes current_pick_index, and a concurrent
+  // pause/resume changes status — skipping on top of either stale snapshot
+  // would silently overwrite their write.
+  const updated = await updateDraftRoomGuarded(id, { currentPickIndex: room.currentPickIndex, status: room.status }, {
     currentPickIndex: nextIndex,
     status: isComplete ? "complete" : room.status === "paused" ? "paused" : "active",
     pickStartedAt: isComplete ? null : now,

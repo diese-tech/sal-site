@@ -162,11 +162,15 @@ export async function updateDraftRoom(id: string, patch: Partial<{
 
 /**
  * Optimistic-concurrency variant of updateDraftRoom: the update only applies
- * while the room's current_pick_index still equals expectedPickIndex, so a
- * concurrent pick or timeout auto-advance cannot be silently overwritten.
+ * while the room still matches every provided expectation (current_pick_index
+ * and/or status), so a concurrent pick, timeout auto-advance, or lifecycle
+ * action (start/pause/resume) cannot be silently overwritten.
  * Returns null if the guard failed (caller lost the race).
  */
-export async function updateDraftRoomIfPickIndex(id: string, expectedPickIndex: number, patch: Partial<{
+export async function updateDraftRoomGuarded(id: string, expected: {
+  currentPickIndex?: number;
+  status?: DraftRoom["status"];
+}, patch: Partial<{
   status: DraftRoom["status"];
   baseOrder: string[];
   currentPickIndex: number;
@@ -187,13 +191,10 @@ export async function updateDraftRoomIfPickIndex(id: string, expectedPickIndex: 
   if (Object.prototype.hasOwnProperty.call(patch, "completedAt")) dbPatch.completed_at = patch.completedAt;
   if (patch.rounds !== undefined) dbPatch.rounds = patch.rounds;
   if (patch.pickTimerSeconds !== undefined) dbPatch.pick_timer_seconds = patch.pickTimerSeconds;
-  const { data, error } = await supabase
-    .from("draft_rooms")
-    .update(dbPatch)
-    .eq("id", id)
-    .eq("current_pick_index", expectedPickIndex)
-    .select()
-    .maybeSingle();
+  let q = supabase.from("draft_rooms").update(dbPatch).eq("id", id);
+  if (expected.currentPickIndex !== undefined) q = q.eq("current_pick_index", expected.currentPickIndex);
+  if (expected.status !== undefined) q = q.eq("status", expected.status);
+  const { data, error } = await q.select().maybeSingle();
   if (error) throw error;
   if (!data) return null;
   return fromDbRoom(data as DbDraftRoom);

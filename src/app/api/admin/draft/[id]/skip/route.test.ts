@@ -4,11 +4,11 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/admin-auth", () => ({ isAdminRequest: vi.fn(() => true) }));
 vi.mock("@/lib/draft-data", () => ({
   buildDraftState: vi.fn(),
-  updateDraftRoomIfPickIndex: vi.fn(),
+  updateDraftRoomGuarded: vi.fn(),
 }));
 vi.mock("@/lib/league-data", () => ({ writeAuditLog: vi.fn() }));
 
-import { buildDraftState, updateDraftRoomIfPickIndex } from "@/lib/draft-data";
+import { buildDraftState, updateDraftRoomGuarded } from "@/lib/draft-data";
 import { writeAuditLog } from "@/lib/league-data";
 import { POST } from "./route";
 
@@ -36,7 +36,7 @@ describe("POST /api/admin/draft/[id]/skip concurrency guard (#207)", () => {
 
   it("returns 409 and writes no audit log when a concurrent action advanced the draft", async () => {
     vi.mocked(buildDraftState).mockResolvedValue(stateFor({}));
-    vi.mocked(updateDraftRoomIfPickIndex).mockResolvedValue(null);
+    vi.mocked(updateDraftRoomGuarded).mockResolvedValue(null);
 
     const response = await POST(req(), ctx);
 
@@ -48,14 +48,14 @@ describe("POST /api/admin/draft/[id]/skip concurrency guard (#207)", () => {
   it("advances an active mid-draft pick under the index guard and audits once", async () => {
     vi.mocked(buildDraftState).mockResolvedValue(stateFor({}));
     const updated = { ...room, currentPickIndex: 2 };
-    vi.mocked(updateDraftRoomIfPickIndex).mockResolvedValue(updated as Awaited<ReturnType<typeof updateDraftRoomIfPickIndex>>);
+    vi.mocked(updateDraftRoomGuarded).mockResolvedValue(updated as Awaited<ReturnType<typeof updateDraftRoomGuarded>>);
 
     const response = await POST(req(), ctx);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ room: updated, skipped: true, complete: false });
-    expect(updateDraftRoomIfPickIndex).toHaveBeenCalledTimes(1);
-    expect(updateDraftRoomIfPickIndex).toHaveBeenCalledWith("room-1", 1, {
+    expect(updateDraftRoomGuarded).toHaveBeenCalledTimes(1);
+    expect(updateDraftRoomGuarded).toHaveBeenCalledWith("room-1", { currentPickIndex: 1, status: "active" }, {
       currentPickIndex: 2,
       status: "active",
       pickStartedAt: expect.any(String),
@@ -68,25 +68,25 @@ describe("POST /api/admin/draft/[id]/skip concurrency guard (#207)", () => {
   it("keeps a paused draft paused when skipping", async () => {
     vi.mocked(buildDraftState).mockResolvedValue(stateFor({ status: "paused" }));
     const updated = { ...room, status: "paused", currentPickIndex: 2 };
-    vi.mocked(updateDraftRoomIfPickIndex).mockResolvedValue(updated as Awaited<ReturnType<typeof updateDraftRoomIfPickIndex>>);
+    vi.mocked(updateDraftRoomGuarded).mockResolvedValue(updated as Awaited<ReturnType<typeof updateDraftRoomGuarded>>);
 
     const response = await POST(req(), ctx);
 
     expect(response.status).toBe(200);
-    expect(updateDraftRoomIfPickIndex).toHaveBeenCalledWith("room-1", 1, expect.objectContaining({ status: "paused" }));
+    expect(updateDraftRoomGuarded).toHaveBeenCalledWith("room-1", { currentPickIndex: 1, status: "paused" }, expect.objectContaining({ status: "paused" }));
     expect(writeAuditLog).toHaveBeenCalledTimes(1);
   });
 
   it("completes the draft when the final slot is skipped", async () => {
     vi.mocked(buildDraftState).mockResolvedValue(stateFor({ currentPickIndex: 3 }));
     const updated = { ...room, status: "complete", currentPickIndex: 4 };
-    vi.mocked(updateDraftRoomIfPickIndex).mockResolvedValue(updated as Awaited<ReturnType<typeof updateDraftRoomIfPickIndex>>);
+    vi.mocked(updateDraftRoomGuarded).mockResolvedValue(updated as Awaited<ReturnType<typeof updateDraftRoomGuarded>>);
 
     const response = await POST(req(), ctx);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ room: updated, skipped: true, complete: true });
-    expect(updateDraftRoomIfPickIndex).toHaveBeenCalledWith("room-1", 3, {
+    expect(updateDraftRoomGuarded).toHaveBeenCalledWith("room-1", { currentPickIndex: 3, status: "active" }, {
       currentPickIndex: 4,
       status: "complete",
       pickStartedAt: null,

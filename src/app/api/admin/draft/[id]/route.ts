@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
-import { getDraftRoom, updateDraftRoom } from "@/lib/draft-data";
+import { getDraftRoom, updateDraftRoomGuarded } from "@/lib/draft-data";
 import { errorMessage } from "@/lib/error-monitor";
 
 const patchSchema = z.object({
@@ -23,7 +23,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const existing = await getDraftRoom(id);
     if (!existing) return NextResponse.json({ error: "Draft room not found." }, { status: 404 });
     if (existing.status !== "pending") return NextResponse.json({ error: `Cannot modify a draft with status "${existing.status}".` }, { status: 400 });
-    const room = await updateDraftRoom(id, result.data);
+    // The status re-check is enforced inside the update itself: a start
+    // request landing between the read above and this write would otherwise
+    // let the config change on an already-active draft.
+    const room = await updateDraftRoomGuarded(id, { status: "pending" }, result.data);
+    if (!room) return NextResponse.json({ error: "Draft is no longer pending. Refresh and retry." }, { status: 409 });
     return NextResponse.json({ room });
   } catch (err) {
     const message = errorMessage(err, "Failed to update draft room.");

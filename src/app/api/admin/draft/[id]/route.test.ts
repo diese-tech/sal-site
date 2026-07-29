@@ -4,10 +4,10 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/admin-auth", () => ({ isAdminRequest: vi.fn(() => true) }));
 vi.mock("@/lib/draft-data", () => ({
   getDraftRoom: vi.fn(),
-  updateDraftRoom: vi.fn(),
+  updateDraftRoomGuarded: vi.fn(),
 }));
 
-import { getDraftRoom, updateDraftRoom } from "@/lib/draft-data";
+import { getDraftRoom, updateDraftRoomGuarded } from "@/lib/draft-data";
 import { PATCH } from "./route";
 
 const room = {
@@ -41,19 +41,29 @@ describe("PATCH /api/admin/draft/[id] config immutability (#208)", () => {
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({ error: 'Cannot modify a draft with status "active".' });
-    expect(updateDraftRoom).not.toHaveBeenCalled();
+    expect(updateDraftRoomGuarded).not.toHaveBeenCalled();
   });
 
   it("applies the patch while the draft is still pending", async () => {
     vi.mocked(getDraftRoom).mockResolvedValue(room);
-    vi.mocked(updateDraftRoom).mockResolvedValue({ ...room!, rounds: 3 });
+    vi.mocked(updateDraftRoomGuarded).mockResolvedValue({ ...room!, rounds: 3 });
 
     const response = await PATCH(request({ rounds: 3 }), ctx);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ room: { ...room!, rounds: 3 } });
-    expect(updateDraftRoom).toHaveBeenCalledTimes(1);
-    expect(updateDraftRoom).toHaveBeenCalledWith("room-1", { rounds: 3 });
+    expect(updateDraftRoomGuarded).toHaveBeenCalledTimes(1);
+    expect(updateDraftRoomGuarded).toHaveBeenCalledWith("room-1", { status: "pending" }, { rounds: 3 });
+  });
+
+  it("returns 409 when a concurrent start wins between the read and the guarded update", async () => {
+    vi.mocked(getDraftRoom).mockResolvedValue(room);
+    vi.mocked(updateDraftRoomGuarded).mockResolvedValue(null);
+
+    const response = await PATCH(request({ rounds: 3 }), ctx);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({ error: "Draft is no longer pending. Refresh and retry." });
   });
 
   it("returns 404 for an unknown room", async () => {
@@ -63,6 +73,6 @@ describe("PATCH /api/admin/draft/[id] config immutability (#208)", () => {
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({ error: "Draft room not found." });
-    expect(updateDraftRoom).not.toHaveBeenCalled();
+    expect(updateDraftRoomGuarded).not.toHaveBeenCalled();
   });
 });
