@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
-import { updateDraftRoom } from "@/lib/draft-data";
+import { getDraftRoom, updateDraftRoom } from "@/lib/draft-data";
 import { errorMessage } from "@/lib/error-monitor";
 
 const patchSchema = z.object({
@@ -17,6 +17,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const result = patchSchema.safeParse(body);
   if (!result.success) return NextResponse.json({ error: result.error.issues.map((i) => i.message).join("; ") }, { status: 400 });
   try {
+    // Room config is immutable once the draft leaves "pending": the atomic
+    // pick RPC (migration 015) assumes baseOrder/rounds/timer never change
+    // while the draft is active.
+    const existing = await getDraftRoom(id);
+    if (!existing) return NextResponse.json({ error: "Draft room not found." }, { status: 404 });
+    if (existing.status !== "pending") return NextResponse.json({ error: `Cannot modify a draft with status "${existing.status}".` }, { status: 400 });
     const room = await updateDraftRoom(id, result.data);
     return NextResponse.json({ room });
   } catch (err) {

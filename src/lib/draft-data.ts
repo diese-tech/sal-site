@@ -161,6 +161,45 @@ export async function updateDraftRoom(id: string, patch: Partial<{
 }
 
 /**
+ * Optimistic-concurrency variant of updateDraftRoom: the update only applies
+ * while the room's current_pick_index still equals expectedPickIndex, so a
+ * concurrent pick or timeout auto-advance cannot be silently overwritten.
+ * Returns null if the guard failed (caller lost the race).
+ */
+export async function updateDraftRoomIfPickIndex(id: string, expectedPickIndex: number, patch: Partial<{
+  status: DraftRoom["status"];
+  baseOrder: string[];
+  currentPickIndex: number;
+  pickStartedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  rounds: number;
+  pickTimerSeconds: number;
+}>): Promise<DraftRoom | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const dbPatch: Database["public"]["Tables"]["draft_rooms"]["Update"] = {};
+  if (patch.status !== undefined) dbPatch.status = patch.status;
+  if (patch.baseOrder !== undefined) dbPatch.base_order = patch.baseOrder;
+  if (patch.currentPickIndex !== undefined) dbPatch.current_pick_index = patch.currentPickIndex;
+  if (Object.prototype.hasOwnProperty.call(patch, "pickStartedAt")) dbPatch.pick_started_at = patch.pickStartedAt;
+  if (Object.prototype.hasOwnProperty.call(patch, "startedAt")) dbPatch.started_at = patch.startedAt;
+  if (Object.prototype.hasOwnProperty.call(patch, "completedAt")) dbPatch.completed_at = patch.completedAt;
+  if (patch.rounds !== undefined) dbPatch.rounds = patch.rounds;
+  if (patch.pickTimerSeconds !== undefined) dbPatch.pick_timer_seconds = patch.pickTimerSeconds;
+  const { data, error } = await supabase
+    .from("draft_rooms")
+    .update(dbPatch)
+    .eq("id", id)
+    .eq("current_pick_index", expectedPickIndex)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return fromDbRoom(data as DbDraftRoom);
+}
+
+/**
  * Atomically records a pick and advances the draft (migration 015): locks the
  * room row, re-validates that current_pick_index still equals
  * expectedPickIndex, inserts the pick, and updates index/status/timers in one

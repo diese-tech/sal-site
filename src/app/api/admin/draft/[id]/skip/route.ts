@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/admin-auth";
-import { buildDraftState, updateDraftRoom } from "@/lib/draft-data";
+import { buildDraftState, updateDraftRoomIfPickIndex } from "@/lib/draft-data";
 import { buildPickSequence } from "@/types/draft";
 import { writeAuditLog } from "@/lib/league-data";
 
@@ -17,12 +17,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const nextIndex = room.currentPickIndex + 1;
   const isComplete = nextIndex >= sequence.length;
   const now = new Date().toISOString();
-  const updated = await updateDraftRoom(id, {
+  // Guarded on the pick index read above: a concurrent captain pick or
+  // timeout auto-advance changes current_pick_index, and skipping on top of
+  // that stale snapshot would silently drop their advance.
+  const updated = await updateDraftRoomIfPickIndex(id, room.currentPickIndex, {
     currentPickIndex: nextIndex,
     status: isComplete ? "complete" : room.status === "paused" ? "paused" : "active",
     pickStartedAt: isComplete ? null : now,
     completedAt: isComplete ? now : null,
   });
+  if (!updated) {
+    return NextResponse.json({ error: "Another action advanced the draft. Refresh and retry." }, { status: 409 });
+  }
   await writeAuditLog("draft_pick_skipped", "draft_room", id, { skippedPickIndex: room.currentPickIndex });
   return NextResponse.json({ room: updated, skipped: true, complete: isComplete });
 }
