@@ -11,9 +11,20 @@ export function safeRedirectPath(next: string | null | undefined, fallback = "/r
  */
 export function safeAdminReturnPath(next: string | null | undefined): string | null {
   if (!next) return null;
-  if (!/^\/admin(?:\/|\?|$)/.test(next)) return null;
-  if (next.startsWith("/admin/login")) return null;
-  return next;
+  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\")) return null;
+  // Validate against the browser-normalized path, not the raw string — a
+  // crafted value like /admin/../register passes a prefix check but actually
+  // navigates outside /admin. Returning the normalized form also means the
+  // redirect target is exactly what was validated.
+  let url: URL;
+  try {
+    url = new URL(next, "http://localhost");
+  } catch {
+    return null;
+  }
+  if (!/^\/admin(?:\/|$)/.test(url.pathname)) return null;
+  if (url.pathname === "/admin/login" || url.pathname.startsWith("/admin/login/")) return null;
+  return url.pathname + url.search;
 }
 
 /**
