@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { saveSeasonRosterAssignment } from "@/lib/league-data";
 import { buildPickSequence, type DraftPick, type DraftRoom, type DraftState } from "@/types/draft";
 import type { DivisionId } from "@/types/league";
 import type { Database } from "@/types/database.types";
@@ -92,6 +93,25 @@ export async function getDraftPicks(draftRoomId: string): Promise<DraftPick[]> {
   return (data as DbDraftPick[]).map(fromDbPick);
 }
 
+/** Player IDs drafted in ANY room of the season — a player may only be drafted once per season. */
+export async function getSeasonDraftedPlayerIds(seasonId: string): Promise<Set<string>> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return new Set();
+  const { data: rooms, error: roomsError } = await supabase
+    .from("draft_rooms")
+    .select("id")
+    .eq("season_id", seasonId);
+  if (roomsError) { console.error("getSeasonDraftedPlayerIds:", roomsError.message); return new Set(); }
+  const roomIds = (rooms ?? []).map((r: { id: string }) => r.id);
+  if (roomIds.length === 0) return new Set();
+  const { data: picks, error: picksError } = await supabase
+    .from("draft_picks")
+    .select("player_id")
+    .in("draft_room_id", roomIds);
+  if (picksError) { console.error("getSeasonDraftedPlayerIds:", picksError.message); return new Set(); }
+  return new Set((picks ?? []).map((p: { player_id: string }) => p.player_id));
+}
+
 export async function buildDraftState(draftRoomId: string): Promise<DraftState | null> {
   const [room, picks] = await Promise.all([getDraftRoom(draftRoomId), getDraftPicks(draftRoomId)]);
   if (!room) return null;
@@ -157,6 +177,46 @@ export async function updateDraftRoom(id: string, patch: Partial<{
   if (patch.pickTimerSeconds !== undefined) dbPatch.pick_timer_seconds = patch.pickTimerSeconds;
   const { data, error } = await supabase.from("draft_rooms").update(dbPatch).eq("id", id).select().single();
   if (error) throw error;
+  return fromDbRoom(data as DbDraftRoom);
+}
+
+/**
+ * Optimistic-concurrency variant of updateDraftRoom: the update only applies
+ * while the room still matches every provided expectation (current_pick_index
+ * and/or status), so a concurrent pick, timeout auto-advance, or lifecycle
+ * action (start/pause/resume) cannot be silently overwritten.
+ * Returns null if the guard failed (caller lost the race).
+ */
+export async function updateDraftRoomGuarded(id: string, expected: {
+  currentPickIndex?: number;
+  status?: DraftRoom["status"];
+}, patch: Partial<{
+  status: DraftRoom["status"];
+  baseOrder: string[];
+  currentPickIndex: number;
+  pickStartedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  rounds: number;
+  pickTimerSeconds: number;
+}>): Promise<DraftRoom | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const dbPatch: Database["public"]["Tables"]["draft_rooms"]["Update"] = {};
+  if (patch.status !== undefined) dbPatch.status = patch.status;
+  if (patch.baseOrder !== undefined) dbPatch.base_order = patch.baseOrder;
+  if (patch.currentPickIndex !== undefined) dbPatch.current_pick_index = patch.currentPickIndex;
+  if (Object.prototype.hasOwnProperty.call(patch, "pickStartedAt")) dbPatch.pick_started_at = patch.pickStartedAt;
+  if (Object.prototype.hasOwnProperty.call(patch, "startedAt")) dbPatch.started_at = patch.startedAt;
+  if (Object.prototype.hasOwnProperty.call(patch, "completedAt")) dbPatch.completed_at = patch.completedAt;
+  if (patch.rounds !== undefined) dbPatch.rounds = patch.rounds;
+  if (patch.pickTimerSeconds !== undefined) dbPatch.pick_timer_seconds = patch.pickTimerSeconds;
+  let q = supabase.from("draft_rooms").update(dbPatch).eq("id", id);
+  if (expected.currentPickIndex !== undefined) q = q.eq("current_pick_index", expected.currentPickIndex);
+  if (expected.status !== undefined) q = q.eq("status", expected.status);
+  const { data, error } = await q.select().maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
   return fromDbRoom(data as DbDraftRoom);
 }
 
@@ -373,7 +433,12 @@ export async function removePlayerFromAllShortlists(draftRoomId: string, playerI
     .eq("player_id", playerId);
 }
 
-export async function getTopShortlistPick(draftRoomId: string, orgId: string): Promise<string | null> {
+export async function getTopShortlistPick(
+  draftRoomId: string,
+  orgId: string,
+  seasonId: string,
+  isEligible?: (playerId: string) => boolean,
+): Promise<string | null> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
   // Get shortlist ordered by position
@@ -384,15 +449,16 @@ export async function getTopShortlistPick(draftRoomId: string, orgId: string): P
     .eq("org_id", orgId)
     .order("position", { ascending: true });
   if (!shortlist || shortlist.length === 0) return null;
-  // Get already-drafted player IDs
-  const { data: picks } = await supabase
-    .from("draft_picks")
-    .select("player_id")
-    .eq("draft_room_id", draftRoomId);
-  const draftedIds = new Set((picks ?? []).map((p: { player_id: string }) => p.player_id));
-  // Return first shortlisted player not yet drafted
+  // Exclude players drafted anywhere this season, not just in this room
+  const draftedIds = await getSeasonDraftedPlayerIds(seasonId);
+  // Return the first shortlisted player who is undrafted and passes the
+  // caller's eligibility rule — a shortlist can hold stale entries (e.g. a
+  // cross-division player added before the division lock), and auto-pick
+  // must not accept a player the manual pick route would reject.
   for (const entry of shortlist as Array<{ player_id: string }>) {
-    if (!draftedIds.has(entry.player_id)) return entry.player_id;
+    if (draftedIds.has(entry.player_id)) continue;
+    if (isEligible && !isEligible(entry.player_id)) continue;
+    return entry.player_id;
   }
   return null;
 }
@@ -400,9 +466,11 @@ export async function getTopShortlistPick(draftRoomId: string, orgId: string): P
 // ---- Finalize ------------------------------------------------------------
 
 /**
- * Propagates a completed draft's picks to team rosters (#62): every picked
- * player gets the picking org's id and status 'drafted'. Idempotent — safe
- * to call again for a draft whose picks were already applied.
+ * Publishes a completed draft's picks as season rosters (#210): every pick is
+ * written through saveSeasonRosterAssignment — the canonical season_rosters
+ * path all season-scoped consumers read — and mirrored onto the legacy
+ * players.org_id/status columns. Idempotent — the roster upsert is keyed on
+ * (season_id, player_id), so re-running is safe.
  */
 export async function finalizeDraftRosters(draftRoomId: string): Promise<{ assigned: number }> {
   const supabase = getSupabaseServerClient();
@@ -420,6 +488,37 @@ export async function finalizeDraftRosters(draftRoomId: string): Promise<{ assig
     byOrg.set(pick.orgId, list);
   }
 
+  // saveSeasonRosterAssignment resolves each player's division via a
+  // .single() lookup on season_orgs, which would fail opaquely mid-loop for
+  // an org that was never assigned to the season (draft start only validates
+  // baseOrder against global orgs.division_id). Fail loudly up front instead.
+  const orgIds = [...byOrg.keys()];
+  if (orgIds.length > 0) {
+    const { data, error } = await supabase
+      .from("season_orgs")
+      .select("org_id")
+      .eq("season_id", room.seasonId)
+      .in("org_id", orgIds);
+    if (error) throw new Error(error.message);
+    const assigned = new Set((data ?? []).map((r: { org_id: string }) => r.org_id));
+    const missing = orgIds.filter((orgId) => !assigned.has(orgId));
+    if (missing.length > 0) {
+      throw new Error(`Cannot publish rosters: org(s) not assigned to season ${room.seasonId}: ${missing.join(", ")}`);
+    }
+  }
+
+  for (const pick of picks) {
+    await saveSeasonRosterAssignment({
+      seasonId: room.seasonId,
+      playerId: pick.playerId,
+      orgId: pick.orgId,
+      divisionId: room.divisionId,
+      isCaptain: false,
+    });
+  }
+
+  // Legacy parity: keep the global players columns in sync for consumers
+  // that have not moved to season_rosters yet.
   for (const [orgId, playerIds] of byOrg) {
     const { error } = await supabase
       .from("players")

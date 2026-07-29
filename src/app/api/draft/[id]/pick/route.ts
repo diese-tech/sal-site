@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { buildDraftState, finalizeDraftRosters, getDraftPicks, removePlayerFromAllShortlists, submitPickAtomic } from "@/lib/draft-data";
+import { buildDraftState, getSeasonDraftedPlayerIds, removePlayerFromAllShortlists, submitPickAtomic } from "@/lib/draft-data";
 import { getCaptainSessionFromRequest } from "@/lib/captain-auth";
 import { buildPickSequence } from "@/types/draft";
 import { getLeagueData, writeAuditLog, LeagueDataUnavailableError } from "@/lib/league-data";
 import { reportError } from "@/lib/error-monitor";
-
-const DIVISION_TIER: Record<string, number> = { terra: 1, solar: 2, lunar: 3 };
 
 const pickSchema = z.object({
   playerId: z.string().min(1),
@@ -40,8 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "It is not your turn to pick." }, { status: 403 });
   }
 
-  // Division eligibility: captain cannot draft from a higher-tier division
-  const roomTier = DIVISION_TIER[room.divisionId] ?? 999;
+  // Division lock: every player drafts within their own division
   let leagueData;
   try {
     leagueData = await getLeagueData();
@@ -51,21 +48,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     throw err;
   }
+  // A player must belong to this room's division to be draftable. Players
+  // with no division are ineligible everywhere — both draft UIs already hide
+  // them, and allowing them server-side would let two sibling-division rooms
+  // race the season-wide drafted check on the same player.
   const playerData = leagueData.players.find((p) => p.id === playerId);
-  if (playerData?.divisionId) {
-    const playerTier = DIVISION_TIER[playerData.divisionId] ?? 999;
-    if (playerTier < roomTier) {
-      return NextResponse.json(
-        { error: `Cannot draft a ${playerData.divisionId} division player in a ${room.divisionId} draft.` },
-        { status: 400 },
-      );
-    }
+  if (!playerData || playerData.divisionId !== room.divisionId) {
+    return NextResponse.json(
+      { error: `Only ${room.divisionId} division players can be drafted in this room.` },
+      { status: 400 },
+    );
   }
 
-  // Verify player hasn't already been picked
-  const existingPicks = await getDraftPicks(id);
-  if (existingPicks.some((p) => p.playerId === playerId)) {
-    return NextResponse.json({ error: "Player has already been drafted." }, { status: 400 });
+  // Verify player hasn't already been picked in any room this season — a
+  // second same-division room can exist after an earlier one completed.
+  const draftedIds = await getSeasonDraftedPlayerIds(room.seasonId);
+  if (draftedIds.has(playerId)) {
+    return NextResponse.json({ error: "Player has already been drafted this season." }, { status: 400 });
   }
 
   // Atomic insert + index advance; a concurrent pick for the same slot
@@ -86,12 +85,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   const isComplete = submitted.isComplete;
   await removePlayerFromAllShortlists(id, playerId);
-
-  if (isComplete) {
-    // Propagate picks to team rosters now that the draft is complete (#62)
-    const { assigned } = await finalizeDraftRosters(id);
-    await writeAuditLog("draft_finalized", "draft_room", id, { draftRoomId: id, assigned });
-  }
 
   await writeAuditLog("draft_pick", "draft_pick", `${id}-${pickNumber}`, {
     draftRoomId: id,
