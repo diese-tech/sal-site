@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { saveSeasonRosterAssignment } from "@/lib/league-data";
 import { buildPickSequence, type DraftPick, type DraftRoom, type DraftState } from "@/types/draft";
 import type { DivisionId } from "@/types/league";
 import type { Database } from "@/types/database.types";
@@ -400,9 +401,11 @@ export async function getTopShortlistPick(draftRoomId: string, orgId: string): P
 // ---- Finalize ------------------------------------------------------------
 
 /**
- * Propagates a completed draft's picks to team rosters (#62): every picked
- * player gets the picking org's id and status 'drafted'. Idempotent — safe
- * to call again for a draft whose picks were already applied.
+ * Publishes a completed draft's picks as season rosters (#210): every pick is
+ * written through saveSeasonRosterAssignment — the canonical season_rosters
+ * path all season-scoped consumers read — and mirrored onto the legacy
+ * players.org_id/status columns. Idempotent — the roster upsert is keyed on
+ * (season_id, player_id), so re-running is safe.
  */
 export async function finalizeDraftRosters(draftRoomId: string): Promise<{ assigned: number }> {
   const supabase = getSupabaseServerClient();
@@ -420,6 +423,37 @@ export async function finalizeDraftRosters(draftRoomId: string): Promise<{ assig
     byOrg.set(pick.orgId, list);
   }
 
+  // saveSeasonRosterAssignment resolves each player's division via a
+  // .single() lookup on season_orgs, which would fail opaquely mid-loop for
+  // an org that was never assigned to the season (draft start only validates
+  // baseOrder against global orgs.division_id). Fail loudly up front instead.
+  const orgIds = [...byOrg.keys()];
+  if (orgIds.length > 0) {
+    const { data, error } = await supabase
+      .from("season_orgs")
+      .select("org_id")
+      .eq("season_id", room.seasonId)
+      .in("org_id", orgIds);
+    if (error) throw new Error(error.message);
+    const assigned = new Set((data ?? []).map((r: { org_id: string }) => r.org_id));
+    const missing = orgIds.filter((orgId) => !assigned.has(orgId));
+    if (missing.length > 0) {
+      throw new Error(`Cannot publish rosters: org(s) not assigned to season ${room.seasonId}: ${missing.join(", ")}`);
+    }
+  }
+
+  for (const pick of picks) {
+    await saveSeasonRosterAssignment({
+      seasonId: room.seasonId,
+      playerId: pick.playerId,
+      orgId: pick.orgId,
+      divisionId: room.divisionId,
+      isCaptain: false,
+    });
+  }
+
+  // Legacy parity: keep the global players columns in sync for consumers
+  // that have not moved to season_rosters yet.
   for (const [orgId, playerIds] of byOrg) {
     const { error } = await supabase
       .from("players")
