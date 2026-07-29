@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/league-data", () => ({ saveSeasonRosterAssignment: vi.fn() }));
 
 import { saveSeasonRosterAssignment } from "@/lib/league-data";
-import { finalizeDraftRosters } from "./draft-data";
+import { finalizeDraftRosters, getTopShortlistPick } from "./draft-data";
 
 type QueryState = {
   table: string;
@@ -161,5 +161,49 @@ describe("finalizeDraftRosters publishes season rosters (#210)", () => {
     await expect(finalizeDraftRosters("room-1")).rejects.toThrow("Draft is not complete.");
 
     expect(saveSeasonRosterAssignment).not.toHaveBeenCalled();
+  });
+});
+
+describe("getTopShortlistPick excludes season-wide drafted players (#206)", () => {
+  // Two rooms in the season; p1 was drafted in the OTHER room (room-2).
+  const seasonHandler = handlerFor({
+    captain_shortlists: { data: [{ player_id: "p1" }, { player_id: "p2" }], error: null },
+    draft_rooms: { data: [{ id: "room-1" }, { id: "room-2" }], error: null },
+    draft_picks: { data: [{ player_id: "p1" }], error: null },
+  });
+
+  it("skips a shortlisted player drafted in another room and returns the next entry", async () => {
+    client = makeClient(seasonHandler);
+
+    await expect(getTopShortlistPick("room-1", "org-a", "season-1")).resolves.toBe("p2");
+
+    // Drafted set is built across every room in the season, not just room-1.
+    const pickQuery = executed.find((q) => q.table === "draft_picks");
+    expect(pickQuery?.ins).toEqual([["draft_room_id", ["room-1", "room-2"]]]);
+  });
+
+  it("returns null when every shortlisted player is drafted somewhere this season", async () => {
+    client = makeClient(handlerFor({
+      captain_shortlists: { data: [{ player_id: "p1" }, { player_id: "p2" }], error: null },
+      draft_rooms: { data: [{ id: "room-1" }, { id: "room-2" }], error: null },
+      draft_picks: { data: [{ player_id: "p1" }, { player_id: "p2" }], error: null },
+    }));
+
+    await expect(getTopShortlistPick("room-1", "org-a", "season-1")).resolves.toBeNull();
+  });
+
+  it("skips entries rejected by the eligibility predicate (stale cross-division shortlists)", async () => {
+    client = makeClient(handlerFor({
+      captain_shortlists: { data: [{ player_id: "p1" }, { player_id: "p2" }], error: null },
+      draft_rooms: { data: [{ id: "room-1" }], error: null },
+      draft_picks: { data: [], error: null },
+    }));
+
+    await expect(
+      getTopShortlistPick("room-1", "org-a", "season-1", (playerId) => playerId !== "p1"),
+    ).resolves.toBe("p2");
+    await expect(
+      getTopShortlistPick("room-1", "org-a", "season-1", () => false),
+    ).resolves.toBeNull();
   });
 });
