@@ -94,4 +94,39 @@ describe("ScouterProfileSection", () => {
 
     expect(html).toContain("No scouter games recorded for Preseason 2");
   });
+
+  it("shows the selector when only a historical season has games", () => {
+    const html = renderToStaticMarkup(
+      ScouterProfileSection({
+        playerId: "player-1",
+        profile: {
+          selectedSeason: {
+            id: "preseason2",
+            name: "Preseason 2",
+            status: "pre-season",
+            startDate: "2026-07-01",
+          },
+          availableSeasons: [
+            {
+              id: "season1",
+              name: "Season 1",
+              status: "complete",
+              startDate: "2026-04-01",
+            },
+          ],
+          summary: {
+            gamesPlayed: 0,
+            wins: 0,
+            losses: 0,
+            averageKda: 0,
+            averageDamage: 0,
+          },
+          games: [],
+        },
+      }),
+    );
+
+    expect(html).toContain('name="season"');
+    expect(html).toContain('value="season1"');
+  });
 });

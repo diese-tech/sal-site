@@ -93,8 +93,7 @@ export async function getPlayerScouterProfile(
       .from("seasons")
       .select("id, name, status, start_date")
       .in("status", ["active", "pre-season"])
-      .order("start_date", { ascending: false })
-      .limit(1)
+      .eq("is_current", true)
       .maybeSingle(),
     client
       .from("scouter_game_participants")

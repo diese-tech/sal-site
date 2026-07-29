@@ -32,7 +32,9 @@ export function ScouterProfileSection({ playerId, profile }: Props) {
             </h2>
           </div>
 
-          {profile.availableSeasons.length > 1 && (
+          {(profile.availableSeasons.length > 1 ||
+            (!selectedSeasonIsAvailable &&
+              profile.availableSeasons.length > 0)) && (
             <form
               action={`/players/${encodeURIComponent(playerId)}`}
               method="get"

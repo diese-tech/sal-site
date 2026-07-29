@@ -89,6 +89,10 @@ function fakeClient(rows = participantRows) {
   const filters: Array<[string, unknown]> = [];
   const seasonBuilder = {
     select: () => seasonBuilder,
+    eq: (column: string, value: unknown) => (
+      filters.push([column, value]),
+      seasonBuilder
+    ),
     in: (column: string, values: string[]) => (
       filters.push([column, values]),
       seasonBuilder
@@ -143,7 +147,7 @@ describe("getPlayerScouterProfile", () => {
     expect(filters).toEqual(
       expect.arrayContaining([
         ["status", ["active", "pre-season"]],
-        ["start_date", { ascending: false }],
+        ["is_current", true],
         ["player_id", "player-1"],
       ]),
     );
