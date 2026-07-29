@@ -15,7 +15,9 @@ vi.mock("@/lib/captain-auth", () => ({ getCaptainSessionFromRequest: vi.fn(() =>
 vi.mock("@/lib/league-data", () => ({ writeAuditLog: vi.fn() }));
 
 import {
+  advancePickOnTimeout,
   buildDraftState,
+  finalizeDraftRosters,
   getDraftPicks,
   getTopShortlistPick,
   removePlayerFromAllShortlists,
@@ -83,5 +85,49 @@ describe("auto-pick conflict logging (#141)", () => {
 
     expect(writeAuditLog).not.toHaveBeenCalled();
     expect(removePlayerFromAllShortlists).not.toHaveBeenCalled();
+  });
+});
+
+describe("draft completion does not auto-publish rosters (#210)", () => {
+  // Same room at the final slot: pick 4 of 4, org-a on the clock.
+  const finalSlotState = {
+    room: {
+      status: "active",
+      pickStartedAt: new Date(Date.now() - 60_000).toISOString(),
+      pickTimerSeconds: 10,
+      baseOrder: ["org-a", "org-b"],
+      rounds: 2,
+      currentPickIndex: 3,
+    },
+  } as Awaited<ReturnType<typeof buildDraftState>>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(buildDraftState).mockResolvedValue(finalSlotState);
+    vi.mocked(getDraftPicks).mockResolvedValue([]);
+  });
+
+  it("a completing shortlist auto-pick does not call finalizeDraftRosters", async () => {
+    vi.mocked(getTopShortlistPick).mockResolvedValue("player-1");
+    vi.mocked(submitPickAtomic).mockResolvedValue({ ok: true, isComplete: true });
+
+    await GET(req(), ctx);
+
+    expect(finalizeDraftRosters).not.toHaveBeenCalled();
+    const actions = vi.mocked(writeAuditLog).mock.calls.map((c) => c[0]);
+    expect(actions).toContain("draft_auto_pick");
+    expect(actions).not.toContain("draft_finalized");
+  });
+
+  it("a completing auto-skip does not call finalizeDraftRosters", async () => {
+    vi.mocked(getTopShortlistPick).mockResolvedValue(null);
+    vi.mocked(advancePickOnTimeout).mockResolvedValue(true);
+
+    await GET(req(), ctx);
+
+    expect(finalizeDraftRosters).not.toHaveBeenCalled();
+    const actions = vi.mocked(writeAuditLog).mock.calls.map((c) => c[0]);
+    expect(actions).toContain("draft_auto_skip");
+    expect(actions).not.toContain("draft_finalized");
   });
 });

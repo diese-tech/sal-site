@@ -5,9 +5,10 @@ import { finalizeDraftRosters } from "@/lib/draft-data";
 import { writeAuditLog } from "@/lib/league-data";
 import { errorMessage } from "@/lib/error-monitor";
 
-// Manual roster propagation for a completed draft (#62). New drafts finalize
-// automatically when the last pick lands; this covers drafts completed before
-// auto-finalize existed or re-runs after manual roster corrections.
+// Sole roster-publication path for a completed draft (#210): the admin's
+// "End Draft & Publish Rosters" action (docs/draft-platform-guide.md). Draft
+// completion itself never publishes rosters — an admin triggers this endpoint,
+// which is idempotent and safe to re-run after manual roster corrections.
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isAdminRequest(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
