@@ -9,7 +9,10 @@ import type {
   TicketStatus,
   TicketTimelineEvent,
 } from "@/types/admin-ticket";
-import { TERMINAL_TICKET_STATUSES } from "@/types/admin-ticket";
+import {
+  CURRENT_TICKET_CATEGORIES,
+  TERMINAL_TICKET_STATUSES,
+} from "@/types/admin-ticket";
 
 type Tables = Database["public"]["Tables"];
 
@@ -205,6 +208,80 @@ function mapStatus(table: Record<string, TicketStatus>, raw: string): TicketStat
   return table[raw] ?? "open";
 }
 
+// ─── SLA policy ────────────────────────────────────────────────────────────────
+
+/**
+ * Response target in hours per category, measured from ticket creation. The
+ * deadline is derived at read time (createdAt + target), so targets are
+ * tunable here without schema work.
+ *
+ * Reasoning behind the defaults:
+ * - operation / match_report: match results block official standings (and the
+ *   schedules built on them), so they get the tightest 48h turnaround.
+ * - stat_review: extracted stats feed published player records; the same 48h
+ *   window keeps corrections landing while the match is still fresh.
+ * - registration: gates one player's onboarding but blocks no live standings,
+ *   so it gets a longer 72h window.
+ * Future categories (bug_report, ruling, scout_review) have no backend yet;
+ * they get entries here when their normalizers land.
+ */
+export const SLA_TARGET_HOURS: Record<
+  (typeof CURRENT_TICKET_CATEGORIES)[number],
+  number
+> = {
+  operation: 48,
+  stat_review: 48,
+  registration: 72,
+  match_report: 48,
+};
+
+const HOUR_MS = 3_600_000;
+
+/**
+ * Derive the SLA deadline for a normalized ticket. Terminal tickets carry no
+ * active SLA — resolved work must never be retroactively flagged as overdue —
+ * and unparseable creation times yield no deadline rather than a bogus one.
+ */
+function slaDeadlineFor(
+  category: (typeof CURRENT_TICKET_CATEGORIES)[number],
+  createdAt: string,
+  status: TicketStatus,
+): string | undefined {
+  if (isTerminalStatus(status)) return undefined;
+  const created = Date.parse(createdAt);
+  if (Number.isNaN(created)) return undefined;
+  return new Date(created + SLA_TARGET_HOURS[category] * HOUR_MS).toISOString();
+}
+
+/**
+ * A ticket is at risk once its remaining time drops inside this window
+ * (25% of the tightest 48h target). One fixed window keeps the rule simple
+ * and predictable across categories instead of scaling per target.
+ */
+export const SLA_AT_RISK_WINDOW_HOURS = 12;
+
+export type SlaState = "ok" | "at_risk" | "overdue";
+
+/**
+ * Pure SLA classification of a deadline against `now`.
+ * - null when there is no deadline (or it does not parse): nothing to show.
+ * - "overdue" once the deadline is reached (remaining <= 0).
+ * - "at_risk" when at most SLA_AT_RISK_WINDOW_HOURS remain.
+ * - "ok" otherwise.
+ */
+export function classifySla(
+  deadline: string | undefined,
+  now: number | Date,
+): SlaState | null {
+  if (!deadline) return null;
+  const deadlineMs = Date.parse(deadline);
+  if (Number.isNaN(deadlineMs)) return null;
+  const remaining = deadlineMs - (typeof now === "number" ? now : now.getTime());
+  if (remaining <= 0) return "overdue";
+  if (remaining <= SLA_AT_RISK_WINDOW_HOURS * HOUR_MS) return "at_risk";
+  return "ok";
+}
+
 // ─── Normalizers ───────────────────────────────────────────────────────────────
 
 export function normalizePendingAction(row: PendingActionSourceRow): AdminTicket {
@@ -225,6 +302,7 @@ export function normalizePendingAction(row: PendingActionSourceRow): AdminTicket
     priority: row.type === "match_result" ? "high" : "normal",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    slaDeadline: slaDeadlineFor("operation", row.created_at, status),
     divisionId: row.division_id ?? undefined,
     matchId: row.match_id ?? undefined,
     title: `${typeLabel} request`,
@@ -262,6 +340,7 @@ export function normalizePendingStatRecord(row: PendingStatRecordSourceRow): Adm
     priority: row.confidence < 0.5 ? "high" : "normal",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    slaDeadline: slaDeadlineFor("stat_review", row.created_at, status),
     matchId: row.match_id,
     title: matchRef ? `Stat review for match ${matchRef}` : "Stat review",
     summary: `Extracted stats (${humanizeToken(row.source).toLowerCase()} source, ${confidencePct}% confidence) awaiting Discord review.`,
@@ -304,6 +383,7 @@ export function normalizeRegistration(row: RegistrationSourceRow): AdminTicket {
     priority: "normal",
     createdAt: row.created_at,
     updatedAt,
+    slaDeadline: slaDeadlineFor("registration", row.created_at, status),
     seasonId: row.season_id ?? undefined,
     registrationIgn,
     title: `Registration: ${name}`,
@@ -344,6 +424,7 @@ export function normalizeMatchReport(row: MatchReportSourceRow): AdminTicket {
     priority: row.status === "review" ? "high" : "normal",
     createdAt: row.created_at,
     updatedAt,
+    slaDeadline: slaDeadlineFor("match_report", row.created_at, status),
     seasonId: row.season_id,
     divisionId: row.division_id,
     matchId: row.match_id,
