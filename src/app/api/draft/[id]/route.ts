@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   advancePickOnTimeout,
   buildDraftState,
-  getDraftPicks,
+  getSeasonDraftedPlayerIds,
   getShortlist,
   getTopShortlistPick,
   removePlayerFromAllShortlists,
@@ -31,11 +31,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
       // Try auto-pick from shortlist before skipping
       if (currentOrgId) {
-        const topPick = await getTopShortlistPick(id, currentOrgId);
+        const topPick = await getTopShortlistPick(id, currentOrgId, state.room.seasonId);
         if (topPick) {
-          // Verify not already picked (race condition guard)
-          const existingPicks = await getDraftPicks(id);
-          if (!existingPicks.some((p) => p.playerId === topPick)) {
+          // Verify not already picked anywhere this season (race condition guard)
+          const draftedIds = await getSeasonDraftedPlayerIds(state.room.seasonId);
+          if (!draftedIds.has(topPick)) {
             const pickNumber = state.room.currentPickIndex + 1;
             // Atomic insert + index advance; if a concurrent request already
             // advanced the draft, just return fresh state without picking.

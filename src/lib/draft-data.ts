@@ -93,6 +93,25 @@ export async function getDraftPicks(draftRoomId: string): Promise<DraftPick[]> {
   return (data as DbDraftPick[]).map(fromDbPick);
 }
 
+/** Player IDs drafted in ANY room of the season — a player may only be drafted once per season. */
+export async function getSeasonDraftedPlayerIds(seasonId: string): Promise<Set<string>> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return new Set();
+  const { data: rooms, error: roomsError } = await supabase
+    .from("draft_rooms")
+    .select("id")
+    .eq("season_id", seasonId);
+  if (roomsError) { console.error("getSeasonDraftedPlayerIds:", roomsError.message); return new Set(); }
+  const roomIds = (rooms ?? []).map((r: { id: string }) => r.id);
+  if (roomIds.length === 0) return new Set();
+  const { data: picks, error: picksError } = await supabase
+    .from("draft_picks")
+    .select("player_id")
+    .in("draft_room_id", roomIds);
+  if (picksError) { console.error("getSeasonDraftedPlayerIds:", picksError.message); return new Set(); }
+  return new Set((picks ?? []).map((p: { player_id: string }) => p.player_id));
+}
+
 export async function buildDraftState(draftRoomId: string): Promise<DraftState | null> {
   const [room, picks] = await Promise.all([getDraftRoom(draftRoomId), getDraftPicks(draftRoomId)]);
   if (!room) return null;
@@ -374,7 +393,7 @@ export async function removePlayerFromAllShortlists(draftRoomId: string, playerI
     .eq("player_id", playerId);
 }
 
-export async function getTopShortlistPick(draftRoomId: string, orgId: string): Promise<string | null> {
+export async function getTopShortlistPick(draftRoomId: string, orgId: string, seasonId: string): Promise<string | null> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
   // Get shortlist ordered by position
@@ -385,12 +404,8 @@ export async function getTopShortlistPick(draftRoomId: string, orgId: string): P
     .eq("org_id", orgId)
     .order("position", { ascending: true });
   if (!shortlist || shortlist.length === 0) return null;
-  // Get already-drafted player IDs
-  const { data: picks } = await supabase
-    .from("draft_picks")
-    .select("player_id")
-    .eq("draft_room_id", draftRoomId);
-  const draftedIds = new Set((picks ?? []).map((p: { player_id: string }) => p.player_id));
+  // Exclude players drafted anywhere this season, not just in this room
+  const draftedIds = await getSeasonDraftedPlayerIds(seasonId);
   // Return first shortlisted player not yet drafted
   for (const entry of shortlist as Array<{ player_id: string }>) {
     if (!draftedIds.has(entry.player_id)) return entry.player_id;
