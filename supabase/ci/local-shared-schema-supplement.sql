@@ -66,6 +66,15 @@ create table if not exists pending_actions (
 -- schema.sql already created.
 alter table gods enable row level security;
 
+-- god_draft_sessions is created by schema.sql/010 without RLS, and neither of the
+-- migrations replayed here ever enables it -- 011 only adds a SELECT policy, which is
+-- inert while RLS is off. Production has RLS enabled (confirmed against
+-- diese-tech/sal-database's canonical baseline migration) plus a broad GRANT to anon;
+-- RLS is the only thing stopping anon from writing. Without this, api.auto_expose_new_tables
+-- would let the local anon role mutate draft sessions in a way production never allows,
+-- so this required gate would pass against a materially weaker security model.
+alter table god_draft_sessions enable row level security;
+
 -- 010_god_draft_realtime.sql and 011_god_draft_schema_complete.sql both do
 -- `ALTER PUBLICATION supabase_realtime ADD TABLE ...`, guarded only against the table
 -- already being a publication member (duplicate_object). On the live/hosted project this
