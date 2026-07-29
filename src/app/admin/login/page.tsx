@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { timingSafeEqual } from "crypto";
 import { adminCookie } from "@/lib/admin-auth";
+import { safeAdminReturnPath } from "@/lib/auth-redirect";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Admin Login — SAL" };
@@ -21,9 +22,14 @@ async function loginWithPassword(formData: FormData) {
   "use server";
   const password = formData.get("password");
   const adminPassword = process.env.ADMIN_PASSWORD;
+  // Deep-link return path (e.g. /admin/tickets?ticket=...); re-validated here
+  // because the hidden form field is client-controlled.
+  const rawNext = formData.get("next");
+  const nextPath = safeAdminReturnPath(typeof rawNext === "string" ? rawNext : null);
+  const failure = `/admin/login?error=invalid_password${nextPath ? `&next=${encodeURIComponent(nextPath)}` : ""}`;
 
   if (!adminPassword || !password || typeof password !== "string") {
-    redirect("/admin/login?error=invalid_password");
+    redirect(failure);
   }
 
   const expectedBuf = Buffer.from(adminPassword, "utf8");
@@ -32,12 +38,12 @@ async function loginWithPassword(formData: FormData) {
     expectedBuf.length === actualBuf.length && timingSafeEqual(expectedBuf, actualBuf);
 
   if (!valid) {
-    redirect("/admin/login?error=invalid_password");
+    redirect(failure);
   }
 
   const cookie = adminCookie("password-admin", "super_admin");
   (await cookies()).set(cookie.name, cookie.value, cookie.options);
-  redirect("/admin");
+  redirect(nextPath ?? "/admin");
 }
 
 export default async function AdminLoginPage({
@@ -46,6 +52,7 @@ export default async function AdminLoginPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
+  const nextPath = safeAdminReturnPath(typeof sp.next === "string" ? sp.next : null);
   const errorKey = typeof sp.error === "string" ? sp.error : null;
   const errorMessage = errorKey ? (ERROR_MESSAGES[errorKey] ?? "Authentication failed. Please try again.") : null;
   const oauthConfigured = Boolean(process.env.DISCORD_ADMIN_CLIENT_ID);
@@ -81,7 +88,7 @@ export default async function AdminLoginPage({
 
           {oauthConfigured ? (
             <a
-              href="/api/admin/discord/authorize"
+              href={`/api/admin/discord/authorize${nextPath ? `?next=${encodeURIComponent(nextPath)}` : ""}`}
               className="flex w-full items-center justify-center gap-3 rounded-xl border border-indigo-400/40 bg-indigo-400/15 px-4 py-3 text-sm font-black uppercase text-indigo-100 transition hover:bg-indigo-400/25 active:translate-y-0.5 active:scale-[0.98]"
             >
               <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -91,6 +98,7 @@ export default async function AdminLoginPage({
             </a>
           ) : passwordConfigured ? (
             <form action={loginWithPassword} className="space-y-4">
+              {nextPath && <input type="hidden" name="next" value={nextPath} />}
               <div className="space-y-1.5">
                 <label htmlFor="password" className="block text-xs font-black uppercase text-slate-400">
                   Password

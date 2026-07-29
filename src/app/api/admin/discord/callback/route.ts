@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { adminCookie } from "@/lib/admin-auth";
+import { safeAdminReturnPath } from "@/lib/auth-redirect";
 import { checkRateLimit, clearRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { reportError } from "@/lib/error-monitor";
@@ -26,17 +27,30 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const state = searchParams.get("state");
   const storedState = request.cookies.get("discord_admin_state")?.value;
+  // Deep-link return path set by the authorize route; re-validated because a
+  // cookie value is client-controlled.
+  const next = safeAdminReturnPath(request.cookies.get("discord_admin_next")?.value);
 
-  // Always clear the state cookie
+  // Always clear the state and return-path cookies
   const clearStateCookie = (response: NextResponse) => {
-    response.cookies.set("discord_admin_state", "", {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      maxAge: 0,
-      path: "/",
-    });
+    for (const name of ["discord_admin_state", "discord_admin_next"]) {
+      response.cookies.set(name, "", {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 0,
+        path: "/",
+      });
+    }
     return response;
+  };
+
+  // Error redirects keep ?next= so a retry from the login page still returns
+  // to the original deep link after a successful sign-in.
+  const loginErrorUrl = (error: string) => {
+    const params = new URLSearchParams({ error });
+    if (next) params.set("next", next);
+    return new URL(`/admin/login?${params}`, siteUrl());
   };
 
   // Verify state using timing-safe comparison to prevent timing oracle attacks
@@ -46,12 +60,12 @@ export async function GET(request: NextRequest) {
     state.length === storedState.length &&
     timingSafeEqual(Buffer.from(state), Buffer.from(storedState));
   if (!stateMatch) {
-    const response = NextResponse.redirect(new URL("/admin/login?error=invalid_state", siteUrl()));
+    const response = NextResponse.redirect(loginErrorUrl("invalid_state"));
     return clearStateCookie(response);
   }
 
   if (!code) {
-    const response = NextResponse.redirect(new URL("/admin/login?error=invalid_state", siteUrl()));
+    const response = NextResponse.redirect(loginErrorUrl("invalid_state"));
     return clearStateCookie(response);
   }
 
@@ -60,7 +74,7 @@ export async function GET(request: NextRequest) {
   const redirectUri = process.env.DISCORD_ADMIN_REDIRECT_URI;
 
   if (!clientId || !clientSecret || !redirectUri) {
-    const response = NextResponse.redirect(new URL("/admin/login?error=config", siteUrl()));
+    const response = NextResponse.redirect(loginErrorUrl("config"));
     return clearStateCookie(response);
   }
 
@@ -85,7 +99,7 @@ export async function GET(request: NextRequest) {
     tokenData = (await tokenRes.json()) as DiscordTokenResponse;
   } catch (err) {
     reportError("admin discord login: token exchange failed", err);
-    const response = NextResponse.redirect(new URL("/admin/login?error=token_exchange", siteUrl()));
+    const response = NextResponse.redirect(loginErrorUrl("token_exchange"));
     return clearStateCookie(response);
   }
 
@@ -99,14 +113,14 @@ export async function GET(request: NextRequest) {
     discordUser = (await userRes.json()) as DiscordUser;
   } catch (err) {
     reportError("admin discord login: user fetch failed", err);
-    const response = NextResponse.redirect(new URL("/admin/login?error=user_fetch", siteUrl()));
+    const response = NextResponse.redirect(loginErrorUrl("user_fetch"));
     return clearStateCookie(response);
   }
 
   // Look up in admin_users table
   const supabase = getSupabaseServerClient();
   if (!supabase) {
-    const response = NextResponse.redirect(new URL("/admin/login?error=config", siteUrl()));
+    const response = NextResponse.redirect(loginErrorUrl("config"));
     return clearStateCookie(response);
   }
 
@@ -121,23 +135,24 @@ export async function GET(request: NextRequest) {
       discordId: discordUser.id,
       username: discordUser.username,
     });
-    const response = NextResponse.redirect(new URL("/admin/login?error=no_access", siteUrl()));
+    const response = NextResponse.redirect(loginErrorUrl("no_access"));
     return clearStateCookie(response);
   }
 
   const role = data.role as "super_admin" | "admin";
 
-  // Set admin session cookie and redirect to admin
+  // Set admin session cookie and redirect back to the deep link if one was
+  // preserved, otherwise the admin home
   try {
     const cookie = adminCookie(discordUser.id, role);
-    const response = NextResponse.redirect(new URL("/admin", siteUrl()));
+    const response = NextResponse.redirect(new URL(next ?? "/admin", siteUrl()));
     clearRateLimit(`admin-discord-callback:${ip}`);
     response.cookies.set(cookie.name, cookie.value, cookie.options);
     return clearStateCookie(response);
   } catch (err) {
     // e.g. ADMIN_SESSION_SECRET missing — previously surfaced as a bare 500
     reportError("admin discord login: session cookie creation failed", err, { discordId: discordUser.id });
-    const response = NextResponse.redirect(new URL("/admin/login?error=config", siteUrl()));
+    const response = NextResponse.redirect(loginErrorUrl("config"));
     return clearStateCookie(response);
   }
 }

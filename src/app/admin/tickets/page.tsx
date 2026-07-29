@@ -7,8 +7,19 @@ import { AdminTicketsClient } from "@/components/admin/AdminTicketsClient";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Tickets - SAL Admin" };
 
-export default async function AdminTicketsPage() {
-  const session = await requireAdmin();
+export default async function AdminTicketsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // Rebuild the incoming query so an unauthenticated deep link
+  // (?ticket=...&status=...) survives the login redirect round-trip.
+  const sp = await searchParams;
+  const query = new URLSearchParams(
+    Object.entries(sp).flatMap(([key, value]) => (typeof value === "string" ? [[key, value]] : [])),
+  );
+  const queryString = query.toString();
+  const session = await requireAdmin(`/admin/tickets${queryString ? `?${queryString}` : ""}`);
   const queue = await getAdminTicketQueue();
   const capabilities = capabilitiesForAdminRole(session.role);
   return (
