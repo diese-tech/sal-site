@@ -1503,6 +1503,191 @@ export type Database = {
           },
         ]
       }
+      scouter_game_participants: {
+        Row: {
+          ally_healing: number | null
+          assists: number
+          created_at: string
+          damage_mitigated: number | null
+          damage_taken: number | null
+          deaths: number
+          god_id: string | null
+          gpm: number | null
+          id: string
+          jungle_damage: number | null
+          kills: number
+          minion_damage: number | null
+          player_damage: number | null
+          player_id: string | null
+          player_level: number | null
+          raw_ign: string
+          role: string | null
+          scouter_game_id: string
+          self_healing: number | null
+          side: string
+          structure_damage: number | null
+          updated_at: string
+          updated_by_discord_id: string | null
+          wards_placed: number | null
+        }
+        Insert: {
+          ally_healing?: number | null
+          assists?: number
+          created_at?: string
+          damage_mitigated?: number | null
+          damage_taken?: number | null
+          deaths?: number
+          god_id?: string | null
+          gpm?: number | null
+          id?: string
+          jungle_damage?: number | null
+          kills?: number
+          minion_damage?: number | null
+          player_damage?: number | null
+          player_id?: string | null
+          player_level?: number | null
+          raw_ign: string
+          role?: string | null
+          scouter_game_id: string
+          self_healing?: number | null
+          side: string
+          structure_damage?: number | null
+          updated_at?: string
+          updated_by_discord_id?: string | null
+          wards_placed?: number | null
+        }
+        Update: {
+          ally_healing?: number | null
+          assists?: number
+          created_at?: string
+          damage_mitigated?: number | null
+          damage_taken?: number | null
+          deaths?: number
+          god_id?: string | null
+          gpm?: number | null
+          id?: string
+          jungle_damage?: number | null
+          kills?: number
+          minion_damage?: number | null
+          player_damage?: number | null
+          player_id?: string | null
+          player_level?: number | null
+          raw_ign?: string
+          role?: string | null
+          scouter_game_id?: string
+          self_healing?: number | null
+          side?: string
+          structure_damage?: number | null
+          updated_at?: string
+          updated_by_discord_id?: string | null
+          wards_placed?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scouter_game_participants_god_id_fkey"
+            columns: ["god_id"]
+            isOneToOne: false
+            referencedRelation: "gods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scouter_game_participants_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scouter_game_participants_scouter_game_id_fkey"
+            columns: ["scouter_game_id"]
+            isOneToOne: false
+            referencedRelation: "scouter_games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scouter_games: {
+        Row: {
+          created_at: string
+          details_image_path: string
+          game_mode: string | null
+          game_ordinal: number
+          id: string
+          match_length_seconds: number | null
+          scoreboard_image_path: string
+          scouter_match_id: string
+          smite_match_id: string | null
+          winning_side: string | null
+        }
+        Insert: {
+          created_at?: string
+          details_image_path: string
+          game_mode?: string | null
+          game_ordinal: number
+          id?: string
+          match_length_seconds?: number | null
+          scoreboard_image_path: string
+          scouter_match_id: string
+          smite_match_id?: string | null
+          winning_side?: string | null
+        }
+        Update: {
+          created_at?: string
+          details_image_path?: string
+          game_mode?: string | null
+          game_ordinal?: number
+          id?: string
+          match_length_seconds?: number | null
+          scoreboard_image_path?: string
+          scouter_match_id?: string
+          smite_match_id?: string | null
+          winning_side?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scouter_games_scouter_match_id_fkey"
+            columns: ["scouter_match_id"]
+            isOneToOne: false
+            referencedRelation: "scouter_matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scouter_matches: {
+        Row: {
+          created_at: string
+          hosted_at: string
+          hosted_by_discord_id: string
+          id: string
+          notes: string | null
+          season_id: string
+        }
+        Insert: {
+          created_at?: string
+          hosted_at?: string
+          hosted_by_discord_id: string
+          id?: string
+          notes?: string | null
+          season_id: string
+        }
+        Update: {
+          created_at?: string
+          hosted_at?: string
+          hosted_by_discord_id?: string
+          id?: string
+          notes?: string | null
+          season_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scouter_matches_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       season_orgs: {
         Row: {
           created_at: string
@@ -1778,6 +1963,22 @@ export type Database = {
           p_outbox_id: string
           p_retry_after_seconds?: number
           p_worker_id: string
+        }
+        Returns: Json
+      }
+      ingest_scouter_game: {
+        Args: {
+          p_details_image_path: string
+          p_game_mode?: string
+          p_game_ordinal: number
+          p_hosted_by_discord_id: string
+          p_match_length_seconds?: number
+          p_participants: Json
+          p_scoreboard_image_path: string
+          p_scouter_match_id?: string
+          p_season_id: string
+          p_smite_match_id?: string
+          p_winning_side: string
         }
         Returns: Json
       }
