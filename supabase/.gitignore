@@ -1,0 +1,14 @@
+# Supabase
+.branches
+.temp
+
+# Generated at CI/local-verification time only from supabase/schema.sql +
+# supabase/ci/local-shared-schema-supplement.sql (see .github/workflows/ci.yml,
+# integration-tests job). Never commit this -- it is not part of the canonical
+# migration sequence, see supabase/migrations/README.md.
+migrations/00000000000000_ci_local_shared_schema_bootstrap.sql
+
+# dotenvx
+.env.keys
+.env.local
+.env.*.local
