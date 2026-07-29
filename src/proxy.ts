@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { adminLoginPath } from "@/lib/auth-redirect";
 
 function decodeBase64Url(value: string): string {
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -69,7 +70,11 @@ export async function proxy(request: NextRequest) {
       if (protectsAdminApi) {
         return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
       }
-      return NextResponse.redirect(new URL("/admin/login", request.url));
+      // Preserve the full path + query (e.g. /admin/tickets?ticket=...) so a
+      // deep link survives the login round-trip.
+      return NextResponse.redirect(
+        new URL(adminLoginPath(request.nextUrl.pathname + request.nextUrl.search), request.url),
+      );
     }
   }
 

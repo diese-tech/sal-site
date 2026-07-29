@@ -3,6 +3,7 @@ import type { AdminTicket } from "@/types/admin-ticket";
 import { DEFAULT_TICKET_FILTERS } from "@/types/admin-ticket";
 import {
   applyTicketFilters,
+  classifySla,
   getTicketCounts,
   normalizeMatchReport,
   normalizePendingAction,
@@ -10,6 +11,8 @@ import {
   normalizeRegistration,
   normalizeTicketSources,
   searchMatches,
+  SLA_AT_RISK_WINDOW_HOURS,
+  SLA_TARGET_HOURS,
   sortTickets,
   type MatchReportSourceRow,
   type PendingActionSourceRow,
@@ -309,14 +312,88 @@ describe("normalizeTicketSources", () => {
   });
 });
 
+describe("SLA deadline derivation", () => {
+  it("sets createdAt plus the per-category target for unresolved tickets", () => {
+    // Fixture creation times are 10:00Z, so the derived deadlines land on
+    // created day + target: 48h for operation/stat_review/match_report, 72h
+    // for registration.
+    expect(SLA_TARGET_HOURS).toEqual({
+      operation: 48,
+      stat_review: 48,
+      registration: 72,
+      match_report: 48,
+    });
+    expect(normalizePendingAction(pendingActionRow()).slaDeadline).toBe("2026-07-03T10:00:00.000Z");
+    expect(normalizePendingStatRecord(statRecordRow()).slaDeadline).toBe("2026-07-04T10:00:00.000Z");
+    expect(normalizeRegistration(registrationRow()).slaDeadline).toBe("2026-07-06T10:00:00.000Z");
+    expect(normalizeMatchReport(matchReportRow()).slaDeadline).toBe("2026-07-06T10:00:00.000Z");
+  });
+
+  it("gives terminal tickets no deadline so resolved work is never retroactively overdue", () => {
+    expect(normalizePendingAction(pendingActionRow({ status: "approved" })).slaDeadline).toBeUndefined();
+    expect(normalizePendingStatRecord(statRecordRow({ status: "rejected" })).slaDeadline).toBeUndefined();
+    expect(normalizeRegistration(registrationRow({ status: "approved" })).slaDeadline).toBeUndefined();
+    expect(normalizeMatchReport(matchReportRow({ status: "done" })).slaDeadline).toBeUndefined();
+  });
+
+  it("keeps deadlines on unresolved intermediate statuses", () => {
+    expect(
+      normalizePendingAction(pendingActionRow({ status: "pending_info" })).slaDeadline,
+    ).toBe("2026-07-03T10:00:00.000Z");
+    expect(
+      normalizeMatchReport(matchReportRow({ status: "extracting" })).slaDeadline,
+    ).toBe("2026-07-06T10:00:00.000Z");
+  });
+
+  it("derives no deadline from an unparseable creation time", () => {
+    expect(
+      normalizeRegistration(registrationRow({ created_at: "not-a-date" })).slaDeadline,
+    ).toBeUndefined();
+  });
+});
+
+describe("classifySla", () => {
+  const deadline = "2026-07-10T00:00:00.000Z";
+  const deadlineMs = Date.parse(deadline);
+  const windowMs = SLA_AT_RISK_WINDOW_HOURS * 3_600_000;
+
+  it("returns null when there is no deadline to classify", () => {
+    expect(classifySla(undefined, deadlineMs)).toBeNull();
+    expect(classifySla("", deadlineMs)).toBeNull();
+    expect(classifySla("not-a-date", deadlineMs)).toBeNull();
+  });
+
+  it("is ok while more than the at-risk window remains", () => {
+    expect(classifySla(deadline, deadlineMs - windowMs - 1)).toBe("ok");
+    expect(classifySla(deadline, Date.parse("2026-07-01T00:00:00Z"))).toBe("ok");
+  });
+
+  it("is at risk from exactly the window boundary until the deadline", () => {
+    expect(classifySla(deadline, deadlineMs - windowMs)).toBe("at_risk");
+    expect(classifySla(deadline, deadlineMs - 1)).toBe("at_risk");
+  });
+
+  it("is overdue from the deadline onward", () => {
+    expect(classifySla(deadline, deadlineMs)).toBe("overdue");
+    expect(classifySla(deadline, deadlineMs + 3_600_000)).toBe("overdue");
+  });
+
+  it("accepts a Date for now", () => {
+    expect(classifySla(deadline, new Date(deadlineMs + 1))).toBe("overdue");
+    expect(classifySla(deadline, new Date(deadlineMs - windowMs - 1))).toBe("ok");
+  });
+});
+
 describe("sortTickets", () => {
   it("puts urgent and SLA-bound work first, then oldest unresolved, then terminal", () => {
-    const urgent = ticket({ id: "a:urgent", priority: "urgent", createdAt: "2026-07-10T00:00:00Z" });
+    // slaDeadline is pinned per fixture: the normalizer-provided base ticket
+    // now always carries one, and this test exercises the mixed queue shape.
+    const urgent = ticket({ id: "a:urgent", priority: "urgent", slaDeadline: undefined, createdAt: "2026-07-10T00:00:00Z" });
     const slaSoon = ticket({ id: "a:sla-soon", slaDeadline: "2026-07-11T00:00:00Z", createdAt: "2026-07-10T00:00:00Z" });
     const slaLater = ticket({ id: "a:sla-later", slaDeadline: "2026-07-20T00:00:00Z", createdAt: "2026-07-01T00:00:00Z" });
-    const oldOpen = ticket({ id: "a:old-open", createdAt: "2026-06-01T00:00:00Z" });
-    const newOpen = ticket({ id: "a:new-open", createdAt: "2026-07-09T00:00:00Z" });
-    const resolved = ticket({ id: "a:resolved", status: "resolved", updatedAt: "2026-07-08T00:00:00Z" });
+    const oldOpen = ticket({ id: "a:old-open", slaDeadline: undefined, createdAt: "2026-06-01T00:00:00Z" });
+    const newOpen = ticket({ id: "a:new-open", slaDeadline: undefined, createdAt: "2026-07-09T00:00:00Z" });
+    const resolved = ticket({ id: "a:resolved", status: "resolved", slaDeadline: undefined, updatedAt: "2026-07-08T00:00:00Z" });
 
     const sorted = sortTickets([resolved, newOpen, slaLater, oldOpen, urgent, slaSoon]);
     expect(sorted.map((t) => t.id)).toEqual([
@@ -341,6 +418,58 @@ describe("sortTickets", () => {
     const a = ticket({ id: "a:tie", ...same });
     expect(sortTickets([b, a]).map((t) => t.id)).toEqual(["a:tie", "b:tie"]);
     expect(sortTickets([a, b]).map((t) => t.id)).toEqual(["a:tie", "b:tie"]);
+  });
+
+  it("orders populated deadlines earliest first, ahead of priority and age", () => {
+    const laterButHigh = ticket({
+      id: "a:later-high",
+      priority: "high",
+      slaDeadline: "2026-07-12T00:00:00Z",
+      createdAt: "2026-06-01T00:00:00Z",
+    });
+    const soonerButNormal = ticket({
+      id: "a:sooner-normal",
+      priority: "normal",
+      slaDeadline: "2026-07-11T00:00:00Z",
+      createdAt: "2026-07-09T00:00:00Z",
+    });
+    expect(sortTickets([laterButHigh, soonerButNormal]).map((t) => t.id)).toEqual([
+      "a:sooner-normal",
+      "a:later-high",
+    ]);
+  });
+
+  it("breaks equal-deadline ties by priority, then id, deterministically", () => {
+    const shared = { slaDeadline: "2026-07-11T00:00:00Z", createdAt: "2026-07-01T00:00:00Z" };
+    const normalB = ticket({ id: "b:eq", priority: "normal", ...shared });
+    const normalA = ticket({ id: "a:eq", priority: "normal", ...shared });
+    const high = ticket({ id: "z:eq-high", priority: "high", ...shared });
+    expect(sortTickets([normalB, high, normalA]).map((t) => t.id)).toEqual([
+      "z:eq-high",
+      "a:eq",
+      "b:eq",
+    ]);
+    expect(sortTickets([normalA, normalB, high]).map((t) => t.id)).toEqual([
+      "z:eq-high",
+      "a:eq",
+      "b:eq",
+    ]);
+  });
+
+  it("sorts normalizer-fed tickets by derived deadline across categories", () => {
+    // Registration created 2026-07-01 (72h target) is due 2026-07-04; the
+    // high-priority match report created 2026-07-03 (48h target) is due
+    // 2026-07-05, so the registration leads despite the lower priority.
+    const registration = normalizeRegistration(
+      registrationRow({ created_at: "2026-07-01T00:00:00Z" }),
+    );
+    const report = normalizeMatchReport(matchReportRow({ created_at: "2026-07-03T00:00:00Z" }));
+    expect(registration.slaDeadline).toBe("2026-07-04T00:00:00.000Z");
+    expect(report.slaDeadline).toBe("2026-07-05T00:00:00.000Z");
+    expect(sortTickets([report, registration]).map((t) => t.category)).toEqual([
+      "registration",
+      "match_report",
+    ]);
   });
 });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { checkRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
+import { safeAdminReturnPath } from "@/lib/auth-redirect";
 
 export async function GET(request: NextRequest) {
   const ip = getRateLimitIdentifier(request);
@@ -33,6 +34,18 @@ export async function GET(request: NextRequest) {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     maxAge: 300,
+    path: "/",
+  });
+  // Deep-link return path (validated /admin path, e.g. /admin/tickets?ticket=...)
+  // carried through the OAuth round-trip in a short-lived cookie so `state`
+  // stays a pure CSRF nonce. Always set so a stale value from an earlier
+  // attempt cannot leak into this one.
+  const next = safeAdminReturnPath(request.nextUrl.searchParams.get("next"));
+  response.cookies.set("discord_admin_next", next ?? "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: next ? 300 : 0,
     path: "/",
   });
   return response;

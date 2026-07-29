@@ -3,11 +3,29 @@ import { capabilitiesForAdminRole } from "@/types/admin-ticket";
 
 describe("capabilitiesForAdminRole", () => {
   it.each(["admin", "super_admin"] as const)(
-    "temporarily allows the current %s role to act on Wave 1 tickets",
+    "lets the %s role view the queue and act on Wave 1 tickets, matching the admin-session check on the action endpoints",
     (role) => {
       expect(capabilitiesForAdminRole(role)).toEqual({
         canViewQueue: true,
         canActOnTickets: true,
+        canViewRestrictedIdentities: false,
+      });
+    },
+  );
+
+  it.each(["admin", "super_admin"] as const)(
+    "keeps restricted identities hidden from %s until an audited reveal path exists",
+    (role) => {
+      expect(capabilitiesForAdminRole(role).canViewRestrictedIdentities).toBe(false);
+    },
+  );
+
+  it.each(["owner", "moderator", "division_commissioner", "", null, undefined] as const)(
+    "denies everything for unrecognized role %j",
+    (role) => {
+      expect(capabilitiesForAdminRole(role)).toEqual({
+        canViewQueue: false,
+        canActOnTickets: false,
         canViewRestrictedIdentities: false,
       });
     },

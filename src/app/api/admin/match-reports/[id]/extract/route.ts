@@ -5,12 +5,9 @@ import { toDatabaseJson } from "@/lib/database-json";
 import { getAdminLeagueData, LeagueDataUnavailableError } from "@/lib/league-data";
 import type { ExtractedGame } from "@/types/match-report";
 import { errorMessage } from "@/lib/error-monitor";
+import { callOpenRouterVision } from "@/lib/openrouter-vision";
 
 const SMITE_ROLES = ["Solo", "Jungle", "Mid", "Carry", "Support"] as const;
-
-// Best-value vision model on OpenRouter for scoreboard OCR.
-// Override via OPENROUTER_MODEL env var if needed.
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL ?? "google/gemini-2.0-flash-001";
 
 const EXTRACTION_PROMPT = (
   homeOrgName: string,
@@ -53,44 +50,6 @@ Instructions:
 - Look for VICTORY/DEFEAT text or trophy icons to determine winner
 - Include all 10 players (5 per side) if visible
 `.trim();
-
-interface OpenRouterMessage {
-  role: "user" | "assistant";
-  content: Array<
-    | { type: "text"; text: string }
-    | { type: "image_url"; image_url: { url: string } }
-  >;
-}
-
-async function callOpenRouter(messages: OpenRouterMessage[]): Promise<string> {
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://sal.gg",
-      "X-Title": "SAL Match Report",
-    },
-    body: JSON.stringify({
-      model: OPENROUTER_MODEL,
-      max_tokens: 2048,
-      messages,
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text().catch(() => res.statusText);
-    throw new Error(`OpenRouter error ${res.status}: ${err}`);
-  }
-
-  const data = await res.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
-    error?: { message?: string };
-  };
-
-  if (data.error) throw new Error(data.error.message ?? "OpenRouter API error");
-  return data.choices?.[0]?.message?.content ?? "";
-}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isAdminRequest(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -150,7 +109,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
 
       try {
-        const text = await callOpenRouter([
+        const text = await callOpenRouterVision([
           {
             role: "user",
             content: [
@@ -166,7 +125,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               },
             ],
           },
-        ]);
+        ], { maxTokens: 2048, title: "SAL Match Report" });
 
         // Strip markdown code fences if present
         const jsonText = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();

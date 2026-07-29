@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { NextRequest } from "next/server";
+import { adminLoginPath } from "@/lib/auth-redirect";
 
 const COOKIE_NAME = "sal_admin_session";
 const MAX_AGE_SECONDS = 60 * 60 * 8;
@@ -61,9 +62,15 @@ export async function isAdminSession(): Promise<boolean> {
   return (await getAdminSession()) !== null;
 }
 
-export async function requireAdmin(): Promise<AdminSessionPayload> {
+/**
+ * @param returnTo Optional same-site /admin path (with query) to come back to
+ *   after login, so deep links survive the redirect. The proxy already
+ *   preserves this for page loads; pages that receive deep-link query params
+ *   (e.g. /admin/tickets?ticket=...) pass it here as defense in depth.
+ */
+export async function requireAdmin(returnTo?: string): Promise<AdminSessionPayload> {
   const session = await getAdminSession();
-  if (!session) redirect("/admin/login");
+  if (!session) redirect(adminLoginPath(returnTo));
   return session;
 }
 

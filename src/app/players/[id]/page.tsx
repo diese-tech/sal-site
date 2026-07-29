@@ -3,7 +3,9 @@ import Link from "next/link";
 import type { DivisionId, PlayerRole } from "@/types/league";
 import { AvatarMark, RolePill } from "@/components/card-lab/ui";
 import { GodPoolGrid } from "@/components/league/GodPoolGrid";
+import { ScouterProfileSection } from "@/components/league/ScouterProfileSection";
 import { getLeagueData } from "@/lib/league-data";
+import { getPlayerScouterProfile } from "@/lib/scouter-profile";
 import { getPlayerGodStats, getPlayerMatchHistory, getPlayerSeasonSummaries } from "@/lib/stats-data";
 import { cn } from "@/lib/utils";
 
@@ -61,8 +63,15 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   return { title: p ? `${p.displayAlias ?? p.ign} — SAL` : "Player — SAL" };
 }
 
-export default async function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PlayerPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ season?: string }>;
+}) {
   const { id } = await params;
+  const { season: scouterSeasonId } = await searchParams;
   const { players, orgs, season } = await getLeagueData();
 
   const player = players.find((p) => p.id === id);
@@ -80,10 +89,11 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
       ? Math.round((player.stats.wins / player.stats.gamesPlayed) * 100)
       : null;
 
-  const [godStats, matchHistory, seasonSummaries] = await Promise.all([
+  const [godStats, matchHistory, seasonSummaries, scouterProfile] = await Promise.all([
     getPlayerGodStats(id, season.id),
     getPlayerMatchHistory(id, season.id),
     getPlayerSeasonSummaries(id),
+    getPlayerScouterProfile(id, scouterSeasonId),
   ]);
 
   return (
@@ -184,6 +194,8 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
       )}
+
+      <ScouterProfileSection playerId={id} profile={scouterProfile} />
 
       {/* God Pool */}
       <div className="mt-4">
