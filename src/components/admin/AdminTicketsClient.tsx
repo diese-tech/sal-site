@@ -270,10 +270,14 @@ export function AdminTicketsClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [liveTickets, setLiveTickets] = useState(tickets);
-  // One clock reading, taken when the queue mounts, keeps SLA chips
-  // consistent across all rows and render-pure. Admins land on this page per
-  // triage visit, so mount time is an honest "now" for classification.
-  const [now] = useState(() => Date.now());
+  // Refreshed on an interval (not every render) so SLA chips update while an
+  // admin leaves the queue open across an at-risk or overdue boundary,
+  // without needing a full remount or reload.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   const [filters, setFilters] = useState<TicketFilters>(() => parseFilters(searchParams));
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("ticket"));
 
