@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminTicket } from "@/types/admin-ticket";
 import { normalizeRegistration, type RegistrationSourceRow } from "@/lib/admin-ticket-model";
 
@@ -46,11 +46,11 @@ const TICKETS: AdminTicket[] = [
   ),
 ];
 
-function renderQueue(query: string) {
+function renderQueue(query: string, tickets: AdminTicket[] = TICKETS) {
   navigationMocks.searchParams = new URLSearchParams(query);
   return renderToStaticMarkup(
     createElement(AdminTicketsClient, {
-      tickets: TICKETS,
+      tickets,
       sourceHealth: [],
       seasonNames: {},
       divisionNames: {},
@@ -61,6 +61,10 @@ function renderQueue(query: string) {
 
 beforeEach(() => {
   navigationMocks.searchParams = new URLSearchParams();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("AdminTicketsClient deep-link selection", () => {
@@ -94,5 +98,52 @@ describe("AdminTicketsClient deep-link selection", () => {
 
     expect(html).toContain("Select a ticket to see its details.");
     expect(html).not.toContain("Ticket not found");
+  });
+});
+
+// Both fixture registrations are created 2026-07-03T10:00Z, so their derived
+// 72h SLA deadline is 2026-07-06T10:00Z.
+describe("AdminTicketsClient SLA affordance", () => {
+  it("shows no SLA chip while the deadline is comfortably ahead", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-04T10:00:00Z"));
+
+    const html = renderQueue("");
+    expect(html).not.toContain("SLA at risk");
+    expect(html).not.toContain("SLA overdue");
+  });
+
+  it("marks rows at risk inside the final 12h window", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-06T00:00:00Z"));
+
+    const html = renderQueue("");
+    expect(html).toContain("SLA at risk");
+    expect(html).not.toContain("SLA overdue");
+  });
+
+  it("marks rows overdue once the deadline passes", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-07T00:00:00Z"));
+
+    const html = renderQueue("");
+    expect(html).toContain("SLA overdue");
+    expect(html).not.toContain("SLA at risk");
+  });
+
+  it("never flags a resolved ticket even when a stale deadline remains on it", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-07T00:00:00Z"));
+
+    // Simulates an optimistic client-side resolve, which flips status without
+    // clearing the derived deadline.
+    const resolved: AdminTicket = {
+      ...normalizeRegistration(registrationRow()),
+      status: "resolved",
+      slaDeadline: "2026-07-06T10:00:00.000Z",
+    };
+    const html = renderQueue("status=all", [resolved]);
+    expect(html).not.toContain("SLA overdue");
+    expect(html).not.toContain("SLA at risk");
   });
 });

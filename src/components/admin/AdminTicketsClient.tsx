@@ -19,7 +19,12 @@ import {
   TICKET_PRIORITY_LABELS,
   TICKET_STATUS_LABELS,
 } from "@/types/admin-ticket";
-import { applyTicketFilters, getTicketCounts } from "@/lib/admin-ticket-model";
+import {
+  applyTicketFilters,
+  classifySla,
+  getTicketCounts,
+  isTerminalStatus,
+} from "@/lib/admin-ticket-model";
 import { buildQueryString, parseFilters, resolveTicketSelection } from "@/lib/admin-ticket-links";
 import { getTicketActionMode, type TicketActionMode } from "@/lib/admin-ticket-actions";
 import { cn } from "@/lib/utils";
@@ -38,6 +43,13 @@ const PRIORITY_STYLE: Record<TicketPriority, string> = {
   high: "border-orange-300/30 bg-orange-300/10 text-orange-200",
   normal: "border-white/10 bg-white/[0.04] text-slate-400",
   low: "border-white/10 bg-white/[0.02] text-slate-500",
+};
+
+// Only at-risk and overdue states get a marker; a comfortably-on-track SLA
+// would just be chip noise on every row.
+const SLA_CHIP: Record<"at_risk" | "overdue", { label: string; className: string }> = {
+  at_risk: { label: "SLA at risk", className: "border-amber-300/40 bg-amber-300/15 text-amber-200" },
+  overdue: { label: "SLA overdue", className: "border-red-300/40 bg-red-300/15 text-red-200" },
 };
 
 const STATUS_FILTER_OPTIONS: { value: TicketFilters["status"]; label: string }[] = [
@@ -96,9 +108,18 @@ function FilterField({ label, children }: { label: string; children: React.React
 const SELECT_CLASS =
   "rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs font-semibold text-white focus:border-cyan-500/40 focus:outline-none";
 
-function TicketChips({ ticket }: { ticket: AdminTicket }) {
+function TicketChips({ ticket, now }: { ticket: AdminTicket; now: number }) {
+  // Guard on terminal status as well as the deadline: an optimistic client
+  // update can resolve a ticket without clearing its derived slaDeadline, and
+  // resolved work must never be flagged as overdue.
+  const sla = isTerminalStatus(ticket.status) ? null : classifySla(ticket.slaDeadline, now);
   return (
     <span className="flex flex-wrap items-center gap-1.5">
+      {(sla === "at_risk" || sla === "overdue") && (
+        <span className={cn("rounded-xl border px-2 py-0.5 text-[0.6rem] font-black uppercase", SLA_CHIP[sla].className)}>
+          {SLA_CHIP[sla].label}
+        </span>
+      )}
       <span className={cn("rounded-xl border px-2 py-0.5 text-[0.6rem] font-black uppercase", STATUS_STYLE[ticket.status])}>
         {TICKET_STATUS_LABELS[ticket.status]}
       </span>
@@ -118,6 +139,7 @@ function TicketChips({ ticket }: { ticket: AdminTicket }) {
 
 function TicketDetail({
   ticket,
+  now,
   seasonNames,
   divisionNames,
   capabilities,
@@ -126,6 +148,7 @@ function TicketDetail({
   onActionSuccess,
 }: {
   ticket: AdminTicket;
+  now: number;
   seasonNames: Record<string, string>;
   divisionNames: Record<string, string>;
   capabilities: TicketViewerCapabilities;
@@ -154,7 +177,7 @@ function TicketDetail({
     <div className="rounded-2xl border border-white/10 bg-slate-950/84 p-5 backdrop-blur">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
         <h2 className="min-w-0 text-base font-black text-white">{ticket.title}</h2>
-        <TicketChips ticket={ticket} />
+        <TicketChips ticket={ticket} now={now} />
       </div>
       <p className="mb-4 text-xs text-slate-400">{ticket.summary}</p>
 
@@ -247,6 +270,10 @@ export function AdminTicketsClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [liveTickets, setLiveTickets] = useState(tickets);
+  // One clock reading, taken when the queue mounts, keeps SLA chips
+  // consistent across all rows and render-pure. Admins land on this page per
+  // triage visit, so mount time is an honest "now" for classification.
+  const [now] = useState(() => Date.now());
   const [filters, setFilters] = useState<TicketFilters>(() => parseFilters(searchParams));
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("ticket"));
 
@@ -484,7 +511,7 @@ export function AdminTicketsClient({
                   >
                     <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                       <span className="font-mono text-[0.65rem] font-bold text-slate-500">{ticket.displayId}</span>
-                      <TicketChips ticket={ticket} />
+                      <TicketChips ticket={ticket} now={now} />
                     </div>
                     <p className="truncate text-sm font-black text-white">{ticket.title}</p>
                     <p className="truncate text-xs text-slate-500">{ticket.summary}</p>
@@ -509,6 +536,7 @@ export function AdminTicketsClient({
               </button>
               <TicketDetail
                 ticket={selected}
+                now={now}
                 seasonNames={seasonNames}
                 divisionNames={divisionNames}
                 capabilities={capabilities}

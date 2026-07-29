@@ -115,7 +115,11 @@ export interface AdminTicket {
   priority: TicketPriority;
   createdAt: string;
   updatedAt: string;
-  /** No current source carries an SLA; typed for future queues. */
+  /**
+   * Derived at read time from createdAt plus the per-category target in
+   * SLA_TARGET_HOURS (src/lib/admin-ticket-model.ts). Absent on terminal
+   * tickets: resolved work carries no active SLA.
+   */
   slaDeadline?: string;
   seasonId?: string;
   divisionId?: string;
