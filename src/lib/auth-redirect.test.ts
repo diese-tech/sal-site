@@ -23,6 +23,15 @@ describe("safeAdminReturnPath", () => {
     expect(safeAdminReturnPath("/admin/login")).toBeNull();
     expect(safeAdminReturnPath("/admin/login?error=no_access")).toBeNull();
   });
+
+  it("validates against the normalized path, not the raw string", () => {
+    expect(safeAdminReturnPath("/admin/../register")).toBeNull();
+    expect(safeAdminReturnPath("/admin/tickets/../../register")).toBeNull();
+    expect(safeAdminReturnPath("/admin/./login")).toBeNull();
+    expect(safeAdminReturnPath("/admin\\..\\register")).toBeNull();
+    // Harmless dot segments come back normalized, query intact.
+    expect(safeAdminReturnPath("/admin/tickets/../tickets?ticket=x")).toBe("/admin/tickets?ticket=x");
+  });
 });
 
 describe("adminLoginPath", () => {
