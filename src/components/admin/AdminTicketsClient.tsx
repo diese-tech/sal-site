@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminTicketActions } from "@/components/admin/AdminTicketActions";
 import type {
   AdminTicket,
-  TicketCategory,
   TicketFilters,
   TicketPriority,
   TicketSourceHealth,
@@ -15,13 +14,13 @@ import type {
 } from "@/types/admin-ticket";
 import {
   CURRENT_TICKET_CATEGORIES,
-  DEFAULT_TICKET_FILTERS,
   FUTURE_TICKET_CATEGORIES,
   TICKET_CATEGORY_LABELS,
   TICKET_PRIORITY_LABELS,
   TICKET_STATUS_LABELS,
 } from "@/types/admin-ticket";
 import { applyTicketFilters, getTicketCounts } from "@/lib/admin-ticket-model";
+import { buildQueryString, parseFilters, resolveTicketSelection } from "@/lib/admin-ticket-links";
 import { getTicketActionMode, type TicketActionMode } from "@/lib/admin-ticket-actions";
 import { cn } from "@/lib/utils";
 
@@ -83,39 +82,6 @@ function formatTimestamp(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function parseFilters(params: URLSearchParams): TicketFilters {
-  const statuses = STATUS_FILTER_OPTIONS.map((o) => o.value);
-  const priorities = PRIORITY_FILTER_OPTIONS.map((o) => o.value);
-  const assignments = ASSIGNMENT_FILTER_OPTIONS.map((o) => o.value);
-  const categories: (TicketCategory | "all")[] = ["all", ...CURRENT_TICKET_CATEGORIES, ...FUTURE_TICKET_CATEGORIES];
-  const pick = <T extends string>(key: string, allowed: readonly T[], fallback: T): T => {
-    const value = params.get(key);
-    return allowed.includes(value as T) ? (value as T) : fallback;
-  };
-  return {
-    status: pick("status", statuses, DEFAULT_TICKET_FILTERS.status),
-    category: pick("category", categories, DEFAULT_TICKET_FILTERS.category),
-    priority: pick("priority", priorities, DEFAULT_TICKET_FILTERS.priority),
-    seasonId: params.get("season") ?? DEFAULT_TICKET_FILTERS.seasonId,
-    divisionId: params.get("division") ?? DEFAULT_TICKET_FILTERS.divisionId,
-    assignment: pick("assignment", assignments, DEFAULT_TICKET_FILTERS.assignment),
-    search: params.get("q") ?? "",
-  };
-}
-
-function buildQueryString(filters: TicketFilters, selectedId: string | null): string {
-  const params = new URLSearchParams();
-  if (filters.status !== DEFAULT_TICKET_FILTERS.status) params.set("status", filters.status);
-  if (filters.category !== "all") params.set("category", filters.category);
-  if (filters.priority !== "all") params.set("priority", filters.priority);
-  if (filters.seasonId !== "all") params.set("season", filters.seasonId);
-  if (filters.divisionId !== "all") params.set("division", filters.divisionId);
-  if (filters.assignment !== "all") params.set("assignment", filters.assignment);
-  if (filters.search.trim()) params.set("q", filters.search);
-  if (selectedId) params.set("ticket", selectedId);
-  return params.toString();
 }
 
 function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
@@ -284,25 +250,38 @@ export function AdminTicketsClient({
   const [filters, setFilters] = useState<TicketFilters>(() => parseFilters(searchParams));
   const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("ticket"));
 
+  // Deep-link resolution (see src/lib/admin-ticket-links.ts for the URL
+  // contract): the ?ticket= value read on first render resolves here, so a
+  // valid link opens its ticket immediately and a stale one surfaces as an
+  // explicit not_found state rather than a silent empty panel.
+  const selection = useMemo(
+    () => resolveTicketSelection(liveTickets, selectedId),
+    [liveTickets, selectedId],
+  );
+  const selected = selection.ticket;
+
   // Mirror state into the URL so filters and the selected ticket deep-link,
-  // without a server round-trip per keystroke.
+  // without a server round-trip per keystroke. A resolved ticket is written in
+  // canonical id form (normalizing displayId links); an unresolved id is kept
+  // as-is so the honest not-found state survives reload and sharing.
   useEffect(() => {
-    const query = buildQueryString(filters, selectedId);
+    const query = buildQueryString(
+      filters,
+      selection.kind === "found" ? selection.ticket.id : selection.requestedId,
+    );
     const url = query ? `${window.location.pathname}?${query}` : window.location.pathname;
     window.history.replaceState(null, "", url);
-  }, [filters, selectedId]);
+  }, [filters, selection]);
 
   const counts = useMemo(() => getTicketCounts(liveTickets), [liveTickets]);
   const filtered = useMemo(() => applyTicketFilters(liveTickets, filters), [liveTickets, filters]);
-  const selected = useMemo(
-    () => (selectedId ? (liveTickets.find((t) => t.id === selectedId) ?? null) : null),
-    [liveTickets, selectedId],
-  );
   const selectedActionMode = useMemo(() => {
-    const serverTicket = selectedId ? tickets.find((ticket) => ticket.id === selectedId) : null;
+    // Look up by the resolved ticket's canonical id so displayId deep links
+    // still pin action gating to the server-provided ticket state.
+    const serverTicket = selected ? tickets.find((ticket) => ticket.id === selected.id) : null;
     const actionTicket = serverTicket ?? selected;
     return actionTicket ? getTicketActionMode(actionTicket, capabilities) : "read_only";
-  }, [capabilities, selected, selectedId, tickets]);
+  }, [capabilities, selected, tickets]);
 
   const updateTicket = useCallback((nextTicket: AdminTicket) => {
     setLiveTickets((current) => current.map((ticket) => (
@@ -478,7 +457,7 @@ export function AdminTicketsClient({
 
       {/* Queue and detail */}
       <div className="lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start lg:gap-4">
-        <div className={cn(selected && "hidden lg:block")}>
+        <div className={cn(selection.kind !== "none" && "hidden lg:block")}>
           {filtered.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-slate-950/84 py-16 text-center backdrop-blur">
               <p className="text-sm font-black uppercase text-slate-500">
@@ -519,7 +498,7 @@ export function AdminTicketsClient({
           )}
         </div>
 
-        <div className={cn(!selected && "hidden lg:block")}>
+        <div className={cn(selection.kind === "none" && "hidden lg:block")}>
           {selected ? (
             <>
               <button
@@ -538,6 +517,26 @@ export function AdminTicketsClient({
                 onActionSuccess={refreshAfterAction}
               />
             </>
+          ) : selection.kind === "not_found" ? (
+            // Honest deep-link failure state: the requested id matched nothing
+            // in the loaded queue (stale link, resolved-and-removed ticket, or
+            // a typo). Never silently fall back to "nothing selected".
+            <div
+              role="status"
+              className="rounded-2xl border border-amber-300/25 bg-slate-950/84 px-6 py-14 text-center backdrop-blur"
+            >
+              <p className="text-sm font-black uppercase text-amber-200">Ticket not found</p>
+              <p className="mx-auto mt-2 max-w-md text-xs text-slate-400">
+                No ticket matching <span className="font-mono text-slate-300">{selection.requestedId}</span> is in the
+                current queue. It may have been resolved and removed, or the link may be stale.
+              </p>
+              <button
+                onClick={() => setSelectedId(null)}
+                className="mt-4 rounded-lg border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs font-black uppercase text-slate-300 transition hover:text-white"
+              >
+                Back to Queue
+              </button>
+            </div>
           ) : (
             <div className="rounded-2xl border border-white/10 bg-slate-950/84 py-16 text-center backdrop-blur">
               <p className="text-sm font-black uppercase text-slate-500">Select a ticket to see its details.</p>

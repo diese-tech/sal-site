@@ -129,7 +129,7 @@ for (const path of ["/teams/helix-reign", "/teams/midnight-pact", "/teams/root-w
 for (const path of ["/admin", "/admin/matches", "/admin/players", "/admin/standings", "/admin/teams", "/admin/announcements", "/admin/tickets"]) {
   test(`admin route ${path} redirects when logged out`, async ({ page }) => {
     await page.goto(path);
-    await expect(page).toHaveURL(/\/admin\/login$/);
+    await expect(page).toHaveURL(/\/admin\/login(\?next=|$)/);
   });
 }
 
@@ -781,7 +781,7 @@ test("admin import sends batch to API and shows imported count", async ({ page }
 
 test("admin draft route redirects when logged out", async ({ page }) => {
   await page.goto("/admin/draft");
-  await expect(page).toHaveURL(/\/admin\/login$/);
+  await expect(page).toHaveURL(/\/admin\/login(\?next=|$)/);
 });
 
 test("admin draft page renders heading and create room form", async ({ page }) => {

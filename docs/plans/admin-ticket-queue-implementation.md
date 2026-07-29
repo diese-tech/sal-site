@@ -165,3 +165,30 @@ Do not move existing workflows into the new page. This PR builds the unified rea
 ## Deliverable
 
 Open a focused PR against `main` after implementation. In the PR description, explicitly state that the queue begins as read-only and that atomic ticket actions, new ticket schemas, RBAC, Discord notifications, and AI integrations will be delivered separately.
+
+## Deep-link contract (SITE-11 addendum)
+
+The URL-backed state promised above is now a hardened contract for external
+surfaces (the Discord bot in particular):
+
+- Stable link form for the bot to emit:
+  `/admin/tickets?ticket=<category>:<sourceId>` — the ticket's internal id
+  (`AdminTicket.id`, e.g. `registration:4f9c...`). It is unique by
+  construction and is exactly what the queue writes back to the URL when a
+  ticket is selected.
+- The short human-facing `displayId` (e.g. `RG-4F9C1D2E`) is also accepted,
+  case-insensitively, as a convenience for hand-typed links. It is a truncated
+  form of the source id and not guaranteed unique, so bots must emit the
+  internal id form. A displayId link is rewritten to the canonical id once
+  resolved.
+- An id that matches nothing in the loaded queue shows an explicit
+  "Ticket not found" state (stale link, resolved-and-removed ticket) — never a
+  silent fallback to an empty selection. The unresolved id stays in the URL so
+  the state survives reload and sharing.
+- Unauthenticated hits are redirected to `/admin/login?next=<path+query>` and
+  both login flows (password and Discord OAuth) return to that validated
+  `/admin` path, so a deep link survives the login round-trip.
+
+Parsing and resolution live in `src/lib/admin-ticket-links.ts`; the login
+return-path validation lives in `src/lib/auth-redirect.ts`
+(`safeAdminReturnPath` / `adminLoginPath`).
