@@ -48,7 +48,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getCaptainSessionFromRequest).mockReturnValue({ draftRoomId: "room-1", orgId: "org-a" });
   vi.mocked(buildDraftState).mockResolvedValue(state);
-  mockLeaguePlayers([]);
+  mockLeaguePlayers([{ id: "player-9", divisionId: "solar" }]);
   vi.mocked(getSeasonDraftedPlayerIds).mockResolvedValue(new Set());
   vi.mocked(submitPickAtomic).mockResolvedValue({ ok: true, isComplete: true });
 });
@@ -61,7 +61,7 @@ describe("division-locked drafting (#206)", () => {
 
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toEqual({
-      error: "Cannot draft a terra division player in a solar draft.",
+      error: "Only solar division players can be drafted in this room.",
     });
     expect(submitPickAtomic).not.toHaveBeenCalled();
   });
@@ -75,13 +75,13 @@ describe("division-locked drafting (#206)", () => {
     expect(submitPickAtomic).toHaveBeenCalled();
   });
 
-  it("accepts a player with no division", async () => {
+  it("rejects a player with no division", async () => {
     mockLeaguePlayers([{ id: "player-9" }]);
 
     const res = await POST(req(), ctx);
 
-    expect(res.status).toBe(200);
-    expect(submitPickAtomic).toHaveBeenCalled();
+    expect(res.status).toBe(400);
+    expect(submitPickAtomic).not.toHaveBeenCalled();
   });
 });
 

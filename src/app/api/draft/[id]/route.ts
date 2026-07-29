@@ -10,7 +10,7 @@ import {
 } from "@/lib/draft-data";
 import { buildPickSequence } from "@/types/draft";
 import { getCaptainSessionFromRequest } from "@/lib/captain-auth";
-import { writeAuditLog } from "@/lib/league-data";
+import { getLeagueData, writeAuditLog, LeagueDataUnavailableError } from "@/lib/league-data";
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -29,9 +29,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const nextIndex = state.room.currentPickIndex + 1;
       const isComplete = nextIndex >= sequence.length;
 
+      // Auto-pick must apply the same division lock as the manual pick
+      // route — a shortlist can hold stale cross-division entries. If league
+      // data is unavailable we cannot validate eligibility, so return the
+      // current state untouched instead of picking or burning the turn; the
+      // next poll retries.
+      let leagueData;
+      try {
+        leagueData = await getLeagueData();
+      } catch (err) {
+        if (err instanceof LeagueDataUnavailableError) {
+          const shortlist = captainOrgId ? await getShortlist(id, captainOrgId) : undefined;
+          return NextResponse.json({ state, captainOrgId, shortlist });
+        }
+        throw err;
+      }
+      const isEligible = (playerId: string) => {
+        const player = leagueData.players.find((p) => p.id === playerId);
+        return !!player && player.divisionId === state.room.divisionId;
+      };
+
       // Try auto-pick from shortlist before skipping
       if (currentOrgId) {
-        const topPick = await getTopShortlistPick(id, currentOrgId, state.room.seasonId);
+        const topPick = await getTopShortlistPick(id, currentOrgId, state.room.seasonId, isEligible);
         if (topPick) {
           // Verify not already picked anywhere this season (race condition guard)
           const draftedIds = await getSeasonDraftedPlayerIds(state.room.seasonId);

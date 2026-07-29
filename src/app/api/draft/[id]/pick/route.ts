@@ -48,14 +48,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     throw err;
   }
+  // A player must belong to this room's division to be draftable. Players
+  // with no division are ineligible everywhere — both draft UIs already hide
+  // them, and allowing them server-side would let two sibling-division rooms
+  // race the season-wide drafted check on the same player.
   const playerData = leagueData.players.find((p) => p.id === playerId);
-  if (playerData?.divisionId) {
-    if (playerData.divisionId !== room.divisionId) {
-      return NextResponse.json(
-        { error: `Cannot draft a ${playerData.divisionId} division player in a ${room.divisionId} draft.` },
-        { status: 400 },
-      );
-    }
+  if (!playerData || playerData.divisionId !== room.divisionId) {
+    return NextResponse.json(
+      { error: `Only ${room.divisionId} division players can be drafted in this room.` },
+      { status: 400 },
+    );
   }
 
   // Verify player hasn't already been picked in any room this season — a

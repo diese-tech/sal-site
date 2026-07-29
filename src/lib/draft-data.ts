@@ -393,7 +393,12 @@ export async function removePlayerFromAllShortlists(draftRoomId: string, playerI
     .eq("player_id", playerId);
 }
 
-export async function getTopShortlistPick(draftRoomId: string, orgId: string, seasonId: string): Promise<string | null> {
+export async function getTopShortlistPick(
+  draftRoomId: string,
+  orgId: string,
+  seasonId: string,
+  isEligible?: (playerId: string) => boolean,
+): Promise<string | null> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
   // Get shortlist ordered by position
@@ -406,9 +411,14 @@ export async function getTopShortlistPick(draftRoomId: string, orgId: string, se
   if (!shortlist || shortlist.length === 0) return null;
   // Exclude players drafted anywhere this season, not just in this room
   const draftedIds = await getSeasonDraftedPlayerIds(seasonId);
-  // Return first shortlisted player not yet drafted
+  // Return the first shortlisted player who is undrafted and passes the
+  // caller's eligibility rule — a shortlist can hold stale entries (e.g. a
+  // cross-division player added before the division lock), and auto-pick
+  // must not accept a player the manual pick route would reject.
   for (const entry of shortlist as Array<{ player_id: string }>) {
-    if (!draftedIds.has(entry.player_id)) return entry.player_id;
+    if (draftedIds.has(entry.player_id)) continue;
+    if (isEligible && !isEligible(entry.player_id)) continue;
+    return entry.player_id;
   }
   return null;
 }

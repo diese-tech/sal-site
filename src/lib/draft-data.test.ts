@@ -191,4 +191,19 @@ describe("getTopShortlistPick excludes season-wide drafted players (#206)", () =
 
     await expect(getTopShortlistPick("room-1", "org-a", "season-1")).resolves.toBeNull();
   });
+
+  it("skips entries rejected by the eligibility predicate (stale cross-division shortlists)", async () => {
+    client = makeClient(handlerFor({
+      captain_shortlists: { data: [{ player_id: "p1" }, { player_id: "p2" }], error: null },
+      draft_rooms: { data: [{ id: "room-1" }], error: null },
+      draft_picks: { data: [], error: null },
+    }));
+
+    await expect(
+      getTopShortlistPick("room-1", "org-a", "season-1", (playerId) => playerId !== "p1"),
+    ).resolves.toBe("p2");
+    await expect(
+      getTopShortlistPick("room-1", "org-a", "season-1", () => false),
+    ).resolves.toBeNull();
+  });
 });

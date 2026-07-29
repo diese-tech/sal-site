@@ -12,7 +12,10 @@ vi.mock("@/lib/draft-data", () => ({
   submitPickAtomic: vi.fn(),
 }));
 vi.mock("@/lib/captain-auth", () => ({ getCaptainSessionFromRequest: vi.fn(() => null) }));
-vi.mock("@/lib/league-data", () => ({ writeAuditLog: vi.fn() }));
+vi.mock("@/lib/league-data", () => {
+  class LeagueDataUnavailableError extends Error {}
+  return { writeAuditLog: vi.fn(), getLeagueData: vi.fn(), LeagueDataUnavailableError };
+});
 
 import {
   advancePickOnTimeout,
@@ -23,14 +26,19 @@ import {
   removePlayerFromAllShortlists,
   submitPickAtomic,
 } from "@/lib/draft-data";
-import { writeAuditLog } from "@/lib/league-data";
+import { getLeagueData, writeAuditLog, LeagueDataUnavailableError } from "@/lib/league-data";
 import { GET } from "./route";
+
+function mockLeaguePlayers(players: Array<{ id: string; divisionId?: string }>) {
+  vi.mocked(getLeagueData).mockResolvedValue({ players } as unknown as Awaited<ReturnType<typeof getLeagueData>>);
+}
 
 // Expired-timer active room: org-a on the clock for pick 1 of 4.
 const state = {
   room: {
     status: "active",
     seasonId: "season-1",
+    divisionId: "solar",
     pickStartedAt: new Date(Date.now() - 60_000).toISOString(),
     pickTimerSeconds: 10,
     baseOrder: ["org-a", "org-b"],
@@ -46,6 +54,7 @@ describe("auto-pick conflict logging (#141)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(buildDraftState).mockResolvedValue(state);
+    mockLeaguePlayers([{ id: "player-1", divisionId: "solar" }]);
     vi.mocked(getTopShortlistPick).mockResolvedValue("player-1");
     // Both racers read the season drafted set before the winner's insert lands.
     vi.mocked(getSeasonDraftedPlayerIds).mockResolvedValue(new Set());
@@ -93,16 +102,38 @@ describe("auto-pick uses the season-wide drafted set (#206)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(buildDraftState).mockResolvedValue(state);
+    mockLeaguePlayers([{ id: "player-1", divisionId: "solar" }]);
     vi.mocked(getTopShortlistPick).mockResolvedValue("player-1");
   });
 
-  it("passes the room's seasonId to getTopShortlistPick", async () => {
+  it("passes the room's seasonId and a division-lock predicate to getTopShortlistPick", async () => {
     vi.mocked(getSeasonDraftedPlayerIds).mockResolvedValue(new Set());
     vi.mocked(submitPickAtomic).mockResolvedValue({ ok: true, isComplete: false });
+    mockLeaguePlayers([
+      { id: "player-1", divisionId: "solar" },
+      { id: "player-2", divisionId: "terra" },
+      { id: "player-3" },
+    ]);
 
     await GET(req(), ctx);
 
-    expect(getTopShortlistPick).toHaveBeenCalledWith("room-1", "org-a", "season-1");
+    expect(getTopShortlistPick).toHaveBeenCalledWith("room-1", "org-a", "season-1", expect.any(Function));
+    const isEligible = vi.mocked(getTopShortlistPick).mock.calls[0][3]!;
+    expect(isEligible("player-1")).toBe(true);   // room's division
+    expect(isEligible("player-2")).toBe(false);  // other division
+    expect(isEligible("player-3")).toBe(false);  // no division
+    expect(isEligible("player-x")).toBe(false);  // unknown player
+  });
+
+  it("neither picks nor skips when league data is unavailable", async () => {
+    vi.mocked(getLeagueData).mockRejectedValue(new LeagueDataUnavailableError("down"));
+
+    const res = await GET(req(), ctx);
+
+    expect(res.status).toBe(200);
+    expect(getTopShortlistPick).not.toHaveBeenCalled();
+    expect(submitPickAtomic).not.toHaveBeenCalled();
+    expect(advancePickOnTimeout).not.toHaveBeenCalled();
   });
 
   it("does not auto-pick a shortlisted player drafted in another room of the season", async () => {
@@ -124,6 +155,7 @@ describe("draft completion does not auto-publish rosters (#210)", () => {
     room: {
       status: "active",
       seasonId: "season-1",
+      divisionId: "solar",
       pickStartedAt: new Date(Date.now() - 60_000).toISOString(),
       pickTimerSeconds: 10,
       baseOrder: ["org-a", "org-b"],
@@ -135,6 +167,7 @@ describe("draft completion does not auto-publish rosters (#210)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(buildDraftState).mockResolvedValue(finalSlotState);
+    mockLeaguePlayers([{ id: "player-1", divisionId: "solar" }]);
     vi.mocked(getSeasonDraftedPlayerIds).mockResolvedValue(new Set());
   });
 
