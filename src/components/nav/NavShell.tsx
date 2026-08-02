@@ -2,15 +2,24 @@
 
 import { usePathname } from "next/navigation";
 import { SiteNav } from "./SiteNav";
+import type { Season } from "@/types/league";
 
-export function NavShell({ children, ticker }: { children: React.ReactNode; ticker: React.ReactNode }) {
+export function NavShell({
+  children,
+  ticker,
+  season,
+}: {
+  children: React.ReactNode;
+  ticker: React.ReactNode;
+  season: Pick<Season, "name" | "status">;
+}) {
   const pathname = usePathname();
   const hideChrome = pathname.startsWith("/admin") || pathname.startsWith("/lab");
 
   return (
     <>
       {!hideChrome && ticker}
-      {!hideChrome && <SiteNav />}
+      {!hideChrome && <SiteNav season={season} />}
       {/* pt-[104px] = ticker (40px) + nav (64px) */}
       <div className={!hideChrome ? "pt-[104px]" : undefined}>{children}</div>
       {!hideChrome && (

@@ -57,6 +57,11 @@ test("league logo asset renders in nav and metadata image path is reachable", as
   expect(response.headers()["content-type"]).toContain("image/png");
 });
 
+test("top nav shows the current season and status", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("banner")).toContainText("Season 1 · Active");
+});
+
 for (const asset of ["/assets/division-solar.png", "/assets/division-lunar.png"]) {
   test(`${asset} is available for division art`, async ({ request }) => {
     const response = await request.get(asset);
