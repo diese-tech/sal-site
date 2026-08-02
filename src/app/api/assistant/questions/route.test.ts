@@ -28,8 +28,6 @@ describe("POST /api/assistant/questions", () => {
       reasons: [
         "durable_feature_flag_missing",
         "sanitized_sources_missing",
-        "privacy_guard_missing",
-        "durable_rate_limiter_missing",
       ],
     });
   });

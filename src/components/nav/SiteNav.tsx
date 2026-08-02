@@ -5,8 +5,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { BRAND_ASSETS } from "@/lib/assets";
+import { formatSeasonLabel } from "@/lib/season-label";
 import { cn } from "@/lib/utils";
 import { AuthButton } from "@/components/auth/AuthButton";
+import type { Season } from "@/types/league";
 
 const NAV_LINKS = [
   { href: "/", label: "Home", exact: true },
@@ -19,7 +21,7 @@ const NAV_LINKS = [
   { href: "/report-a-bug", label: "Report a Bug" },
 ];
 
-export function SiteNav() {
+export function SiteNav({ season }: { season: Pick<Season, "name" | "status"> }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const isActive = (href: string, exact?: boolean) => exact ? pathname === href : pathname.startsWith(href);
@@ -31,11 +33,11 @@ export function SiteNav() {
           {/* Logo */}
           <Link href="/" className="group flex shrink-0 items-center gap-3">
             <div className="relative h-10 w-10 overflow-hidden rounded-xl border border-cyan-400/60 bg-gradient-to-br from-cyan-500/30 to-fuchsia-600/25 shadow-lg shadow-cyan-500/20 transition-all duration-200 group-hover:border-cyan-300/80 group-hover:shadow-cyan-400/35">
-              <Image src={BRAND_ASSETS.leagueLogo} alt="" fill sizes="40px" className="object-cover" priority />
+              <Image src={BRAND_ASSETS.leagueLogo} alt="" fill sizes="40px" className="object-contain p-0.5" priority />
             </div>
             <div className="hidden sm:block">
               <p className="text-xs font-black uppercase text-cyan-200">Serpent Ascension League</p>
-              <p className="text-[0.6rem] font-black uppercase text-slate-500">Season 1 · Active</p>
+              <p className="text-[0.6rem] font-black uppercase text-slate-500">{formatSeasonLabel(season)}</p>
             </div>
           </Link>
 

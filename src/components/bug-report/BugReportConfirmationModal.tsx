@@ -74,8 +74,7 @@ export function BugReportConfirmationModal({
             Ready to send this report?
           </h2>
           <p id="bug-report-confirm-description" className="mt-2 text-sm leading-6 text-slate-400">
-            Review the complete normalized report below. Your report remains anonymous unless you
-            opted into the hidden Discord reply relay.
+            Check the details below. Your report remains anonymous unless you requested private Discord replies.
           </p>
         </div>
 
@@ -114,9 +113,7 @@ export function BugReportConfirmationModal({
 
             {!submissionEnabled ? (
               <div className="rounded-lg border border-amber-300/25 bg-amber-300/[0.08] p-3 text-xs leading-5 text-amber-100">
-                Submission is safely disabled until durable ticket storage, private upload
-                finalization, and shared rate limiting pass their release checks. This report has not
-                been sent.
+                Bug reports are temporarily unavailable. This report has not been sent.
               </div>
             ) : null}
           </div>

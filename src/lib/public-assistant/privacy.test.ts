@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   routeQuestionToPublicModel,
+  getAssistantPrivacyGuard,
   untrustedPrivacyPrefilter,
   type AssistantPrivacyGuard,
   type PrivacyGuardInput,
@@ -50,6 +51,29 @@ function verifiedGuard(): AssistantPrivacyGuard {
 }
 
 describe("public assistant privacy boundary", () => {
+  it("accepts a public rules question and rejects detected private identifiers", async () => {
+    const guard = getAssistantPrivacyGuard();
+    expect(guard).not.toBeNull();
+
+    const safe = await guard?.inspect({
+      rawText: "How many points is a 2-0 win worth?",
+      untrustedCandidate: "How many points is a 2-0 win worth?",
+      riskHints: [],
+      context: "question",
+      inputDigest: "a".repeat(64),
+    });
+    const rejected = await guard?.inspect({
+      rawText: "My email is player@example.com",
+      untrustedCandidate: "My email is [possible email]",
+      riskHints: ["email"],
+      context: "question",
+      inputDigest: "b".repeat(64),
+    });
+
+    expect(safe).toMatchObject({ outcome: "verified_public_safe" });
+    expect(rejected).toMatchObject({ outcome: "rejected", findings: ["email"] });
+  });
+
   it.each(adversarialInputs)("treats regex output only as an untrusted risk hint: %s", (raw) => {
     const prefiltered = untrustedPrivacyPrefilter(raw);
     expect(prefiltered).toEqual({ candidate: expect.any(String), riskHints: expect.any(Array) });

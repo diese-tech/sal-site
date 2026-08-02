@@ -1,4 +1,5 @@
-import type { LeagueData, Division, Org, LeaguePlayer, Match, OrgStanding, Announcement } from "@/types/league";
+import type { LeagueData, Division, Org, LeaguePlayer, Match, Announcement } from "@/types/league";
+import { recalcStandings } from "@/lib/standings";
 
 const DIVISIONS: Division[] = [
   {
@@ -255,57 +256,8 @@ const MATCHES: Match[] = [
   { id: "g-m8", divisionId: "terra", homeOrgId: "serpent-bloom", awayOrgId: "iron-canopy", scheduledDate: "2025-05-28", scheduledTime: "21:00", seasonId: "s1", status: "scheduled", week: 4 },
 ];
 
-function calcStandings(): OrgStanding[] {
-  const map = new Map<string, OrgStanding>();
-
-  for (const org of ORGS) {
-    map.set(org.id, {
-      orgId: org.id,
-      divisionId: org.divisionId,
-      wins: 0,
-      losses: 0,
-      matchesPlayed: 0,
-      pointsFor: 0,
-      pointsAgainst: 0,
-      streak: [],
-      gamesBack: 0,
-    });
-  }
-
-  for (const m of MATCHES) {
-    if (m.status !== "completed" || m.homeScore === undefined || m.awayScore === undefined) continue;
-    const home = map.get(m.homeOrgId)!;
-    const away = map.get(m.awayOrgId)!;
-    home.matchesPlayed++;
-    away.matchesPlayed++;
-    home.pointsFor += m.homeScore;
-    home.pointsAgainst += m.awayScore;
-    away.pointsFor += m.awayScore;
-    away.pointsAgainst += m.homeScore;
-    if (m.homeScore > m.awayScore) {
-      home.wins++;
-      away.losses++;
-      home.streak = [...home.streak.slice(-4), "W"];
-      away.streak = [...away.streak.slice(-4), "L"];
-    } else if (m.awayScore > m.homeScore) {
-      away.wins++;
-      home.losses++;
-      away.streak = [...away.streak.slice(-4), "W"];
-      home.streak = [...home.streak.slice(-4), "L"];
-    }
-  }
-
-  // Calculate games back per division
-  const divIds: import("@/types/league").DivisionId[] = ["terra", "solar", "lunar"];
-  for (const divId of divIds) {
-    const divStandings = [...map.values()].filter((s) => s.divisionId === divId);
-    const leader = divStandings.reduce((a, b) => (b.wins - b.losses > a.wins - a.losses ? b : a), divStandings[0]);
-    for (const s of divStandings) {
-      s.gamesBack = ((leader.wins - leader.losses) - (s.wins - s.losses)) / 2;
-    }
-  }
-
-  return [...map.values()];
+function calcStandings() {
+  return recalcStandings({ orgs: ORGS, matches: MATCHES });
 }
 
 const ANNOUNCEMENTS: Announcement[] = [

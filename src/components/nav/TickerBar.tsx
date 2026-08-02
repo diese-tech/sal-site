@@ -1,6 +1,7 @@
 import { getLeagueData, LeagueDataUnavailableError } from "@/lib/league-data";
 import { isMatchLive } from "@/lib/match-live";
 import { cn } from "@/lib/utils";
+import { formatShortMatchDate } from "@/lib/date-format";
 
 const DIV_TAG = { solar: "SOL", lunar: "LUN", terra: "TER" } as const;
 const DIV_COLOR = {
@@ -13,13 +14,6 @@ const DIV_SEP_COLOR = {
   lunar: "text-cyan-500/50",
   terra: "text-emerald-500/50",
 } as const;
-
-function shortTime(date: string, time: string) {
-  const d = new Date(`${date}T${time}:00`);
-  const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
-  const t = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  return `${weekday} ${t}`;
-}
 
 export async function TickerBar() {
   // TickerBar renders inside the root layout (src/app/layout.tsx via
@@ -46,7 +40,7 @@ export async function TickerBar() {
     .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.scheduledTime.localeCompare(b.scheduledTime))
     .slice(0, 8);
   const recent = matches
-    .filter((m) => m.status === "completed")
+    .filter((m) => m.status === "completed" || m.status === "forfeit")
     .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate))
     .slice(0, 5);
 
@@ -73,7 +67,7 @@ export async function TickerBar() {
 
         {/* Teams + score/vs */}
         <span className="text-[0.78rem] font-bold text-white">{home?.tag ?? "?"}</span>
-        {m.status === "completed" ? (
+        {m.status === "completed" || m.status === "forfeit" ? (
           <span className="font-mono text-[0.78rem] font-bold text-slate-300">
             {m.homeScore}:{m.awayScore}
           </span>
@@ -93,8 +87,11 @@ export async function TickerBar() {
         {m.status === "completed" && (
           <span className="text-[0.72rem] text-slate-500">· Final</span>
         )}
+        {m.status === "forfeit" && (
+          <span className="text-[0.72rem] text-red-300/80">· Forfeit</span>
+        )}
         {m.status === "scheduled" && (
-          <span className="text-[0.72rem] text-slate-500">· {shortTime(m.scheduledDate, m.scheduledTime)}</span>
+          <span className="text-[0.72rem] text-slate-500">· {formatShortMatchDate(m.scheduledDate, m.scheduledTime)}</span>
         )}
 
         {/* Division-colored separator */}

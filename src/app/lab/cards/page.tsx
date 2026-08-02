@@ -71,7 +71,7 @@ export default function CardLabPage() {
         </section>
 
         <section className="mt-12 pb-8">
-          <SectionHeading eyebrow="Org boards" title="Captain locked, roster slots numbered" />
+          <SectionHeading eyebrow="Org boards" title="Captain and numbered roster slots" />
           <div className="mt-5 grid gap-5 lg:grid-cols-2">
             {orgRosters.map((org) => (
               <OrgRosterCard key={org.id} org={org} />

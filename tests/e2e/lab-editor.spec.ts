@@ -258,7 +258,6 @@ test("editor page and card lab load without page-level horizontal overflow", asy
 });
 
 test("editor previews do not create internal horizontal scrollbars across screen ratios", async ({ page }) => {
-  test.skip(true, "Lab editor is an internal design tool; mobile hardening now focuses on shipped public/admin surfaces.");
   const viewports = [
     { width: 390, height: 844 },
     { width: 768, height: 1024 },

@@ -1,6 +1,12 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { AssistantQuestionScope, AssistantSourceType, PublicSafeModelInput } from "@/types/public-assistant";
 import { isSafePublicUrl } from "./safe-url";
+import {
+  PUBLIC_ASSISTANT_SOURCE_CONTRACT,
+  RULEBOOK_PUBLIC_URL,
+  RULEBOOK_TEXT_EXPORT_URL,
+} from "./config";
 
 export const PUBLIC_SOURCE_PRECEDENCE: Record<AssistantSourceType, number> = {
   published_rule: 1,
@@ -218,11 +224,130 @@ export function selectEligibleSources(input: unknown, context: SourceSelectionCo
   return { eligible: orderSanitizedSources(eligible), rejected };
 }
 
-/**
- * Release B must provide this repository from durable, Admin-approved data.
- * Raw notes, private evidence, individual votes, and confidential facts do not
- * satisfy this interface and must never be passed to the public model.
- */
+const RULEBOOK_CACHE_TTL_MS = 5 * 60 * 1_000;
+const RULEBOOK_REQUIRED_MARKERS = ["1.0 purpose", "8.0 seeding", "26.0 rulebook disclaimer"];
+
+let cachedRulebook: { source: SanitizedAssistantSource; expiresAt: number } | null = null;
+
+const SEARCH_STOP_WORDS = new Set([
+  "about", "after", "before", "during", "from", "have", "many", "often", "rules", "should", "team", "teams",
+  "that", "their", "there", "they", "this", "what", "when", "where", "which", "with", "would", "your",
+]);
+
+export function selectRelevantRulebookExcerpt(canonicalText: string, question: string): string {
+  const sections = canonicalText
+    .split(/(?=^\d+\.\d+\s+)/gm)
+    .map((section) => section.trim())
+    .filter((section) => /^\d+\.\d+\s+/.test(section));
+  const terms = [...new Set(
+    question.toLowerCase().match(/[a-z0-9]+/g)?.filter(
+      (term) => term.length >= 4 && !SEARCH_STOP_WORDS.has(term),
+    ) ?? [],
+  )];
+
+  if (sections.length === 0 || terms.length === 0) return canonicalText;
+
+  const ranked = sections
+    .map((section, index) => {
+      const normalized = section.toLowerCase();
+      const heading = normalized.split("\n", 1)[0] ?? "";
+      const score = terms.reduce(
+        (total, term) => total + (normalized.includes(term) ? 1 : 0) + (heading.includes(term) ? 2 : 0),
+        0,
+      );
+      return { section, index, score };
+    })
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, 5)
+    .sort((left, right) => left.index - right.index);
+
+  return ranked.length > 0 ? ranked.map(({ section }) => section).join("\n\n") : canonicalText;
+}
+
+async function loadPublishedRulebook(): Promise<SanitizedAssistantSource> {
+  if (cachedRulebook && cachedRulebook.expiresAt > Date.now()) return cachedRulebook.source;
+
+  const response = await fetch(RULEBOOK_TEXT_EXPORT_URL, {
+    cache: "no-store",
+    headers: { Accept: "text/plain" },
+  });
+  if (!response.ok) throw new Error(`Rulebook export returned ${response.status}.`);
+
+  const canonicalText = (await response.text()).trim();
+  const normalizedRulebook = canonicalText.toLowerCase();
+  if (
+    canonicalText.length < 1_000 ||
+    canonicalText.length > 50_000 ||
+    RULEBOOK_REQUIRED_MARKERS.some((marker) => !normalizedRulebook.includes(marker))
+  ) {
+    throw new Error("Rulebook export failed validation.");
+  }
+
+  const sourceVersion = createHash("sha256").update(canonicalText, "utf8").digest("hex");
+  const source = sanitizedAssistantSourceSchema.parse({
+    id: "sal-rulebook-google-doc",
+    sourceType: "published_rule",
+    title: "Serpent Ascension League Rulebook",
+    canonicalText,
+    ...PUBLIC_ASSISTANT_SOURCE_CONTRACT,
+    sourceVersion,
+    scope: { global: true, seasonIds: [], divisionScopes: [] },
+    effectiveAt: "2026-05-20T20:19:18.637Z",
+    expiresAt: null,
+    status: "published",
+    supersededBy: null,
+    conflictState: "none",
+    visibility: "public_sanitized",
+    publicUrl: RULEBOOK_PUBLIC_URL,
+  });
+
+  cachedRulebook = { source, expiresAt: Date.now() + RULEBOOK_CACHE_TTL_MS };
+  return source;
+}
+
+const APPROVED_PRECEDENTS: SanitizedAssistantSource[] = [
+  sanitizedAssistantSourceSchema.parse({
+    id: "terra-solar-adaptation",
+    sourceType: "sanitized_precedent",
+    title: "Approved Terra Division adaptation",
+    canonicalText:
+      "Unless a Terra-specific published rule or approved council ruling says otherwise, Terra follows the Solar Division rules adapted one tier upward. In division-specific rules, Terra takes Solar's role and Solar takes Lunar's lower-division role. If that adaptation creates a conflict or does not clearly resolve a case, SAL admins or the council must review it.",
+    ...PUBLIC_ASSISTANT_SOURCE_CONTRACT,
+    sourceVersion: "terra-adaptation-v1",
+    scope: { global: true, seasonIds: [], divisionScopes: [] },
+    effectiveAt: "2026-08-02T00:00:00.000Z",
+    expiresAt: null,
+    status: "published",
+    supersededBy: null,
+    conflictState: "none",
+    visibility: "public_sanitized",
+    publicUrl: "/rules#terra-adaptation",
+  }),
+];
+
 export function getSanitizedSourceRetriever(): SanitizedSourceRetriever | null {
-  return null;
+  return {
+    async readiness() {
+      await loadPublishedRulebook();
+      return {
+        ready: true,
+        ...PUBLIC_ASSISTANT_SOURCE_CONTRACT,
+        sourceCount: 1 + APPROVED_PRECEDENTS.length,
+        verifiedAt: new Date().toISOString(),
+      };
+    },
+    async search(input) {
+      const candidates: SanitizedAssistantSource[] = [];
+      if (input.sourceTypes.includes("published_rule")) {
+        const rulebook = await loadPublishedRulebook();
+        candidates.push({
+          ...rulebook,
+          canonicalText: selectRelevantRulebookExcerpt(rulebook.canonicalText, input.question),
+        });
+      }
+      if (input.sourceTypes.includes("sanitized_precedent")) candidates.push(...APPROVED_PRECEDENTS);
+      return candidates.slice(0, input.limit);
+    },
+  };
 }

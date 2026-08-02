@@ -86,7 +86,7 @@ export function DivisionCard({
               <OrgLogo initials={org.logoInitials} gradient={org.logoGradient} className="h-7 w-7 shrink-0 text-xs" />
               <span className="flex-1 truncate font-black text-white">{org.name}</span>
               <span className="shrink-0 text-xs font-bold tabular-nums text-slate-400">
-                {standing.wins}–{standing.losses}
+                {standing.leaguePoints} pts
               </span>
             </Link>
           );

@@ -143,8 +143,8 @@ export function BugReportForm({
       >
         {!submissionEnabled ? (
           <div className="border-b border-amber-300/20 bg-amber-300/[0.07] px-5 py-3 text-sm text-amber-100 sm:px-7">
-            <strong>Preview available.</strong> Secure storage and shared rate limiting are still being
-            connected. You can prepare and review a report, but it cannot be submitted yet.
+            <strong>Reports are temporarily unavailable.</strong> You can prepare a report, but it cannot be submitted
+            right now.
           </div>
         ) : null}
 
@@ -301,8 +301,7 @@ export function BugReportForm({
                 <div>
                   <p className="text-sm font-bold text-white">JPEG, PNG, or WebP</p>
                   <p id="attachments-help" className="mt-1 text-xs leading-5 text-slate-500">
-                    Up to {BUG_REPORT_ATTACHMENT_LIMITS.maxFiles} images, 20 MB each. Metadata is stripped
-                    before private storage when intake goes live.
+                    Up to {BUG_REPORT_ATTACHMENT_LIMITS.maxFiles} images, 20 MB each.
                   </p>
                 </div>
                 <button
@@ -375,8 +374,7 @@ export function BugReportForm({
                 <span>
                   <span className="block text-sm font-bold text-indigo-100">Allow private Discord replies</span>
                   <span className="mt-1 block text-xs leading-5 text-slate-400">
-                    SALbot may DM you when staff asks a question. Your identity stays hidden from the
-                    staff ticket and is never included in its Discord message.
+                    SALbot may DM you when staff asks a question. Your Discord identity is not shown in the staff ticket.
                   </span>
                 </span>
               </label>
@@ -384,8 +382,7 @@ export function BugReportForm({
               <div className="rounded-lg border border-white/10 bg-white/[0.025] p-4">
                 <p className="text-sm font-bold text-white">Need a private reply?</p>
                 <p className="mt-1 text-xs leading-5 text-slate-400">
-                  You can submit anonymously without signing in. To let SALbot relay staff questions by
-                  DM, sign in first and return to this page.
+                  Submit anonymously, or sign in first if you want staff questions relayed through SALbot.
                 </p>
                 <Link
                   href="/auth/signin?next=/report-a-bug"
@@ -405,8 +402,7 @@ export function BugReportForm({
 
         <div className="flex flex-col gap-4 border-t border-white/10 bg-black/20 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
           <p className="max-w-xl text-xs leading-5 text-slate-500">
-            Nothing is sent until you confirm. Reports are retained for operations and may contribute to
-            a sanitized, admin-reviewed FAQ later.
+            Review everything before submitting. Nothing is sent until you confirm.
           </p>
           <button
             type="submit"
@@ -508,7 +504,7 @@ function BugReportReceipt({ receipt }: { receipt: BugReportSubmissionReceipt }) 
       <h2 className="u-font-display mt-2 text-2xl font-black text-white">Report safely stored</h2>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
         {anonymousAccess
-          ? "Save both items below. The private link carries a one-time fragment token that is not sent in the request path."
+          ? "Save the private status link and recovery code below so you can return to this report."
           : "Use the link below while signed in with Discord to see status and reply privately."}
       </p>
       <div className={`mt-6 grid gap-3 ${anonymousAccess ? "sm:grid-cols-[1fr_auto]" : ""}`}>

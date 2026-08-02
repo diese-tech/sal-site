@@ -57,6 +57,11 @@ test("league logo asset renders in nav and metadata image path is reachable", as
   expect(response.headers()["content-type"]).toContain("image/png");
 });
 
+test("top nav shows the current season and status", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("banner")).toContainText("Season 1 · Active");
+});
+
 for (const asset of ["/assets/division-solar.png", "/assets/division-lunar.png"]) {
   test(`${asset} is available for division art`, async ({ request }) => {
     const response = await request.get(asset);
@@ -64,6 +69,32 @@ for (const asset of ["/assets/division-solar.png", "/assets/division-lunar.png"]
     expect(Number(response.headers()["content-length"] ?? 0)).toBeGreaterThan(100_000);
   });
 }
+
+for (const route of ["/rules", "/report-a-bug"]) {
+  test(`${route} omits internal implementation notes`, async ({ page }) => {
+    await page.goto(route);
+    await expect(page.locator("main")).not.toContainText(
+      /feature gates|model contract|paid fallback|shared rate limiting|release checks|normalized report|admin remediation/i,
+    );
+  });
+}
+
+test("same-page links scroll smoothly without hiding targets behind the site header", async ({ page }) => {
+  await page.goto("/rules");
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe("smooth");
+
+  for (const linkName of ["View the rulebook", "Ask a rules question"]) {
+    await page.goto("/rules");
+    await page.getByRole("link", { name: linkName }).click();
+    await expect.poll(() => page.evaluate(() => window.location.hash)).not.toBe("");
+    await page.waitForTimeout(500);
+    const targetTop = await page.evaluate(() => {
+      const target = document.querySelector(window.location.hash);
+      return target?.getBoundingClientRect().top ?? 0;
+    });
+    expect(targetTop).toBeGreaterThanOrEqual(100);
+  }
+});
 
 for (const cta of [
   { name: "Full Schedule", href: "/schedule" },
@@ -195,7 +226,7 @@ test("admin schedule create form exposes every editable field", async ({ page })
   await adminLogin(page);
   await page.goto("/admin/matches");
   await page.getByRole("button", { name: "+ Schedule Match" }).click();
-  for (const label of ["Division", "Home", "Away", "Status", "Date", "Time", "Week", "Stream URL", "VOD URL"]) {
+  for (const label of ["Division", "Home", "Away", "Status", "Date", "Time (EST)", "Week", "Stream URL", "VOD URL"]) {
     await expect(page.getByText(label, { exact: true })).toBeVisible();
   }
   // Score fields only appear when status is completed
@@ -283,7 +314,7 @@ test("mobile standings preserve readable team names", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/standings");
   await expect(page.getByRole("link", { name: /Helix Reign/ }).first()).toBeVisible();
-  await expect(page.getByText("100%").first()).toBeVisible();
+  await expect(page.getByText("6 pts").first()).toBeVisible();
   await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
 });
 

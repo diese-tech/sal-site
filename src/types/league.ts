@@ -103,9 +103,16 @@ export interface OrgStanding {
   divisionId: DivisionId;
   wins: number;
   losses: number;
+  draws: number;
   matchesPlayed: number;
+  /** Official Section 8 standings points (3/2/1/0 for a BO3 result). */
+  leaguePoints: number;
   pointsFor: number;
   pointsAgainst: number;
+  /** Match wins against each opponent, used for the second tiebreak. */
+  headToHeadWins: Record<string, number>;
+  /** Average final league points of opponents this team lost to. */
+  qualityOfLosses: number;
   streak: ("W" | "L" | "D")[];
   gamesBack: number;
 }

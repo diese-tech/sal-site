@@ -15,6 +15,7 @@ const STATUSES: { id: MatchStatus | "all"; label: string }[] = [
   { id: "live", label: "Live" },
   { id: "scheduled", label: "Scheduled" },
   { id: "completed", label: "Completed" },
+  { id: "forfeit", label: "Forfeit" },
   { id: "postponed", label: "Postponed" },
 ];
 

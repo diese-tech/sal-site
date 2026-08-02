@@ -81,7 +81,7 @@ export function OrgRosterPanel({
       {/* Captain */}
       {captain && (
         <div>
-          <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-300">Captain locked</p>
+          <p className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-300">Captain</p>
           <PlayerRow player={captain} divisionId={divisionId} />
         </div>
       )}

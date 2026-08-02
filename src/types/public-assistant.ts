@@ -91,7 +91,8 @@ export type AssistantUnavailableReason =
   | "sanitized_source_version_mismatch"
   | "privacy_guard_missing"
   | "durable_rate_limiter_missing"
-  | "free_model_contract_mismatch";
+  | "free_model_contract_mismatch"
+  | "provider_unavailable";
 
 export interface AssistantUnavailableResponse {
   ok: false;

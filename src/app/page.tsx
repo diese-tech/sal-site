@@ -8,6 +8,7 @@ import { AnnouncementCard } from "@/components/league/AnnouncementCard";
 import { LiveMatchFeature } from "@/components/league/LiveMatchFeature";
 import { getLeagueData } from "@/lib/league-data";
 import { isMatchLive } from "@/lib/match-live";
+import { sortStandings } from "@/lib/standings";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -80,10 +81,9 @@ async function PulseSection() {
           <p className="mb-3 font-mono text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-slate-400">Division Leaders</p>
           <div className="space-y-4">
             {divisions.map((division) => {
-              const divStandings = standings
-                .filter((s) => s.divisionId === division.id)
-                .sort((a, b) => b.wins - a.wins || a.losses - b.losses)
-                .slice(0, 3);
+              const divStandings = sortStandings(
+                standings.filter((s) => s.divisionId === division.id),
+              ).slice(0, 3);
               const accentColor =
                 division.id === "solar"
                   ? "text-orange-400"
@@ -109,7 +109,7 @@ async function PulseSection() {
                           <span className="w-4 font-mono text-[0.6rem] text-slate-600">#{rank + 1}</span>
                           <span className="flex-1 truncate text-[0.75rem] font-semibold text-slate-200">{org.tag}</span>
                           <span className="font-mono text-[0.65rem] font-semibold text-slate-400">
-                            {s.wins}–{s.losses}
+                            {s.leaguePoints} pts
                           </span>
                           {/* Win streak dots — leading W results, up to 5 */}
                           {s.streak.length > 0 && s.streak[0] === "W" && (
@@ -153,7 +153,7 @@ async function MatchesSection() {
     .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.scheduledTime.localeCompare(b.scheduledTime))
     .slice(0, 5);
   const recentResults = matches
-    .filter((m) => m.status === "completed")
+    .filter((m) => m.status === "completed" || m.status === "forfeit")
     .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate) || b.scheduledTime.localeCompare(a.scheduledTime))
     .slice(0, 4);
   const getOrg = (id: string) => orgs.find((o) => o.id === id)!;
@@ -193,7 +193,7 @@ async function DivisionsSection() {
           <DivisionCard
             key={div.id}
             division={div}
-            standings={standings.filter((s) => s.divisionId === div.id).sort((a, b) => b.wins - a.wins)}
+            standings={sortStandings(standings.filter((s) => s.divisionId === div.id))}
             orgs={orgs}
           />
         ))}

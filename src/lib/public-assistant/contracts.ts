@@ -129,6 +129,7 @@ const assistantUnavailableResponseSchema = z
         "privacy_guard_missing",
         "durable_rate_limiter_missing",
         "free_model_contract_mismatch",
+        "provider_unavailable",
       ]),
     ),
     retryable: z.literal(false),
@@ -176,7 +177,7 @@ export function buildUnavailableResponse(reasons: AssistantUnavailableReason[]):
     kind: "assistant_unavailable",
     code: "PUBLIC_ASSISTANT_DISABLED",
     message:
-      "The public rules assistant is disabled. Once it launches, it will use approved public-safe sources only. No guidance or ticket was created from this request.",
+      "The public rules assistant is temporarily unavailable. No guidance or ticket was created from this request.",
     reasons,
     retryable: false,
     model: PUBLIC_ASSISTANT_MODEL,

@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 import { formatAuditEntry } from "@/lib/audit-format";
 import { getAuditLog, getLeagueData } from "@/lib/league-data";
 import { cn } from "@/lib/utils";
+import { sortStandings } from "@/lib/standings";
 import Link from "next/link";
 
 export const metadata = { title: "Admin - SAL" };
@@ -24,7 +25,7 @@ export default async function AdminOverviewPage() {
     orgs: orgs.filter((o) => o.divisionId === id).length,
     players: players.filter((p) => p.divisionId === id).length,
     topOrg: (() => {
-      const divStandings = standings.filter((s) => s.divisionId === id).sort((a, b) => b.wins - a.wins);
+      const divStandings = sortStandings(standings.filter((s) => s.divisionId === id));
       if (!divStandings[0]) return "—";
       return orgs.find((o) => o.id === divStandings[0].orgId)?.name ?? "—";
     })(),
