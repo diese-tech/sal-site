@@ -226,7 +226,7 @@ export function AdminMatchesClient({
           {confirming && (
             <div className="rounded-2xl border border-orange-300/30 bg-orange-950/40 p-4">
               <p className="text-sm font-semibold text-orange-100">
-                Saving a completed or forfeited match will immediately recalculate standings. This cannot be undone automatically. Continue?
+                Saving a {editing.status === "forfeit" ? "forfeited" : "completed"} match will immediately recalculate standings. This cannot be undone automatically. Continue?
               </p>
               <div className="mt-3 flex gap-2">
                 <button onClick={() => void doSave()} className="rounded-xl border border-orange-300/40 bg-orange-300/15 px-4 py-2 text-sm font-black uppercase text-orange-100">Yes, save & recalculate</button>

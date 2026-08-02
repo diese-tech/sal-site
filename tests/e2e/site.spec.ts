@@ -226,7 +226,7 @@ test("admin schedule create form exposes every editable field", async ({ page })
   await adminLogin(page);
   await page.goto("/admin/matches");
   await page.getByRole("button", { name: "+ Schedule Match" }).click();
-  for (const label of ["Division", "Home", "Away", "Status", "Date", "Time", "Week", "Stream URL", "VOD URL"]) {
+  for (const label of ["Division", "Home", "Away", "Status", "Date", "Time (EST)", "Week", "Stream URL", "VOD URL"]) {
     await expect(page.getByText(label, { exact: true })).toBeVisible();
   }
   // Score fields only appear when status is completed
@@ -314,7 +314,7 @@ test("mobile standings preserve readable team names", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/standings");
   await expect(page.getByRole("link", { name: /Helix Reign/ }).first()).toBeVisible();
-  await expect(page.getByText("100%").first()).toBeVisible();
+  await expect(page.getByText("6 pts").first()).toBeVisible();
   await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
 });
 

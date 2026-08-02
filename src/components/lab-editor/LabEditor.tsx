@@ -579,7 +579,7 @@ export function LabEditor() {
                             Layout: <span className="text-slate-200">{config.board.layoutPreset} → [{getBoardRows(config.board.teamCount, config.board.layoutPreset).join(", ")}]</span>
                           </p>
                         </div>
-                        <div className="resize-x overflow-hidden rounded-xl" style={{ minWidth: "320px" }}>
+                        <div className="w-full min-w-0 resize-x overflow-hidden rounded-xl sm:min-w-[320px]">
                           <div
                             ref={boardPreviewRef}
                             className="w-full overflow-hidden"

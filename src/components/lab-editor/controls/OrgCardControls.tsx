@@ -11,7 +11,7 @@ export function OrgCardControls({
   return (
     <>
       <SelectControl label="Roster size" value={String(config.orgCard.rosterSize) as "6" | "7" | "8"} options={["6", "7", "8"]} onChange={(v) => updateSection("orgCard", "rosterSize", Number(v) as 6 | 7 | 8)} />
-      <ToggleRow label="Captain slot" value={config.orgCard.showCaptainLockedSlot} onChange={(v) => updateSection("orgCard", "showCaptainLockedSlot", v)} />
+      <ToggleRow label="Captain locked slot" value={config.orgCard.showCaptainLockedSlot} onChange={(v) => updateSection("orgCard", "showCaptainLockedSlot", v)} />
       <ToggleRow label="Active state" value={config.orgCard.activeState} onChange={(v) => updateSection("orgCard", "activeState", v)} />
       <SelectControl label="Header intensity" value={config.orgCard.headerIntensity} options={["low", "medium", "high"]} onChange={(v) => updateSection("orgCard", "headerIntensity", v)} />
       <Slider label="Org card scale" value={config.orgCard.orgCardScale} min={0.75} max={1.25} step={0.01} onChange={(v) => updateSection("orgCard", "orgCardScale", v)} />
