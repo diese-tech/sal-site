@@ -22,26 +22,14 @@ export default async function ReportABugPage() {
 
       <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14">
         <div className="mb-8 max-w-3xl">
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            <p className="font-mono text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">
-              League support
-            </p>
-            <span
-              className={`rounded-md border px-2.5 py-1 font-mono text-[0.65rem] font-bold uppercase tracking-wider ${
-                submissionEnabled
-                  ? "border-emerald-300/35 bg-emerald-300/10 text-emerald-200"
-                  : "border-amber-300/30 bg-amber-300/10 text-amber-200"
-              }`}
-            >
-              {submissionEnabled ? "Intake online" : "Intake preparing"}
-            </span>
-          </div>
+          <p className="mb-4 font-mono text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">
+            League support
+          </p>
           <h1 className="u-font-display text-4xl font-black tracking-tight text-white sm:text-5xl">
             Found something broken?
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
-            Give the SAL team a clear report and we will route it to the right people. Reports are
-            anonymous by default, and you can review everything before it is sent.
+            Tell us what happened and how to reproduce it. You can review everything before sending.
           </p>
         </div>
 
@@ -53,9 +41,8 @@ export default async function ReportABugPage() {
               title="Anonymous by default"
               tone="cyan"
               items={[
-                "Your name is not included in the staff ticket.",
-                "Signed-in identity is linked only when you request private Discord replies.",
-                "Only an Owner may reveal that hidden link for a documented safety, abuse, or legal reason.",
+                "Your name is not shown in the staff ticket.",
+                "Sign in only if you want private Discord replies.",
               ]}
             />
             <InfoCard
@@ -63,9 +50,8 @@ export default async function ReportABugPage() {
               title="A trackable ticket"
               tone="emerald"
               items={[
-                "You receive a private status link and recovery code after the report is safely stored.",
-                "Staff can acknowledge, investigate, ask for details, and record a resolution.",
-                "Waiting tickets get a reminder after 3 days and close as No Response after 7 days.",
+                "You receive a private link to check the report status.",
+                "Staff may ask for more details and will record the resolution.",
               ]}
             />
             <div className="rounded-[var(--sal-card-radius)] border border-amber-300/20 bg-amber-300/[0.06] p-4">
@@ -73,8 +59,8 @@ export default async function ReportABugPage() {
                 Keep secrets out
               </p>
               <p className="mt-2 text-xs leading-5 text-slate-400">
-                Never include passwords, access tokens, database credentials, or private personal
-                information. Critical means urgent impact, not permission to publish exploit details.
+                Do not include passwords, access tokens, or personal information. Keep security-sensitive details out
+                of public channels.
               </p>
             </div>
           </aside>

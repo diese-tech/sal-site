@@ -4,26 +4,29 @@ import { RulesAssistant } from "@/components/rules/RulesAssistant";
 
 export const metadata: Metadata = {
   title: "Rules and Rulings | Serpent Ascension League",
-  description: "Published SAL rules, public-safe precedent, and the official ruling request entry point.",
+  description: "Official SAL rules and guidance for league questions.",
 };
+
+const RULEBOOK_URL =
+  "https://docs.google.com/document/d/1bL0i2Wrfjt0q3jauPDqoBweOOXdkJWMWqfp9nngPjjU/edit?tab=t.0#heading=h.mf7wvm9z1scn";
 
 const SOURCE_HIERARCHY = [
   {
     rank: "01",
-    title: "Current published rules",
-    description: "The active, versioned SAL rulebook is the controlling public source.",
+    title: "Current rulebook",
+    description: "Published SAL rules are the primary source for every ruling.",
     accent: "border-cyan-300/30 bg-cyan-300/[0.07] text-cyan-200",
   },
   {
     rank: "02",
-    title: "Approved public precedent",
-    description: "Sanitized decisions may explain how a rule applied, but they never override a current rule.",
+    title: "Published rulings",
+    description: "Past public rulings may clarify a rule but never override it.",
     accent: "border-violet-300/25 bg-violet-300/[0.06] text-violet-200",
   },
   {
     rank: "03",
-    title: "Official admin review",
-    description: "Ambiguous, incomplete, or conflicting cases belong in a tracked ruling ticket.",
+    title: "SAL admin decision",
+    description: "Ask a SAL admin when published guidance does not resolve your case.",
     accent: "border-emerald-300/25 bg-emerald-300/[0.06] text-emerald-200",
   },
 ] as const;
@@ -40,27 +43,27 @@ export default function RulesPage() {
           <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1.4fr_0.6fr] lg:p-10">
             <div>
               <p className="font-mono text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-cyan-300">
-                League governance
+                League rules
               </p>
               <h1 className="mt-3 max-w-3xl text-3xl font-black tracking-tight text-white sm:text-5xl">
-                Rules should be clear before the lobby starts.
+                Know the rules before the lobby starts.
               </h1>
               <p className="mt-4 max-w-2xl text-sm font-semibold leading-7 text-slate-300 sm:text-base">
-                This will be the public home for versioned SAL rules, approved public-safe precedent, and tracked ruling
-                requests. Published rules always outrank precedent.
+                Read the official SAL rulebook or ask how a rule applies. SAL admins make the final call on
+                case-specific rulings.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <a
                   href="#rule-library"
                   className="rounded-xl border border-cyan-300/40 bg-cyan-300/15 px-5 py-2.5 text-xs font-black uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/20"
                 >
-                  Browse rule sources
+                  View the rulebook
                 </a>
                 <a
                   href="#request-a-ruling"
                   className="rounded-xl border border-violet-300/30 bg-violet-300/10 px-5 py-2.5 text-xs font-black uppercase tracking-wide text-violet-100 transition hover:bg-violet-300/15"
                 >
-                  Request a ruling
+                  Ask a rules question
                 </a>
               </div>
             </div>
@@ -69,12 +72,12 @@ export default function RulesPage() {
               <div className="flex items-center gap-2">
                 <span className="h-2 w-2 rounded-full bg-amber-300 shadow-[0_0_16px_rgba(252,211,77,0.75)]" />
                 <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-amber-200">
-                  Source connection pending
+                  Official guidance
                 </p>
               </div>
               <p className="mt-3 text-sm font-semibold leading-6 text-slate-300">
-                The new public rule library and assistant are safely disabled until approved sources and feature gates
-                are connected. No placeholder answer is treated as an SAL ruling.
+                Start with the published rulebook. Contact a SAL admin when you need a binding decision for a match,
+                roster, or player.
               </p>
               <Link
                 href="/report-a-bug"
@@ -94,7 +97,7 @@ export default function RulesPage() {
                   Decision path
                 </p>
                 <h2 id="source-order-heading" className="mt-1 text-2xl font-black text-white">
-                  How guidance is evaluated
+                  Where to look first
                 </h2>
               </div>
               <div className="grid gap-3 md:grid-cols-3">
@@ -106,10 +109,6 @@ export default function RulesPage() {
                   </article>
                 ))}
               </div>
-              <p className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold leading-5 text-slate-400">
-                If a precedent conflicts with a current published rule, the assistant must use the current rule, hide any
-                private precedent detail, and route the conflict for admin remediation.
-              </p>
             </section>
 
             <section
@@ -120,12 +119,12 @@ export default function RulesPage() {
               <div className="flex flex-col gap-4 border-b border-white/10 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-cyan-400">
-                    Canonical sources
+                    Official source
                   </p>
                   <h2 id="rule-library-heading" className="mt-1 text-xl font-black text-white">Published rule library</h2>
                 </div>
                 <span className="w-fit rounded-full border border-slate-600/40 bg-slate-800/70 px-3 py-1 font-mono text-[0.6rem] font-semibold uppercase tracking-wider text-slate-400">
-                  Not connected
+                  Available
                 </span>
               </div>
               <div className="p-6 text-center sm:p-10">
@@ -135,27 +134,32 @@ export default function RulesPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4 5.5v15A2.5 2.5 0 016.5 18" />
                   </svg>
                 </div>
-                <h3 className="mt-4 text-base font-black text-white">No rule text has been published to this page yet.</h3>
+                <h3 className="mt-4 text-base font-black text-white">SAL Rulebook</h3>
                 <p className="mx-auto mt-2 max-w-lg text-sm font-semibold leading-6 text-slate-400">
-                  The shell does not copy old Discord posts or invent temporary rules. Only an approved, versioned public
-                  source will appear here.
+                  Read the current published rules in Google Docs.
                 </p>
+                <a
+                  href={RULEBOOK_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-5 inline-flex rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-5 py-2.5 text-xs font-black uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/20"
+                >
+                  Open the rulebook <span aria-hidden="true" className="ml-1">↗</span>
+                </a>
               </div>
             </section>
 
             <section className="grid gap-3 sm:grid-cols-2">
               <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                <p className="text-sm font-black text-white">Need a binding decision?</p>
+                <p className="text-sm font-black text-white">Need a final decision?</p>
                 <p className="mt-2 text-sm font-semibold leading-6 text-slate-400">
-                  Assistant guidance is advisory. A binding eligibility or game-day decision requires an authorized SAL
-                  admin and a tracked ticket.
+                  Use the assistant for general guidance. Ask a SAL admin for eligibility, dispute, or game-day rulings.
                 </p>
               </article>
               <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                <p className="text-sm font-black text-white">Privacy at launch</p>
+                <p className="text-sm font-black text-white">Keep private details private</p>
                 <p className="mt-2 text-sm font-semibold leading-6 text-slate-400">
-                  One-shot guidance is not stored as chat history. Confirmed official requests are separate tracked
-                  records. Public models may receive only published rules, approved sanitized findings, and redacted facts.
+                  Do not paste private evidence or personal information into a general rules question.
                 </p>
               </article>
             </section>

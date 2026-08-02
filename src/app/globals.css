@@ -13,6 +13,13 @@
 
 html {
   background: #060d1c;
+  scroll-padding-top: 7rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 /* --- Design tokens --- */

@@ -70,6 +70,32 @@ for (const asset of ["/assets/division-solar.png", "/assets/division-lunar.png"]
   });
 }
 
+for (const route of ["/rules", "/report-a-bug"]) {
+  test(`${route} omits internal implementation notes`, async ({ page }) => {
+    await page.goto(route);
+    await expect(page.locator("main")).not.toContainText(
+      /feature gates|model contract|paid fallback|shared rate limiting|release checks|normalized report|admin remediation/i,
+    );
+  });
+}
+
+test("same-page links scroll smoothly without hiding targets behind the site header", async ({ page }) => {
+  await page.goto("/rules");
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe("smooth");
+
+  for (const linkName of ["View the rulebook", "Ask a rules question"]) {
+    await page.goto("/rules");
+    await page.getByRole("link", { name: linkName }).click();
+    await expect.poll(() => page.evaluate(() => window.location.hash)).not.toBe("");
+    await page.waitForTimeout(500);
+    const targetTop = await page.evaluate(() => {
+      const target = document.querySelector(window.location.hash);
+      return target?.getBoundingClientRect().top ?? 0;
+    });
+    expect(targetTop).toBeGreaterThanOrEqual(100);
+  }
+});
+
 for (const cta of [
   { name: "Full Schedule", href: "/schedule" },
   { name: "All Teams", href: "/teams" },
