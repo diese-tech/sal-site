@@ -9,7 +9,7 @@ import {
 } from "@/types/public-assistant";
 
 const MAX_QUESTION_LENGTH = 2_000;
-const REQUEST_TIMEOUT_MS = 40_000;
+const REQUEST_TIMEOUT_MS = 50_000;
 
 function clientUnavailableResponse(message: string): PublicAssistantResponse {
   return {

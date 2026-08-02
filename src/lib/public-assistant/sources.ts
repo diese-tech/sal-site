@@ -229,6 +229,42 @@ const RULEBOOK_REQUIRED_MARKERS = ["1.0 purpose", "8.0 seeding", "26.0 rulebook 
 
 let cachedRulebook: { source: SanitizedAssistantSource; expiresAt: number } | null = null;
 
+const SEARCH_STOP_WORDS = new Set([
+  "about", "after", "before", "during", "from", "have", "many", "often", "rules", "should", "team", "teams",
+  "that", "their", "there", "they", "this", "what", "when", "where", "which", "with", "would", "your",
+]);
+
+export function selectRelevantRulebookExcerpt(canonicalText: string, question: string): string {
+  const sections = canonicalText
+    .split(/(?=^\d+\.\d+\s+)/gm)
+    .map((section) => section.trim())
+    .filter((section) => /^\d+\.\d+\s+/.test(section));
+  const terms = [...new Set(
+    question.toLowerCase().match(/[a-z0-9]+/g)?.filter(
+      (term) => term.length >= 4 && !SEARCH_STOP_WORDS.has(term),
+    ) ?? [],
+  )];
+
+  if (sections.length === 0 || terms.length === 0) return canonicalText;
+
+  const ranked = sections
+    .map((section, index) => {
+      const normalized = section.toLowerCase();
+      const heading = normalized.split("\n", 1)[0] ?? "";
+      const score = terms.reduce(
+        (total, term) => total + (normalized.includes(term) ? 1 : 0) + (heading.includes(term) ? 2 : 0),
+        0,
+      );
+      return { section, index, score };
+    })
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, 5)
+    .sort((left, right) => left.index - right.index);
+
+  return ranked.length > 0 ? ranked.map(({ section }) => section).join("\n\n") : canonicalText;
+}
+
 async function loadPublishedRulebook(): Promise<SanitizedAssistantSource> {
   if (cachedRulebook && cachedRulebook.expiresAt > Date.now()) return cachedRulebook.source;
 
@@ -303,7 +339,13 @@ export function getSanitizedSourceRetriever(): SanitizedSourceRetriever | null {
     },
     async search(input) {
       const candidates: SanitizedAssistantSource[] = [];
-      if (input.sourceTypes.includes("published_rule")) candidates.push(await loadPublishedRulebook());
+      if (input.sourceTypes.includes("published_rule")) {
+        const rulebook = await loadPublishedRulebook();
+        candidates.push({
+          ...rulebook,
+          canonicalText: selectRelevantRulebookExcerpt(rulebook.canonicalText, input.question),
+        });
+      }
       if (input.sourceTypes.includes("sanitized_precedent")) candidates.push(...APPROVED_PRECEDENTS);
       return candidates.slice(0, input.limit);
     },

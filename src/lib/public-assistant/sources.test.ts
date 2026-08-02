@@ -6,6 +6,7 @@ import {
   sanitizedAssistantSourceSchema,
   selectEligibleSources,
   verifySanitizedSourceReadiness,
+  selectRelevantRulebookExcerpt,
   type SanitizedAssistantSource,
 } from "./sources";
 
@@ -45,6 +46,18 @@ const expectedContract = {
 };
 
 describe("sanitized assistant sources", () => {
+  it("sends the model the relevant rulebook sections instead of the full document", () => {
+    const text = [
+      "1.0 Purpose\nGeneral league purpose and conduct.",
+      "9.0 Pause Rules\nEach team may pause once per set for technical issues.",
+      "26.0 Rulebook Disclaimer\nSAL admins make binding rulings.",
+    ].join("\n\n");
+
+    const excerpt = selectRelevantRulebookExcerpt(text, "How often can a team pause for technical reasons?");
+    expect(excerpt).toContain("9.0 Pause Rules");
+    expect(excerpt).not.toContain("1.0 Purpose");
+  });
+
   it("retrieves the validated Google Doc rulebook and approved Terra precedent", async () => {
     const exportedRulebook = [
       "1.0 Purpose",
