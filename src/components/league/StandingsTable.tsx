@@ -5,6 +5,7 @@ import type { Division, OrgStanding, Org, DivisionId } from "@/types/league";
 import { OrgLogo } from "@/components/card-lab/ui";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { sortStandings } from "@/lib/standings";
 
 const divisionTab: Record<DivisionId, { active: string; label: string }> = {
   solar: {
@@ -59,9 +60,9 @@ export function StandingsTable({
 }) {
   const [activeDivision, setActiveDivision] = useState<DivisionId>(defaultDivision);
 
-  const divStandings = standings
-    .filter((s) => s.divisionId === activeDivision)
-    .sort((a, b) => b.wins - a.wins || b.pointsFor - b.pointsAgainst - (a.pointsFor - a.pointsAgainst));
+  const divStandings = sortStandings(
+    standings.filter((s) => s.divisionId === activeDivision),
+  );
 
   const topRow = divisionTopRow[activeDivision];
 
@@ -93,8 +94,6 @@ export function StandingsTable({
         {divStandings.map((s, i) => {
           const org = orgs.find((o) => o.id === s.orgId);
           if (!org) return null;
-          const winPct = s.matchesPlayed > 0 ? (s.wins / s.matchesPlayed) : 0;
-
           return (
             <Link
               key={s.orgId}
@@ -114,14 +113,14 @@ export function StandingsTable({
                   <p className="text-[0.6rem] font-black uppercase text-slate-500">{org.tag}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono text-lg font-black text-white">{s.wins}-{s.losses}</p>
-                  <p className="text-[0.6rem] font-black uppercase text-slate-500">{(winPct * 100).toFixed(0)}%</p>
+                  <p className="font-mono text-lg font-black text-white">{s.leaguePoints} pts</p>
+                  <p className="text-[0.6rem] font-black uppercase text-slate-500">
+                    {s.wins}-{s.losses}-{s.draws}
+                  </p>
                 </div>
               </div>
               <div className="mt-3 flex items-center justify-between border-t border-white/8 pt-2">
-                <span className="text-xs font-bold uppercase text-slate-500">
-                  GB {s.gamesBack === 0 ? "—" : s.gamesBack}
-                </span>
+                <span className="text-xs font-bold uppercase text-slate-500">League points</span>
                 <StreakDots streak={s.streak} />
               </div>
             </Link>
@@ -130,13 +129,13 @@ export function StandingsTable({
       </div>
 
       {/* Table header */}
-      <div className="hidden grid-cols-[2rem_1fr_3.5rem_3.5rem_4rem_4rem_5rem] gap-x-3 border-b border-white/8 px-4 py-2.5 text-[0.65rem] font-black uppercase text-slate-500 sm:grid">
+      <div className="hidden grid-cols-[2rem_1fr_3.25rem_3.25rem_3.25rem_4rem_5rem] gap-x-3 border-b border-white/8 px-4 py-2.5 text-[0.65rem] font-black uppercase text-slate-500 sm:grid">
         <span>#</span>
         <span>Team</span>
         <span className="text-center">W</span>
         <span className="text-center">L</span>
-        <span className="text-center">Win%</span>
-        <span className="text-center">GB</span>
+        <span className="text-center">D</span>
+        <span className="text-center">Pts</span>
         <span className="text-center">Last 5</span>
       </div>
 
@@ -144,14 +143,12 @@ export function StandingsTable({
       {divStandings.map((s, i) => {
         const org = orgs.find((o) => o.id === s.orgId);
         if (!org) return null;
-        const winPct = s.matchesPlayed > 0 ? (s.wins / s.matchesPlayed) : 0;
-
         return (
           <Link
             key={s.orgId}
             href={`/teams/${org.id}`}
             className={cn(
-              "hidden grid-cols-[2rem_1fr_3.5rem_3.5rem_4rem_4rem_5rem] items-center gap-x-3 px-4 py-3 transition-colors hover:bg-white/[0.04] sm:grid",
+              "hidden grid-cols-[2rem_1fr_3.25rem_3.25rem_3.25rem_4rem_5rem] items-center gap-x-3 px-4 py-3 transition-colors hover:bg-white/[0.04] sm:grid",
               i === 0 && topRow,
             )}
           >
@@ -167,8 +164,8 @@ export function StandingsTable({
             </div>
             <span className="text-center font-black tabular-nums text-white">{s.wins}</span>
             <span className="text-center tabular-nums text-slate-400">{s.losses}</span>
-            <span className="text-center tabular-nums text-slate-400">{(winPct * 100).toFixed(0)}%</span>
-            <span className="text-center tabular-nums text-slate-500">{s.gamesBack === 0 ? "—" : s.gamesBack}</span>
+            <span className="text-center tabular-nums text-slate-400">{s.draws}</span>
+            <span className="text-center font-black tabular-nums text-cyan-100">{s.leaguePoints}</span>
             <div className="flex justify-center">
               <StreakDots streak={s.streak} />
             </div>

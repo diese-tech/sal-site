@@ -63,10 +63,10 @@ export function OrgCard({
             {org.divisionId.charAt(0).toUpperCase() + org.divisionId.slice(1)} Division
           </span>
 
-          {/* Captain locked block */}
+          {/* Captain block */}
           {captainIgn && (
             <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-              <p className="mb-1.5 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Captain locked</p>
+              <p className="mb-1.5 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Captain</p>
               <p className="truncate font-black text-white">{captainIgn}</p>
             </div>
           )}

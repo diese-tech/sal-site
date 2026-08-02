@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { recalcStandings } from "./standings";
+import { recalcStandings, sortStandings } from "./standings";
 import type { Org, Match } from "@/types/league";
 
 // ── Helper factories ────────────────────────────────────────────────────────
@@ -57,7 +57,9 @@ describe("recalcStandings()", () => {
     for (const s of result) {
       expect(s.wins).toBe(0);
       expect(s.losses).toBe(0);
+      expect(s.draws).toBe(0);
       expect(s.matchesPlayed).toBe(0);
+      expect(s.leaguePoints).toBe(0);
       expect(s.pointsFor).toBe(0);
       expect(s.pointsAgainst).toBe(0);
       expect(s.streak).toEqual([]);
@@ -214,6 +216,31 @@ describe("recalcStandings()", () => {
   });
 
   describe("points accumulation", () => {
+    it("awards official league points for every BO3 result, including forfeits", () => {
+      const orgs = [makeOrg("a"), makeOrg("b"), makeOrg("c"), makeOrg("d")];
+      const matches = [
+        makeMatch("a", "b", 2, 0),
+        makeMatch("a", "c", 2, 1),
+        makeMatch("d", "b", 2, 1),
+        makeMatch("c", "d", 2, 0, "forfeit"),
+      ];
+
+      const result = recalcStandings({ orgs, matches });
+
+      expect(result.find((s) => s.orgId === "a")!.leaguePoints).toBe(5);
+      expect(result.find((s) => s.orgId === "b")!.leaguePoints).toBe(1);
+      expect(result.find((s) => s.orgId === "c")!.leaguePoints).toBe(4);
+      expect(result.find((s) => s.orgId === "d")!.leaguePoints).toBe(2);
+    });
+
+    it("records a draw without inventing a council-approved tie point value", () => {
+      const orgs = [makeOrg("home"), makeOrg("away")];
+      const result = recalcStandings({ orgs, matches: [makeMatch("home", "away", 1, 1)] });
+
+      expect(result.find((s) => s.orgId === "home")).toMatchObject({ draws: 1, leaguePoints: 0 });
+      expect(result.find((s) => s.orgId === "away")).toMatchObject({ draws: 1, leaguePoints: 0 });
+    });
+
     it("accumulates pointsFor and pointsAgainst across multiple matches", () => {
       const orgs = [makeOrg("home"), makeOrg("away")];
       const matches = [
@@ -421,6 +448,8 @@ describe("recalcStandings()", () => {
       expect(winner.losses).toBe(0);
       expect(loser.wins).toBe(0);
       expect(loser.losses).toBe(1);
+      expect(winner.leaguePoints).toBe(3);
+      expect(loser.leaguePoints).toBe(0);
     });
 
     it("forfeit increments matchesPlayed for both teams", () => {
@@ -439,6 +468,37 @@ describe("recalcStandings()", () => {
       const result = recalcStandings({ orgs, matches: [match] });
       expect(result.find((s) => s.orgId === "winner")!.streak).toEqual(["W"]);
       expect(result.find((s) => s.orgId === "loser")!.streak).toEqual(["L"]);
+    });
+  });
+
+  describe("official standings order", () => {
+    it("sorts by league points before match wins", () => {
+      const orgs = [makeOrg("alpha"), makeOrg("beta"), makeOrg("gamma")];
+      const standings = recalcStandings({
+        orgs,
+        matches: [
+          makeMatch("alpha", "gamma", 2, 1),
+          makeMatch("beta", "gamma", 2, 0),
+        ],
+      });
+
+      expect(sortStandings(standings).map((standing) => standing.orgId)).toEqual(["beta", "alpha", "gamma"]);
+    });
+
+    it("uses head-to-head after league points and total match wins", () => {
+      const orgs = [makeOrg("alpha"), makeOrg("beta"), makeOrg("gamma")];
+      const standings = recalcStandings({
+        orgs,
+        matches: [
+          makeMatch("alpha", "beta", 2, 0),
+          makeMatch("beta", "gamma", 2, 0),
+          makeMatch("gamma", "alpha", 2, 0),
+        ],
+      });
+
+      const alpha = standings.find((standing) => standing.orgId === "alpha")!;
+      const beta = standings.find((standing) => standing.orgId === "beta")!;
+      expect(sortStandings([beta, alpha]).map((standing) => standing.orgId)).toEqual(["alpha", "beta"]);
     });
   });
 

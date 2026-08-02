@@ -1,11 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { PublicSafeModelInput } from "@/types/public-assistant";
 import {
+  getSanitizedSourceRetriever,
   orderSanitizedSources,
   sanitizedAssistantSourceSchema,
   selectEligibleSources,
   verifySanitizedSourceReadiness,
   type SanitizedAssistantSource,
 } from "./sources";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function source(
   id: string,
@@ -39,6 +45,29 @@ const expectedContract = {
 };
 
 describe("sanitized assistant sources", () => {
+  it("retrieves the validated Google Doc rulebook and approved Terra precedent", async () => {
+    const exportedRulebook = [
+      "1.0 Purpose",
+      "Published competition rules. ".repeat(45),
+      "8.0 Seeding",
+      "Round-robin league points.",
+      "26.0 Disclaimer",
+    ].join("\n");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(exportedRulebook, { status: 200 })));
+
+    const retriever = getSanitizedSourceRetriever();
+    await expect(retriever?.readiness()).resolves.toMatchObject({ ready: true, sourceCount: 2 });
+    const sources = await retriever?.search({
+      question: "How does Terra work?" as PublicSafeModelInput,
+      scope: { kind: "global" },
+      limit: 8,
+      sourceTypes: ["published_rule", "sanitized_precedent"],
+    });
+
+    expect(sources?.map(({ id }) => id)).toEqual(["sal-rulebook-google-doc", "terra-solar-adaptation"]);
+    expect(sources?.some(({ sourceType }) => sourceType === "public_faq")).toBe(false);
+  });
+
   it("always ranks current published rules ahead of precedent and FAQ material", () => {
     const ordered = orderSanitizedSources([
       source("faq", "public_faq", "2026-07-18T12:00:00Z"),

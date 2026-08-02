@@ -24,7 +24,15 @@ const matchSchema = z.object({
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "homeOrgId and awayOrgId must differ", path: ["awayOrgId"] });
   }
   if ((val.status === "completed" || val.status === "forfeit") && (val.homeScore === undefined || val.awayScore === undefined)) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "homeScore and awayScore are required when status is completed", path: ["homeScore"] });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "homeScore and awayScore are required for final results", path: ["homeScore"] });
+  }
+  if (
+    val.status === "forfeit" &&
+    val.homeScore !== undefined &&
+    val.awayScore !== undefined &&
+    !((val.homeScore === 2 && val.awayScore === 0) || (val.homeScore === 0 && val.awayScore === 2))
+  ) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "forfeits must be recorded as a 2-0 result", path: ["homeScore"] });
   }
   if (val.status !== "completed" && val.status !== "forfeit" && (val.homeScore !== undefined || val.awayScore !== undefined)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "scores may only be set when status is completed", path: ["homeScore"] });

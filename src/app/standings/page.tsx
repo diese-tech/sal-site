@@ -27,7 +27,7 @@ export default async function StandingsPage({
             {season.name} · Week {season.currentWeek}
           </h1>
           <p className="mt-1.5 max-w-2xl text-sm font-semibold text-slate-400">
-            Win%, games back, and form across Solar, Lunar, and Terra divisions. Click any team to view their roster.
+            Official league points, records, and recent form across Solar, Lunar, and Terra divisions. Click any team to view their roster.
           </p>
           {allSeasons.length > 1 && (
             <SeasonSelector seasons={allSeasons} currentSeasonId={season.id} />
@@ -40,12 +40,15 @@ export default async function StandingsPage({
       <div className="mt-5 flex flex-wrap gap-4 text-[0.65rem] font-bold uppercase text-slate-600">
         <span>W - Wins</span>
         <span>L - Losses</span>
-        <span>Win% - Win percentage</span>
-        <span>GB - Games behind leader</span>
+        <span>D - Draws</span>
+        <span>Pts - League points</span>
         <span>Last 5 - Recent form</span>
       </div>
       <p className="mt-2 text-[0.65rem] font-bold uppercase text-slate-600">
-        Forfeits count toward W/L but not points
+        Scoring: 2-0 win = 3 pts · 2-1 win = 2 pts · 1-2 loss = 1 pt · 0-2 loss = 0 pts. A 2-0 forfeit awards 3 pts.
+      </p>
+      <p className="mt-1 text-[0.65rem] font-bold uppercase text-slate-600">
+        Draws are recorded; their league-point value is pending a council ruling.
       </p>
     </main>
   );

@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
+import { createHash } from "node:crypto";
 import { z } from "zod";
+import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rate-limit";
 
 const durableLimiterDecisionSchema = z
   .object({
@@ -30,7 +32,27 @@ export function parseDurableLimiterDecision(input: unknown): DurableLimiterDecis
   return parsed.success ? parsed.data : null;
 }
 
-/** Release B must supply a shared database-backed limiter for site and bot traffic. */
 export function getDurableRequestLimiter(): DurableRequestLimiter | null {
-  return null;
+  // Launch protection uses the site's existing in-memory limiter. This is
+  // best-effort on serverless instances; sal-database should eventually own a
+  // shared limiter alongside versioned rulebook ingestion.
+  return {
+    async consume({ route, request, actorKey }) {
+      const identifier = actorKey ?? getRateLimitIdentifier(request);
+      const key = `${route}:${identifier}`;
+      const decision = checkRateLimit(key);
+      const decisionId = createHash("sha256")
+        .update(`${key}:${decision.resetAt}`)
+        .digest("hex")
+        .slice(0, 32);
+
+      return {
+        allowed: decision.allowed,
+        retryAfterSeconds: decision.allowed
+          ? null
+          : Math.max(1, Math.ceil((decision.resetAt - Date.now()) / 1_000)),
+        decisionId,
+      };
+    },
+  };
 }

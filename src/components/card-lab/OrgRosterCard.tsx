@@ -52,7 +52,7 @@ export function OrgRosterCard({ org, editorConfig }: { org: OrgRoster; editorCon
 
       <div className="space-y-3 p-4" style={{ padding: orgConfig ? `${orgConfig.orgCardPadding}px` : undefined }}>
         {orgConfig?.showCaptainLockedSlot === false ? null : <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-          <div className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Captain locked</div>
+          <div className="mb-2 text-[0.68rem] font-black uppercase tracking-normal text-slate-500">Captain</div>
           <div className="flex items-center gap-3">
             <AvatarMark initials={org.captain.avatarInitials} gradient={org.captain.avatarGradient} className="size-11 rounded-xl text-xs" />
             <div className="min-w-0 flex-1">

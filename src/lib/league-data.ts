@@ -91,7 +91,7 @@ type DbMatch = Omit<Match, "divisionId" | "homeOrgId" | "awayOrgId" | "scheduled
   deletion_scheduled_at?: string | null;
 };
 
-type DbStanding = Omit<OrgStanding, "orgId" | "divisionId" | "matchesPlayed" | "pointsFor" | "pointsAgainst" | "gamesBack"> & {
+type DbStanding = Omit<OrgStanding, "orgId" | "divisionId" | "draws" | "matchesPlayed" | "leaguePoints" | "pointsFor" | "pointsAgainst" | "headToHeadWins" | "qualityOfLosses" | "gamesBack"> & {
   org_id: string;
   division_id: OrgStanding["divisionId"];
   matches_played: number;
@@ -261,20 +261,6 @@ export function toDbMatch(match: Match): DbMatch {
   };
 }
 
-function fromDbStanding(row: DbStanding): OrgStanding {
-  return {
-    orgId: row.org_id,
-    divisionId: row.division_id,
-    wins: row.wins,
-    losses: row.losses,
-    matchesPlayed: row.matches_played,
-    pointsFor: row.points_for,
-    pointsAgainst: row.points_against,
-    streak: row.streak ?? [],
-    gamesBack: row.games_back,
-  };
-}
-
 function toDbStanding(standing: OrgStanding): DbStanding {
   return {
     org_id: standing.orgId,
@@ -323,16 +309,15 @@ async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
       return unavailableOrMock("getLeagueData", "No current or requested season exists.");
     }
 
-    const [divisionRes, seasonOrgRes, seasonRosterRes, standingRes, announcementRes, matchRes] = await Promise.all([
+    const [divisionRes, seasonOrgRes, seasonRosterRes, announcementRes, matchRes] = await Promise.all([
       supabase.from("divisions").select("*").order("tier"),
       supabase.from("season_orgs").select("org_id, division_id").eq("season_id", seasonRow.id).eq("status", "active"),
       supabase.from("season_rosters").select("player_id, org_id, division_id, is_captain").eq("season_id", seasonRow.id).in("roster_status", ["active", "free_agent"]),
-      supabase.from("standings").select("*"),
       supabase.from("announcements").select("*").order("pinned", { ascending: false }).order("created_at", { ascending: false }),
       supabase.from("matches").select("*").eq("season_id", seasonRow.id).is("archived_at", null).order("scheduled_date").order("scheduled_time"),
     ]);
 
-    const queryError = divisionRes.error ?? seasonOrgRes.error ?? seasonRosterRes.error ?? standingRes.error ?? announcementRes.error ?? matchRes.error;
+    const queryError = divisionRes.error ?? seasonOrgRes.error ?? seasonRosterRes.error ?? announcementRes.error ?? matchRes.error;
     if (queryError) {
       console.error("getLeagueData: Supabase query error, using mock data:", queryError.message);
       return unavailableOrMock("getLeagueData", `Supabase query error: ${queryError.message}`);
@@ -373,10 +358,7 @@ async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
 
     const matches = (matchRes.data as DbMatch[]).map(fromDbMatch);
 
-    const seasonOrgIds = new Set(scoped.orgs.map((org) => org.id));
-    const standings = seasonRow.is_current
-      ? (standingRes.data as DbStanding[]).map(fromDbStanding).filter((row) => seasonOrgIds.has(row.orgId))
-      : recalcStandings({ orgs: scoped.orgs, matches }, seasonRow.id);
+    const standings = recalcStandings({ orgs: scoped.orgs, matches }, seasonRow.id);
 
     return {
       season: fromDbSeason(seasonRow),
@@ -425,16 +407,15 @@ export async function getAdminLeagueData(seasonId?: string): Promise<LeagueData>
       return unavailableOrMock("getAdminLeagueData", "No current or requested season exists.");
     }
 
-    const [divisionRes, seasonOrgRes, seasonRosterRes, standingRes, announcementRes, matchRes] = await Promise.all([
+    const [divisionRes, seasonOrgRes, seasonRosterRes, announcementRes, matchRes] = await Promise.all([
       supabase.from("divisions").select("*").order("tier"),
       supabase.from("season_orgs").select("org_id, division_id").eq("season_id", seasonRow.id),
       supabase.from("season_rosters").select("player_id, org_id, division_id, is_captain").eq("season_id", seasonRow.id),
-      supabase.from("standings").select("*"),
       supabase.from("announcements").select("*").order("pinned", { ascending: false }).order("created_at", { ascending: false }),
       supabase.from("matches").select("*").eq("season_id", seasonRow.id).order("scheduled_date").order("scheduled_time"),
     ]);
 
-    const queryError = divisionRes.error ?? seasonOrgRes.error ?? seasonRosterRes.error ?? standingRes.error ?? announcementRes.error ?? matchRes.error;
+    const queryError = divisionRes.error ?? seasonOrgRes.error ?? seasonRosterRes.error ?? announcementRes.error ?? matchRes.error;
     if (queryError) {
       console.error("getAdminLeagueData: Supabase error, using mock data:", queryError.message);
       return unavailableOrMock("getAdminLeagueData", `Supabase query error: ${queryError.message}`);
@@ -468,11 +449,8 @@ export async function getAdminLeagueData(seasonId?: string): Promise<LeagueData>
       orgAssignments,
       rosterAssignments,
     );
-    const seasonOrgIds = new Set(scoped.orgs.map((org) => org.id));
     const matches = (matchRes.data as DbMatch[]).map(fromDbMatch);
-    const standings = seasonRow.is_current
-      ? (standingRes.data as DbStanding[]).map(fromDbStanding).filter((row) => seasonOrgIds.has(row.orgId))
-      : recalcStandings({ orgs: scoped.orgs, matches }, seasonRow.id);
+    const standings = recalcStandings({ orgs: scoped.orgs, matches }, seasonRow.id);
 
     return {
       season: fromDbSeason(seasonRow),

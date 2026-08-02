@@ -68,7 +68,7 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
 
   const upcoming = orgMatches.filter((m) => m.status === "scheduled" || m.status === "live").slice(0, 3);
   const results = orgMatches
-    .filter((m) => m.status === "completed")
+    .filter((m) => m.status === "completed" || m.status === "forfeit")
     .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate) || b.scheduledTime.localeCompare(a.scheduledTime))
     .slice(0, 3);
 

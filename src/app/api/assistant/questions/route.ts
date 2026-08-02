@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PUBLIC_ASSISTANT_MODEL, type PublicAssistantResponse } from "@/types/public-assistant";
+import {
+  PUBLIC_ASSISTANT_API_VERSION,
+  PUBLIC_ASSISTANT_MODEL,
+  RULING_DEEP_LINKS,
+  type PublicAssistantResponse,
+} from "@/types/public-assistant";
 import {
   buildUnavailableResponse,
   buildValidationError,
@@ -22,6 +27,7 @@ import {
   selectEligibleSources,
   verifySanitizedSourceReadiness,
 } from "@/lib/public-assistant/sources";
+import { askOpenRouterPublicAssistant } from "@/lib/public-assistant/provider";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +42,6 @@ function json(body: PublicAssistantResponse, status: number) {
 }
 
 export async function POST(request: NextRequest) {
-  // This shell cannot be enabled by an environment variable. Release B must
-  // replace these unavailable dependencies with a database-backed feature flag
-  // and an Admin-approved sanitized-source repository.
   const featureGate = getDurablePublicAssistantFeatureGate();
   const sourceRetriever = getSanitizedSourceRetriever();
   const privacyGuard = getAssistantPrivacyGuard();
@@ -113,7 +116,7 @@ export async function POST(request: NextRequest) {
       question: verifiedQuestion.text,
       scope: parsed.data.scope,
       limit: 8,
-      sourceTypes: ["published_rule", "sanitized_precedent", "public_faq"],
+      sourceTypes: ["published_rule", "sanitized_precedent"],
     });
   } catch {
     return json(buildUnavailableResponse(["sanitized_sources_missing"]), 503);
@@ -135,8 +138,48 @@ export async function POST(request: NextRequest) {
   const providerPayload = verifiedSources ? buildPublicModelPayload(verifiedQuestion, verifiedSources) : null;
   if (!providerPayload) return json(buildUnavailableResponse(["privacy_guard_missing"]), 503);
 
-  // Keep the route fail-closed if future wiring accidentally satisfies only
-  // the readiness booleans without installing the validated provider response.
-  void providerPayload;
-  return json(buildUnavailableResponse(["sanitized_sources_missing"]), 503);
+  let providerAnswer;
+  try {
+    providerAnswer = await askOpenRouterPublicAssistant(providerPayload);
+  } catch {
+    return json(buildUnavailableResponse(["provider_unavailable"]), 503);
+  }
+
+  const citedIds = new Set(providerAnswer.citedSourceIds);
+  const citations = sources
+    .filter((source) => citedIds.has(source.id))
+    .map((source) => ({
+      sourceId: source.id,
+      sourceType: source.sourceType,
+      title: source.title,
+      ruleSetId: source.ruleSetId,
+      releaseId: source.releaseId,
+      version: source.sourceVersion,
+      current: source.status === "published" && source.supersededBy === null,
+      conflictState: source.conflictState,
+      publicUrl: source.publicUrl,
+    }));
+
+  return json({
+    ok: true,
+    apiVersion: PUBLIC_ASSISTANT_API_VERSION,
+    kind: "ambiguous_guidance",
+    authority: "advisory",
+    answer: providerAnswer.answer,
+    citations,
+    determinism: {
+      classification: "ambiguous",
+      validator: "published-rules-engine",
+      verified: false,
+      ruleVersion: null,
+    },
+    modelConfidence: null,
+    model: PUBLIC_ASSISTANT_MODEL,
+    escalation: {
+      available: false,
+      requestPath: RULING_DEEP_LINKS.requestAnchor,
+      adminTicketPath: null,
+      publicStatusPath: null,
+    },
+  }, 200);
 }

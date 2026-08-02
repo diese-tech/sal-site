@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import type { DivisionId, LeagueData, Match, MatchStatus } from "@/types/league";
 import { cn } from "@/lib/utils";
 
-const ALL_STATUSES: MatchStatus[] = ["scheduled", "live", "completed", "postponed"];
+const ALL_STATUSES: MatchStatus[] = ["scheduled", "live", "completed", "postponed", "forfeit"];
+
+function hasFinalScore(status: MatchStatus) {
+  return status === "completed" || status === "forfeit";
+}
 
 function emptyMatch(data: LeagueData): Match {
   const firstOrg = data.orgs[0];
@@ -64,7 +68,7 @@ export function AdminMatchesClient({
 
   function startSave() {
     if (!editing) return;
-    if (editing.status === "completed") {
+    if (hasFinalScore(editing.status)) {
       setConfirming(true);
     } else {
       void doSave();
@@ -113,8 +117,8 @@ export function AdminMatchesClient({
       body: JSON.stringify({
         ...editing,
         week: Number(editing.week),
-        homeScore: editing.status === "completed" ? Number(editing.homeScore ?? 0) : undefined,
-        awayScore: editing.status === "completed" ? Number(editing.awayScore ?? 0) : undefined,
+        homeScore: hasFinalScore(editing.status) ? Number(editing.homeScore ?? 0) : undefined,
+        awayScore: hasFinalScore(editing.status) ? Number(editing.awayScore ?? 0) : undefined,
       }),
     });
     setSaving(false);
@@ -189,13 +193,13 @@ export function AdminMatchesClient({
               <Field label="Date">
                 <input type="date" value={editing.scheduledDate} onChange={(e) => setEditing({ ...editing, scheduledDate: e.target.value })} className={inputClass} />
               </Field>
-              <Field label="Time">
+              <Field label="Time (EST)">
                 <input type="time" value={editing.scheduledTime} onChange={(e) => setEditing({ ...editing, scheduledTime: e.target.value })} className={inputClass} />
               </Field>
               <Field label="Week">
                 <input type="number" min={1} value={editing.week} onChange={(e) => setEditing({ ...editing, week: Number(e.target.value) })} className={inputClass} />
               </Field>
-              {editing.status === "completed" && (
+              {hasFinalScore(editing.status) && (
                 <Field label="Score">
                   <div className="flex gap-2">
                     <input type="number" min={0} placeholder="Home" value={editing.homeScore ?? ""} onChange={(e) => setEditing({ ...editing, homeScore: e.target.value === "" ? undefined : Number(e.target.value) })} className={inputClass} />
@@ -218,11 +222,11 @@ export function AdminMatchesClient({
             </div>
           </div>
 
-          {/* Confirmation dialog for completed matches */}
+          {/* Confirmation dialog for final results */}
           {confirming && (
             <div className="rounded-2xl border border-orange-300/30 bg-orange-950/40 p-4">
               <p className="text-sm font-semibold text-orange-100">
-                Saving a completed match will immediately recalculate standings. This cannot be undone automatically. Continue?
+                Saving a completed or forfeited match will immediately recalculate standings. This cannot be undone automatically. Continue?
               </p>
               <div className="mt-3 flex gap-2">
                 <button onClick={() => void doSave()} className="rounded-xl border border-orange-300/40 bg-orange-300/15 px-4 py-2 text-sm font-black uppercase text-orange-100">Yes, save & recalculate</button>
@@ -249,7 +253,7 @@ export function AdminMatchesClient({
                   {getOrg(match.homeOrgId)?.name ?? match.homeOrgId} <span className="text-slate-500">vs</span> {getOrg(match.awayOrgId)?.name ?? match.awayOrgId}
                   {match.deletionScheduledAt && <span className="ml-2 rounded border border-red-400/40 bg-red-400/10 px-1.5 py-0.5 text-[0.55rem] font-black uppercase text-red-400">Pending Delete</span>}
                 </span>
-                <span className="text-xs font-semibold text-slate-400">{match.scheduledDate} {match.scheduledTime}</span>
+                <span className="text-xs font-semibold text-slate-400">{match.scheduledDate} {match.scheduledTime} EST</span>
                 <span className="text-xs font-black uppercase text-slate-500">Wk {match.week}</span>
               </button>
               {isSuperAdmin && (

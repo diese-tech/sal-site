@@ -1,32 +1,30 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { RulesAssistant } from "@/components/rules/RulesAssistant";
+import { RULEBOOK_EMBED_URL, RULEBOOK_PUBLIC_URL } from "@/lib/public-assistant/config";
 
 export const metadata: Metadata = {
   title: "Rules and Rulings | Serpent Ascension League",
   description: "Official SAL rules and guidance for league questions.",
 };
 
-const RULEBOOK_URL =
-  "https://docs.google.com/document/d/1bL0i2Wrfjt0q3jauPDqoBweOOXdkJWMWqfp9nngPjjU/edit?tab=t.0#heading=h.mf7wvm9z1scn";
-
 const SOURCE_HIERARCHY = [
   {
     rank: "01",
-    title: "Current rulebook",
-    description: "Published SAL rules are the primary source for every ruling.",
+    title: "Published rulebook",
+    description: "The current written SAL rules and competition procedures.",
     accent: "border-cyan-300/30 bg-cyan-300/[0.07] text-cyan-200",
   },
   {
     rank: "02",
-    title: "Published rulings",
-    description: "Past public rulings may clarify a rule but never override it.",
+    title: "Approved precedents",
+    description: "Pre-approved council scenarios that clarify how rules apply.",
     accent: "border-violet-300/25 bg-violet-300/[0.06] text-violet-200",
   },
   {
     rank: "03",
-    title: "SAL admin decision",
-    description: "Ask a SAL admin when published guidance does not resolve your case.",
+    title: "SAL admin review",
+    description: "Required when sources conflict or do not clearly resolve a case.",
     accent: "border-emerald-300/25 bg-emerald-300/[0.06] text-emerald-200",
   },
 ] as const;
@@ -127,26 +125,47 @@ export default function RulesPage() {
                   Available
                 </span>
               </div>
-              <div className="p-6 text-center sm:p-10">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.07] text-cyan-200">
-                  <svg aria-hidden="true" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 5.5A2.5 2.5 0 016.5 3H20v15H6.5A2.5 2.5 0 004 20.5v-15z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 5.5v15A2.5 2.5 0 016.5 18" />
-                  </svg>
+              <div className="p-4 sm:p-6">
+                <div className="overflow-hidden rounded-xl border border-white/10 bg-white">
+                  <iframe
+                    src={RULEBOOK_EMBED_URL}
+                    title="Serpent Ascension League published rulebook"
+                    loading="lazy"
+                    className="h-[32rem] w-full sm:h-[44rem]"
+                  />
                 </div>
-                <h3 className="mt-4 text-base font-black text-white">SAL Rulebook</h3>
-                <p className="mx-auto mt-2 max-w-lg text-sm font-semibold leading-6 text-slate-400">
-                  Read the current published rules in Google Docs.
-                </p>
+                <div className="mt-4 text-center">
+                  <p className="text-xs font-semibold text-slate-500">
+                    If the embedded reader does not load, open the source document directly.
+                  </p>
                 <a
-                  href={RULEBOOK_URL}
+                  href={RULEBOOK_PUBLIC_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-5 inline-flex rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-5 py-2.5 text-xs font-black uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/20"
                 >
                   Open the rulebook <span aria-hidden="true" className="ml-1">↗</span>
                 </a>
+                </div>
               </div>
+            </section>
+
+            <section
+              id="terra-adaptation"
+              aria-labelledby="terra-adaptation-heading"
+              className="rounded-2xl border border-emerald-300/20 bg-emerald-300/[0.05] p-5"
+            >
+              <p className="font-mono text-[0.62rem] font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                Approved precedent
+              </p>
+              <h2 id="terra-adaptation-heading" className="mt-1 text-lg font-black text-white">
+                Terra Division adaptation
+              </h2>
+              <p className="mt-2 text-sm font-semibold leading-6 text-slate-400">
+                Unless a Terra-specific rule or approved council ruling says otherwise, Terra follows Solar Division
+                rules adapted one tier upward. Cases that remain unclear or create a source conflict go to SAL admin or
+                council review.
+              </p>
             </section>
 
             <section className="grid gap-3 sm:grid-cols-2">

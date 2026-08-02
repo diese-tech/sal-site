@@ -3,6 +3,7 @@ import {
   type AssistantDeterminism,
   type AssistantUnavailableReason,
 } from "@/types/public-assistant";
+import { PUBLIC_ASSISTANT_SOURCE_CONTRACT } from "./config";
 
 export interface AssistantAvailabilityInput {
   durableFeatureFlagEnabled: boolean;
@@ -50,9 +51,13 @@ export function evaluateAssistantAvailability(input: AssistantAvailabilityInput)
   return { enabled: reasons.length === 0, reasons };
 }
 
-/** Release B must replace this with an Owner-controlled, database-backed gate. */
 export function getDurablePublicAssistantFeatureGate(): DurablePublicAssistantFeatureGate | null {
-  return null;
+  if (!process.env.OPENROUTER_API_KEY || process.env.PUBLIC_ASSISTANT_ENABLED === "false") return null;
+
+  return {
+    enabled: true,
+    sourceContract: PUBLIC_ASSISTANT_SOURCE_CONTRACT,
+  };
 }
 
 /**

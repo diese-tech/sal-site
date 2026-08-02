@@ -163,7 +163,7 @@ function AssistantResult({ result }: { result: PublicAssistantResponse }) {
   return (
     <div role="status" className="mt-4 rounded-xl border border-cyan-300/25 bg-cyan-300/[0.06] p-3.5">
       <p className="text-xs font-black uppercase tracking-wide text-cyan-100">
-        {result.kind === "deterministic_guidance" ? "Rulebook guidance" : "Admin review recommended"}
+        Advisory rules guidance
       </p>
       <p className="mt-2 text-sm font-semibold leading-6 text-slate-300">{result.answer}</p>
       {result.citations.length > 0 && (

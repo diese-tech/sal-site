@@ -98,7 +98,33 @@ export function untrustedPrivacyPrefilter(rawInput: string): UntrustedPrivacyPre
 }
 
 export function getAssistantPrivacyGuard(): AssistantPrivacyGuard | null {
-  return null;
+  return {
+    async inspect(input) {
+      const auditedAt = new Date().toISOString();
+      const decisionId = `privacy-${input.inputDigest.slice(0, 24)}`;
+
+      if (input.riskHints.length > 0) {
+        return {
+          outcome: "rejected",
+          decisionId,
+          policyVersion: "local-public-input-v1",
+          auditedAt,
+          inputDigest: input.inputDigest,
+          findings: input.riskHints,
+        };
+      }
+
+      return {
+        outcome: "verified_public_safe",
+        decisionId,
+        policyVersion: "local-public-input-v1",
+        auditedAt,
+        inputDigest: input.inputDigest,
+        sanitizedText: input.untrustedCandidate,
+        findings: [],
+      };
+    },
+  };
 }
 
 async function verifyTextWithGuard(
