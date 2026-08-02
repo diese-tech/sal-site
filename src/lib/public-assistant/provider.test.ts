@@ -56,4 +56,25 @@ describe("OpenRouter public assistant", () => {
 
     await expect(askOpenRouterPublicAssistant(payload)).rejects.toThrow("did not cite an approved source");
   });
+
+  it("retries once and extracts a valid JSON object from model prose", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "test-key");
+    const fetchMock = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: "I could not format that response." } }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: `Here is the requested result:\n${JSON.stringify({
+          answer: "Each team may pause once per set for technical reasons.",
+          citedSourceIds: ["rulebook"],
+        })}` } }],
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(askOpenRouterPublicAssistant(payload)).resolves.toEqual({
+      answer: "Each team may pause once per set for technical reasons.",
+      citedSourceIds: ["rulebook"],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

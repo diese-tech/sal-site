@@ -141,7 +141,11 @@ export async function POST(request: NextRequest) {
   let providerAnswer;
   try {
     providerAnswer = await askOpenRouterPublicAssistant(providerPayload);
-  } catch {
+  } catch (error) {
+    console.error(
+      "Public assistant provider unavailable:",
+      error instanceof Error ? error.message : "Unknown provider error.",
+    );
     return json(buildUnavailableResponse(["provider_unavailable"]), 503);
   }
 
