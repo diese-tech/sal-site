@@ -225,7 +225,7 @@ export function selectEligibleSources(input: unknown, context: SourceSelectionCo
 }
 
 const RULEBOOK_CACHE_TTL_MS = 5 * 60 * 1_000;
-const RULEBOOK_REQUIRED_MARKERS = ["1.0 purpose", "8.0 seeding", "26.0 disclaimer"];
+const RULEBOOK_REQUIRED_MARKERS = ["1.0 purpose", "8.0 seeding", "26.0 rulebook disclaimer"];
 
 let cachedRulebook: { source: SanitizedAssistantSource; expiresAt: number } | null = null;
 

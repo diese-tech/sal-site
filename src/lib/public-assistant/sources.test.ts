@@ -51,7 +51,7 @@ describe("sanitized assistant sources", () => {
       "Published competition rules. ".repeat(45),
       "8.0 Seeding",
       "Round-robin league points.",
-      "26.0 Disclaimer",
+      "26.0 Rulebook Disclaimer",
     ].join("\n");
     vi.stubGlobal("fetch", vi.fn(async () => new Response(exportedRulebook, { status: 200 })));
 
