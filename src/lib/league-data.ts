@@ -1196,3 +1196,23 @@ export async function getPlayerByDiscordId(discordId: string): Promise<LeaguePla
   if (error) throw error;
   return data ? fromDbPlayer(data) : null;
 }
+
+/**
+ * Unscoped-by-season player identity lookup. A player row can exist with no
+ * season_rosters entry in any season (e.g. a registration approved before
+ * season enrollment was wired up — see #230/#233 follow-up), so the public
+ * profile page falls back to this when the season-scoped catalog doesn't
+ * have the id, rather than 404ing on an otherwise-real player.
+ */
+export async function getPlayerById(id: string): Promise<LeaguePlayer | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("players")
+    .select("*")
+    .eq("id", id)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? fromDbPlayer(data) : null;
+}
