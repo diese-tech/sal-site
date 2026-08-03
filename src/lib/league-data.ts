@@ -691,6 +691,23 @@ export async function removeSeasonRosterAssignment(seasonId: string, playerId: s
   if (!supabase) throw new Error("Supabase env is missing.");
   const { error } = await supabase.from("season_rosters").delete().eq("season_id", seasonId).eq("player_id", playerId);
   if (error) throw error;
+
+  // Legacy parity, mirroring saveSeasonRosterAssignment's write-side behavior:
+  // clear the mirrored captain/org state too when this removal affects the
+  // operational (current) season. Without this, a player removed from the
+  // roster keeps stale org_id/is_captain/status on the global players row —
+  // still read as captain/org-affiliated by consumers like resolveRole's
+  // captain-bot check and by the profile page's unscoped fallback, even
+  // though an admin just took them off the team (Codex review on #234).
+  const currentSeasonId = await getCurrentSeasonId();
+  if (seasonId === currentSeasonId) {
+    const { error: playerError } = await supabase
+      .from("players")
+      .update({ org_id: null, is_captain: false, status: "free-agent" })
+      .eq("id", playerId);
+    if (playerError) throw playerError;
+  }
+
   await writeAuditLog("remove_season_roster", "season", seasonId, { playerId });
 }
 
