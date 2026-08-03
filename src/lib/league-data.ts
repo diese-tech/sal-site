@@ -611,21 +611,37 @@ export async function saveSeasonRosterAssignment(input: {
     if (error) throw error;
     divisionId = (data as { division_id: DivisionId }).division_id;
   }
+  const isCaptain = input.orgId ? input.isCaptain : false;
   const { error } = await supabase.from("season_rosters").upsert({
     season_id: input.seasonId,
     player_id: input.playerId,
     org_id: input.orgId,
     division_id: divisionId,
-    is_captain: input.orgId ? input.isCaptain : false,
+    is_captain: isCaptain,
     roster_status: input.orgId ? "active" : "free_agent",
     updated_at: new Date().toISOString(),
   }, { onConflict: "season_id,player_id" });
   if (error) throw error;
+
+  // Legacy parity: the captain bot and other consumers that have not moved to
+  // season_rosters yet (e.g. getPlayerByDiscordId/resolveRole) read
+  // org_id/is_captain/status directly off the global players row — see the
+  // same pattern in finalizeDraftRosters (#230).
+  const { error: playerError } = await supabase
+    .from("players")
+    .update({
+      org_id: input.orgId,
+      is_captain: isCaptain,
+      status: input.orgId ? "org-affiliated" : "free-agent",
+    })
+    .eq("id", input.playerId);
+  if (playerError) throw playerError;
+
   await writeAuditLog("save_season_roster", "season", input.seasonId, {
     playerId: input.playerId,
     orgId: input.orgId,
     divisionId,
-    isCaptain: input.orgId ? input.isCaptain : false,
+    isCaptain,
   });
 }
 

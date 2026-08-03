@@ -1,5 +1,5 @@
 /**
- * Import endpoint integration tests (issue #91).
+ * Import endpoint integration tests (issue #91, extended for #230).
  *
  * Tests the server-side deduplication, validation, and partial-import behavior
  * of POST /api/admin/import/players. Uses vi.mock to avoid a real Supabase
@@ -10,6 +10,9 @@
  *   • Rows with invalid schema fields are caught at parse time (400).
  *   • Valid batches are accepted; partial success is allowed (partial imports
  *     are non-transactional by design — see issue #74 decision comment).
+ *   • Every saved player is enrolled into the selected season/division via
+ *     season_rosters, and a season enrollment failure is reported as an
+ *     error rather than counted as a successful import (#230).
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -32,21 +35,33 @@ vi.mock("@/lib/error-monitor", () => ({
 vi.mock("@/lib/league-data", () => ({
   savePlayersBulk: vi.fn().mockResolvedValue(undefined),
   savePlayer: vi.fn().mockResolvedValue(undefined),
+  saveSeasonRosterAssignment: vi.fn().mockResolvedValue(undefined),
   writeAuditLog: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Chainable stub covering both the season-existence check (select().eq().maybeSingle())
+// and the org lookup (select()) the route runs against the same client.
 vi.mock("@/lib/supabase-server", () => ({
-  getSupabaseServerClient: () => ({
-    from: () => ({
-      select: () => Promise.resolve({ data: [], error: null }),
+  getSupabaseServerClient: vi.fn(() => ({
+    from: (table: string) => ({
+      select: () => {
+        if (table === "seasons") {
+          return {
+            eq: () => ({
+              maybeSingle: () => Promise.resolve({ data: { id: "preseason-2" }, error: null }),
+            }),
+          };
+        }
+        return Promise.resolve({ data: [], error: null });
+      },
     }),
-  }),
+  })),
 }));
 
-function makeRequest(body: unknown): NextRequest {
+function makeRequest(body: Record<string, unknown>): NextRequest {
   return new NextRequest("http://localhost/api/admin/import/players", {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify({ seasonId: "preseason-2", divisionId: "terra", ...body }),
     headers: { "Content-Type": "application/json" },
   });
 }
@@ -167,5 +182,82 @@ describe("POST /api/admin/import/players — partial import behavior", () => {
     expect(data.imported).toBe(2);
     expect(data.errors).toHaveLength(1);
     expect(data.errors[0].ign).toBe("Beta");
+  });
+});
+
+describe("POST /api/admin/import/players — season enrollment (#230)", () => {
+  it("returns 400 when the seasonId or divisionId is missing", async () => {
+    const { POST } = await import("@/app/api/admin/import/players/route");
+
+    const req = new NextRequest("http://localhost/api/admin/import/players", {
+      method: "POST",
+      body: JSON.stringify({ players: [validPlayer({ ign: "NoSeason" })] }),
+      headers: { "Content-Type": "application/json" },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when the selected season does not exist", async () => {
+    const { getSupabaseServerClient } = await import("@/lib/supabase-server");
+    vi.mocked(getSupabaseServerClient).mockReturnValueOnce({
+      from: () => ({
+        select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }) }),
+      }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    const { POST } = await import("@/app/api/admin/import/players/route");
+
+    const req = makeRequest({ players: [validPlayer({ ign: "GhostSeason" })] });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/does not exist/i);
+  });
+
+  it("enrolls every saved player into the selected season/division as a free agent", async () => {
+    const { POST } = await import("@/app/api/admin/import/players/route");
+    const { saveSeasonRosterAssignment } = await import("@/lib/league-data");
+    vi.mocked(saveSeasonRosterAssignment).mockClear();
+
+    const req = makeRequest({
+      seasonId: "preseason-2",
+      divisionId: "solar",
+      players: [validPlayer({ ign: "Enrollee", id: "player-enrollee" })],
+    });
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.imported).toBe(1);
+    expect(saveSeasonRosterAssignment).toHaveBeenCalledWith({
+      seasonId: "preseason-2",
+      playerId: "player-enrollee",
+      orgId: null,
+      divisionId: "solar",
+      isCaptain: false,
+    });
+  });
+
+  it("does not count a player as imported when season enrollment fails, and reports it as an error", async () => {
+    const { POST } = await import("@/app/api/admin/import/players/route");
+    const { saveSeasonRosterAssignment } = await import("@/lib/league-data");
+    vi.mocked(saveSeasonRosterAssignment).mockReset();
+    vi.mocked(saveSeasonRosterAssignment)
+      .mockResolvedValueOnce(undefined) // Alpha enrolls fine
+      .mockRejectedValueOnce(new Error("season_orgs lookup failed")); // Beta fails enrollment
+
+    const req = makeRequest({
+      players: [validPlayer({ ign: "Alpha" }), validPlayer({ ign: "Beta" })],
+    });
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(data.imported).toBe(1);
+    expect(data.errors).toHaveLength(1);
+    expect(data.errors[0].ign).toBe("Beta");
+    expect(data.errors[0].error).toMatch(/failed to enroll in season/i);
+
+    vi.mocked(saveSeasonRosterAssignment).mockReset().mockResolvedValue(undefined);
   });
 });

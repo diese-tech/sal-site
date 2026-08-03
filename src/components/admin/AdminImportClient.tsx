@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { DivisionId } from "@/types/league";
+import Link from "next/link";
+import type { DivisionId, Season } from "@/types/league";
 import type { PlayerRole, PlayerStatus } from "@/types/card-lab";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,7 @@ type ImportedPlayer = {
 
 const VALID_ROLES: PlayerRole[] = ["Solo", "Jungle", "Mid", "Carry", "Support", "Flex"];
 const VALID_DIVISIONS: DivisionId[] = ["terra", "solar", "lunar"];
+const DIVISION_LABELS: Record<DivisionId, string> = { terra: "Terra", solar: "Solar", lunar: "Lunar" };
 
 const ROLE_ALIASES: Record<string, PlayerRole> = {
   solo: "Solo", top: "Solo",
@@ -315,7 +317,12 @@ function rowToPlayer(row: ParsedRow): ImportedPlayer | null {
 
 // ---- Component ----
 
-export function AdminImportClient() {
+function defaultSeasonId(seasons: Season[]): string {
+  const preseason = seasons.find((s) => s.status === "pre-season" && s.isCurrent) ?? seasons.find((s) => s.status === "pre-season");
+  return preseason?.id ?? seasons[0]?.id ?? "";
+}
+
+export function AdminImportClient({ seasons }: { seasons: Season[] }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [text, setText] = useState("");
@@ -323,6 +330,9 @@ export function AdminImportClient() {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{ imported: number; errors: Array<{ ign: string; error: string }>; warnings: Array<{ ign: string; warning: string }> } | null>(null);
   const [message, setMessage] = useState("");
+  const [seasonId, setSeasonId] = useState(() => defaultSeasonId(seasons));
+  const [divisionId, setDivisionId] = useState<DivisionId>("terra");
+  const selectedSeason = useMemo(() => seasons.find((s) => s.id === seasonId), [seasons, seasonId]);
 
   function handleTextChange(value: string) {
     setText(value);
@@ -351,13 +361,17 @@ export function AdminImportClient() {
       setMessage("No valid players to import.");
       return;
     }
+    if (!seasonId) {
+      setMessage("Select a season before importing.");
+      return;
+    }
     setImporting(true);
     setMessage("");
     setResult(null);
     const res = await fetch("/api/admin/import/players", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ players }),
+      body: JSON.stringify({ seasonId, divisionId, players }),
     });
     setImporting(false);
     const data = await res.json().catch(() => null) as { imported?: number; errors?: Array<{ ign: string; error: string }>; warnings?: Array<{ ign: string; warning: string }>; error?: string } | null;
@@ -388,6 +402,40 @@ export function AdminImportClient() {
           <li><span className="font-semibold text-slate-300">Discord bot export</span> — <code className="rounded bg-white/[0.06] px-1">Username</code>, <code className="rounded bg-white/[0.06] px-1">Nickname</code> (= IGN), <code className="rounded bg-white/[0.06] px-1">Roles</code> (comma-separated: division + roles)</li>
           <li><span className="font-semibold text-slate-300">File upload</span> — .csv, .tsv, or .json files</li>
         </ul>
+      </div>
+
+      <div className="mb-4 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.03] p-4">
+        <p className="mb-2 text-[0.65rem] font-black uppercase text-slate-500">Destination — required for every row in this batch</p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1.5 block text-[0.65rem] font-black uppercase text-slate-500">Season</span>
+            <select
+              value={seasonId}
+              onChange={(e) => setSeasonId(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-black/45 px-3 py-2 text-sm font-semibold text-white outline-none focus:border-cyan-300/50"
+            >
+              <option value="">Select a season…</option>
+              {seasons.map((s) => (
+                <option key={s.id} value={s.id}>{s.name} ({s.status}{s.isCurrent ? ", site current" : ""})</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-[0.65rem] font-black uppercase text-slate-500">Division</span>
+            <select
+              value={divisionId}
+              onChange={(e) => setDivisionId(e.target.value as DivisionId)}
+              className="w-full rounded-lg border border-white/10 bg-black/45 px-3 py-2 text-sm font-semibold text-white outline-none focus:border-cyan-300/50"
+            >
+              {VALID_DIVISIONS.map((d) => <option key={d} value={d}>{DIVISION_LABELS[d]}</option>)}
+            </select>
+          </label>
+        </div>
+        {rows.length > 0 && (
+          <p className="mt-3 text-xs font-semibold text-cyan-200">
+            {greenRows + yellowRows} player{greenRows + yellowRows !== 1 ? "s" : ""} will enter {selectedSeason?.name ?? "the selected season"} / {DIVISION_LABELS[divisionId]} as free agents (rows with a recognized Team column instead join that team).
+          </p>
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -426,6 +474,14 @@ export function AdminImportClient() {
           {result && (
             <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/8 p-3">
               <p className="text-sm font-black text-emerald-300">Imported {result.imported} player{result.imported !== 1 ? "s" : ""}.</p>
+              {result.imported > 0 && seasonId && (
+                <Link
+                  href={`/admin/seasons/${encodeURIComponent(seasonId)}/roster`}
+                  className="mt-2 inline-block text-xs font-black uppercase text-cyan-300 hover:text-cyan-100"
+                >
+                  Manage imported players (assign teams/captains) →
+                </Link>
+              )}
               {result.errors.length > 0 && (
                 <ul className="mt-2 space-y-0.5 text-xs text-red-400">
                   {result.errors.map((e, i) => (
@@ -444,7 +500,7 @@ export function AdminImportClient() {
           )}
           <button
             onClick={handleImport}
-            disabled={importing || greenRows + yellowRows === 0}
+            disabled={importing || greenRows + yellowRows === 0 || !seasonId}
             className="rounded-xl border border-cyan-300/30 bg-cyan-300/10 py-2.5 text-xs font-black uppercase text-cyan-100 transition hover:bg-cyan-300/18 disabled:opacity-40"
           >
             {importing ? "Importing…" : `Import ${greenRows + yellowRows} Player${greenRows + yellowRows !== 1 ? "s" : ""}`}

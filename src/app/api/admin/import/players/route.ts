@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
-import { savePlayersBulk, savePlayer, writeAuditLog } from "@/lib/league-data";
+import { savePlayersBulk, savePlayer, saveSeasonRosterAssignment, writeAuditLog } from "@/lib/league-data";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { errorMessage, reportError } from "@/lib/error-monitor";
+
+const importDivisionSchema = z.enum(["solar", "lunar", "terra"]);
 
 const playerSchema = z.object({
   id: z.string().min(1),
@@ -32,6 +34,12 @@ const playerSchema = z.object({
 });
 
 const bodySchema = z.object({
+  // Import-level season + division context (#230): the current operational
+  // process uploads one sheet per division, so admins pick season/division
+  // once for the whole batch instead of every row repeating it. A per-row
+  // divisionId (from a legacy Division column) still overrides this when present.
+  seasonId: z.string().min(1),
+  divisionId: importDivisionSchema,
   players: z.array(playerSchema).min(1).max(500),
 });
 
@@ -44,6 +52,25 @@ export async function POST(request: NextRequest) {
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues.map((i) => i.message).join("; ") }, { status: 400 });
+  }
+
+  const supabase = getSupabaseServerClient();
+
+  // Validate the target season actually exists before touching players — a
+  // typo'd/stale seasonId must not silently report success while enrollment
+  // is impossible (#230 acceptance: don't falsely report success).
+  if (supabase) {
+    const { data: seasonRow, error: seasonErr } = await supabase
+      .from("seasons")
+      .select("id")
+      .eq("id", parsed.data.seasonId)
+      .maybeSingle();
+    if (seasonErr) {
+      return NextResponse.json({ error: `Unable to verify season: ${seasonErr.message}` }, { status: 500 });
+    }
+    if (!seasonRow) {
+      return NextResponse.json({ error: `Season "${parsed.data.seasonId}" does not exist.` }, { status: 400 });
+    }
   }
 
   // Cross-row deduplication: duplicate IGNs (case-insensitive) within one
@@ -66,7 +93,6 @@ export async function POST(request: NextRequest) {
   // Unknown teams import as free agents with a per-row warning instead of
   // failing the row on a foreign-key violation. Queries the orgs table
   // directly — getAdminLeagueData()'s mock fallback must not leak fake ids.
-  const supabase = getSupabaseServerClient();
   const orgLookup = new Map<string, string>();
   if (supabase) {
     const { data: orgRows } = await supabase.from("orgs").select("id, name, tag");
@@ -89,16 +115,16 @@ export async function POST(request: NextRequest) {
   // Fast path: one bulk upsert. If the batch fails (e.g. an IGN unique
   // collision with an existing player), fall back to per-row saves so the
   // valid rows still import — partial importing is allowed by design.
-  let imported = 0;
   const errors: Array<{ ign: string; error: string }> = [];
+  const savedPlayers: typeof players = [];
   try {
     await savePlayersBulk(players);
-    imported = players.length;
+    savedPlayers.push(...players);
   } catch {
     for (const player of players) {
       try {
         await savePlayer(player);
-        imported++;
+        savedPlayers.push(player);
       } catch (err) {
         errors.push({ ign: player.ign, error: errorMessage(err, "Unknown error.") });
       }
@@ -110,7 +136,39 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Enroll every saved player into the selected preseason/division as a
+  // free agent (or, if the sheet's Team column matched a real org, straight
+  // into that org's roster). Bulk import must mean both an upserted player
+  // identity AND season participation — an identity with no season_rosters
+  // row stays invisible to every season-scoped query (#230).
+  let imported = 0;
+  for (const player of savedPlayers) {
+    try {
+      await saveSeasonRosterAssignment({
+        seasonId: parsed.data.seasonId,
+        playerId: player.id,
+        orgId: player.orgId ?? null,
+        divisionId: player.divisionId ?? parsed.data.divisionId,
+        isCaptain: false,
+      });
+      imported++;
+    } catch (err) {
+      errors.push({ ign: player.ign, error: `Saved player but failed to enroll in season: ${errorMessage(err, "Unknown error.")}` });
+    }
+  }
+  if (imported < savedPlayers.length) {
+    reportError("player import: season enrollment failed for some rows", new Error(`${savedPlayers.length - imported}/${savedPlayers.length} rows failed enrollment`), {
+      seasonId: parsed.data.seasonId,
+    });
+  }
+
   if (imported > 0) revalidateTag("league-data", {});
-  await writeAuditLog("players_imported", "player_import", null, { imported, errorCount: errors.length, warningCount: warnings.length });
+  await writeAuditLog("players_imported", "player_import", null, {
+    seasonId: parsed.data.seasonId,
+    divisionId: parsed.data.divisionId,
+    imported,
+    errorCount: errors.length,
+    warningCount: warnings.length,
+  });
   return NextResponse.json({ imported, errors, warnings });
 }
