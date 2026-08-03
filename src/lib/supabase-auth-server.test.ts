@@ -41,6 +41,33 @@ describe("getDiscordUsername", () => {
     const user = { id: "u2", app_metadata: {}, aud: "authenticated", created_at: "2026-01-01T00:00:00Z", email: "another@example.com" } as User;
     expect(getDiscordUsername(user)).toBe("");
   });
+
+  // Codex review (#233): giving up as soon as user_metadata.user_name is
+  // absent left real users permanently stuck with a blank registration —
+  // some sessions only carry the username on the Discord identity itself.
+  it("recovers the username from the Discord identity's identity_data when user_metadata.user_name is absent", () => {
+    const user = makeUser({
+      email: "realperson@example.com",
+      identities: [{ provider: "discord", identity_data: { user_name: "recovered_handle" } }],
+    });
+    expect(getDiscordUsername(user)).toBe("recovered_handle");
+  });
+
+  it("still prefers user_metadata.user_name over the identity_data fallback", () => {
+    const user = makeUser({
+      user_metadata: { user_name: "top_level_handle" },
+      identities: [{ provider: "discord", identity_data: { user_name: "identity_handle" } }],
+    });
+    expect(getDiscordUsername(user)).toBe("top_level_handle");
+  });
+
+  it("ignores identity_data from a non-Discord provider", () => {
+    const user = makeUser({
+      email: "realperson@example.com",
+      identities: [{ provider: "email", identity_data: { user_name: "should-not-be-used" } }],
+    });
+    expect(getDiscordUsername(user)).toBe("");
+  });
 });
 
 describe("getDiscordDisplayName", () => {
