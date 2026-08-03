@@ -43,7 +43,13 @@ export function getDiscordId(user: User): string | null {
 }
 
 export function getDiscordUsername(user: User): string {
-  return (user.user_metadata?.user_name as string | undefined) ?? user.email ?? "unknown";
+  // NEVER fall back to user.email (or any other PII) here: this value is
+  // stored on registrations/players and rendered publicly (player directory,
+  // team rosters), so anything but the real Discord username leaking through
+  // would expose personal data to every visitor. If Discord/Supabase didn't
+  // return a username for this session, leave it blank — callers must not
+  // paper over a missing username with something sensitive.
+  return (user.user_metadata?.user_name as string | undefined) ?? "";
 }
 
 export function getDiscordDisplayName(user: User): string {
