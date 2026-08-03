@@ -24,6 +24,18 @@ export async function POST(request: NextRequest) {
   const discordId = getDiscordId(user);
   if (!discordId) return NextResponse.json({ error: "Discord ID not found in session." }, { status: 400 });
 
+  // A blank username must never be persisted: discord_id can only register
+  // once (see the existing-registration check below), so a registration
+  // created with no Discord handle would leave the user permanently stuck
+  // with no way to retry (Codex review on #233).
+  const discordUsername = getDiscordUsername(user);
+  if (!discordUsername) {
+    return NextResponse.json(
+      { error: "Discord username not found in session. Please sign out and sign back in with Discord, then try again." },
+      { status: 400 },
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
@@ -48,7 +60,7 @@ export async function POST(request: NextRequest) {
   await createRegistration({
     id,
     discordId,
-    discordUsername: getDiscordUsername(user),
+    discordUsername,
     discordDisplayName: getDiscordDisplayName(user),
     seasonId,
     formData: parsed.data.formData,

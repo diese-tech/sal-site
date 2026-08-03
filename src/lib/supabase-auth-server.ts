@@ -43,7 +43,23 @@ export function getDiscordId(user: User): string | null {
 }
 
 export function getDiscordUsername(user: User): string {
-  return (user.user_metadata?.user_name as string | undefined) ?? user.email ?? "unknown";
+  // user_metadata.user_name is usually populated, but some sessions only
+  // carry the username on the Discord identity's own identity_data (both are
+  // Discord-sourced and equally trustworthy) — check both before giving up
+  // (Codex review on #233: giving up too early left real users stuck with a
+  // permanently blank registration, since a discord_id can only register once).
+  const discordIdentity = user.identities?.find((i) => i.provider === "discord");
+  const username =
+    (user.user_metadata?.user_name as string | undefined) ??
+    (discordIdentity?.identity_data?.user_name as string | undefined);
+  // NEVER fall back to user.email (or any other PII) here: this value is
+  // stored on registrations/players and rendered publicly (player directory,
+  // team rosters), so anything but the real Discord username leaking through
+  // would expose personal data to every visitor. If Discord/Supabase didn't
+  // return a username anywhere in this session, leave it blank — callers
+  // must not paper over a missing username with something sensitive, and
+  // must reject/surface the gap instead of silently persisting it.
+  return username ?? "";
 }
 
 export function getDiscordDisplayName(user: User): string {
