@@ -88,20 +88,52 @@ describe("getDiscordId", () => {
 });
 
 describe("getDiscordAvatarUrl", () => {
-  it("returns user_metadata.avatar_url when present", () => {
-    const user = makeUser({ user_metadata: { avatar_url: "https://cdn.discordapp.com/avatars/1/abc.png" } });
-    expect(getDiscordAvatarUrl(user)).toBe("https://cdn.discordapp.com/avatars/1/abc.png");
-  });
-
-  it("falls back to the Discord identity's identity_data.avatar_url", () => {
+  it("prefers the Discord identity's identity_data.avatar_url — it isn't user-editable, unlike user_metadata", () => {
     const user = makeUser({
+      user_metadata: { avatar_url: "https://cdn.discordapp.com/avatars/1/metadata.png" },
       identities: [{ provider: "discord", identity_data: { avatar_url: "https://cdn.discordapp.com/avatars/1/identity.png" } }],
     });
     expect(getDiscordAvatarUrl(user)).toBe("https://cdn.discordapp.com/avatars/1/identity.png");
   });
 
+  it("falls back to user_metadata.avatar_url when identity_data has none", () => {
+    const user = makeUser({ user_metadata: { avatar_url: "https://cdn.discordapp.com/avatars/1/abc.png" } });
+    expect(getDiscordAvatarUrl(user)).toBe("https://cdn.discordapp.com/avatars/1/abc.png");
+  });
+
+  it("also accepts the media.discordapp.net CDN host", () => {
+    const user = makeUser({ user_metadata: { avatar_url: "https://media.discordapp.net/avatars/1/abc.png" } });
+    expect(getDiscordAvatarUrl(user)).toBe("https://media.discordapp.net/avatars/1/abc.png");
+  });
+
   it("returns undefined when no avatar is available anywhere", () => {
     const user = makeUser({});
+    expect(getDiscordAvatarUrl(user)).toBeUndefined();
+  });
+
+  // Codex review (#236): user_metadata is directly writable by the signed-in
+  // user via supabase.auth.updateUser({ data }) — an unvalidated value here
+  // would let any player point every visitor's browser (this renders as a
+  // public, unoptimized <Image>) at an arbitrary attacker-controlled URL.
+  it("rejects a non-Discord-CDN host even when it's the only avatar_url present", () => {
+    const user = makeUser({ user_metadata: { avatar_url: "https://evil.example/tracker.png" } });
+    expect(getDiscordAvatarUrl(user)).toBeUndefined();
+  });
+
+  it("rejects a non-Discord-CDN identity_data.avatar_url too", () => {
+    const user = makeUser({
+      identities: [{ provider: "discord", identity_data: { avatar_url: "https://evil.example/tracker.png" } }],
+    });
+    expect(getDiscordAvatarUrl(user)).toBeUndefined();
+  });
+
+  it("rejects a non-https scheme", () => {
+    const user = makeUser({ user_metadata: { avatar_url: "javascript:alert(1)" } });
+    expect(getDiscordAvatarUrl(user)).toBeUndefined();
+  });
+
+  it("rejects a malformed URL instead of throwing", () => {
+    const user = makeUser({ user_metadata: { avatar_url: "not a url" } });
     expect(getDiscordAvatarUrl(user)).toBeUndefined();
   });
 });
