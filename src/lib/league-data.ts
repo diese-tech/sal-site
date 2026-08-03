@@ -473,7 +473,14 @@ export async function getAdminLeagueData(seasonId?: string): Promise<LeagueData>
 
 export async function getAllSeasons(): Promise<Season[]> {
   const supabase = getSupabaseServerClient();
-  if (!supabase) return [];
+  if (!supabase) {
+    // Same dev/E2E-only mock convention as fetchLeagueData/getFormFields (#153):
+    // admin pages that list seasons (import destination picker, season admin
+    // list) must still render something to interact with in local dev and the
+    // Playwright suite, which both run with no Supabase configured. Never
+    // fabricate data in real production.
+    return canServeMockLeagueData() ? [MOCK_LEAGUE_DATA.season] : [];
+  }
   const { data, error } = await supabase.from("seasons").select("*").order("start_date", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((row) => fromDbSeason(row as DbSeason));
