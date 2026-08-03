@@ -89,6 +89,41 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ imported: 0, errors: dupErrors }, { status: 400 });
   }
 
+  // An import upsert must never resurrect an archived identity implicitly.
+  // Surface those collisions row-by-row so an admin can deliberately restore
+  // the player before attempting season enrollment again.
+  const errors: Array<{ ign: string; error: string }> = [];
+  let importCandidates = parsed.data.players;
+  if (supabase) {
+    const { data: existingPlayers, error: playerLookupError } = await supabase
+      .from("players")
+      .select("id, archived_at")
+      .in("id", parsed.data.players.map((player) => player.id));
+    if (playerLookupError) {
+      return NextResponse.json(
+        { error: `Unable to verify player availability: ${playerLookupError.message}` },
+        { status: 500 },
+      );
+    }
+
+    const archivedPlayerIds = new Set(
+      ((existingPlayers ?? []) as Array<{ id: string; archived_at: string | null }>)
+        .filter((player) => player.archived_at !== null)
+        .map((player) => player.id),
+    );
+    if (archivedPlayerIds.size > 0) {
+      for (const player of parsed.data.players) {
+        if (archivedPlayerIds.has(player.id)) {
+          errors.push({
+            ign: player.ign,
+            error: "Player already exists but is archived. Restore the player before enrolling them.",
+          });
+        }
+      }
+      importCandidates = parsed.data.players.filter((player) => !archivedPlayerIds.has(player.id));
+    }
+  }
+
   // Resolve sheet "Team" values against real orgs by id, name, or tag.
   // Unknown teams import as free agents with a per-row warning instead of
   // failing the row on a foreign-key violation. Queries the orgs table
@@ -96,7 +131,10 @@ export async function POST(request: NextRequest) {
   const orgLookup = new Map<string, string>();
   const orgDivisionById = new Map<string, string>();
   if (supabase) {
-    const { data: orgRows } = await supabase.from("orgs").select("id, name, tag, division_id");
+    const { data: orgRows } = await supabase
+      .from("orgs")
+      .select("id, name, tag, division_id")
+      .is("archived_at", null);
     for (const org of (orgRows ?? []) as Array<{ id: string; name: string; tag: string; division_id: string }>) {
       orgLookup.set(org.id.toLowerCase(), org.id);
       orgLookup.set(org.name.toLowerCase(), org.id);
@@ -106,7 +144,7 @@ export async function POST(request: NextRequest) {
   }
 
   const warnings: Array<{ ign: string; warning: string }> = [];
-  const players = parsed.data.players.map((player) => {
+  const players = importCandidates.map((player) => {
     if (!player.orgId) return player;
     const resolved = orgLookup.get(player.orgId.trim().toLowerCase());
     if (resolved) return { ...player, orgId: resolved };
@@ -132,24 +170,25 @@ export async function POST(request: NextRequest) {
   // Fast path: one bulk upsert. If the batch fails (e.g. an IGN unique
   // collision with an existing player), fall back to per-row saves so the
   // valid rows still import — partial importing is allowed by design.
-  const errors: Array<{ ign: string; error: string }> = [];
   const savedPlayers: typeof players = [];
-  try {
-    await savePlayersBulk(players);
-    savedPlayers.push(...players);
-  } catch {
-    for (const player of players) {
-      try {
-        await savePlayer(player);
-        savedPlayers.push(player);
-      } catch (err) {
-        errors.push({ ign: player.ign, error: errorMessage(err, "Unknown error.") });
+  if (players.length > 0) {
+    try {
+      await savePlayersBulk(players);
+      savedPlayers.push(...players);
+    } catch {
+      for (const player of players) {
+        try {
+          await savePlayer(player);
+          savedPlayers.push(player);
+        } catch (err) {
+          errors.push({ ign: player.ign, error: errorMessage(err, "Unknown error.") });
+        }
       }
-    }
-    if (errors.length > 0) {
-      reportError("player import: some rows failed", new Error(`${errors.length}/${players.length} rows failed`), {
-        firstError: errors[0],
-      });
+      if (errors.length > 0) {
+        reportError("player import: some rows failed", new Error(`${errors.length}/${players.length} rows failed`), {
+          firstError: errors[0],
+        });
+      }
     }
   }
 

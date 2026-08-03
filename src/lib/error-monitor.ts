@@ -1,23 +1,70 @@
 // Lightweight server-side error reporting (#80). Posts failures to a Discord
 // webhook channel when DISCORD_ERROR_WEBHOOK_URL is configured; always falls
-// back to console.error (visible in Vercel function logs). Fire-and-forget —
-// reporting must never break or slow the request that triggered it.
+// back to console.error (visible in Vercel function logs). Reporting must never
+// break the request that triggered it.
+
+import { createHash } from "node:crypto";
+import { getCache, waitUntil } from "@vercel/functions";
 
 const WEBHOOK_TIMEOUT_MS = 3_000;
 const MAX_FIELD_LENGTH = 1_000;
+const ERROR_DEDUPE_TTL_SECONDS = 5 * 60;
+const localSuppressionUntil = new Map<string, number>();
 
 function truncate(value: string, max = MAX_FIELD_LENGTH): string {
   return value.length > max ? `${value.slice(0, max)}…` : value;
 }
 
 export function reportError(context: string, error: unknown, extra?: Record<string, unknown>): void {
-  const message = error instanceof Error ? error.message : String(error);
-  const stack = error instanceof Error ? error.stack : undefined;
-
   console.error(`[${context}]`, error, extra ?? "");
 
+  const delivery = deliverErrorReport(context, error, extra).catch(() => {
+    // Reporting failures are intentionally swallowed.
+  });
+  try {
+    waitUntil(delivery);
+  } catch {
+    // Build steps and local tests may not provide a request lifecycle.
+    void delivery;
+  }
+}
+
+export async function deliverErrorReport(
+  context: string,
+  error: unknown,
+  extra?: Record<string, unknown>,
+): Promise<"disabled" | "suppressed" | "sent"> {
+  const message = error instanceof Error ? error.message : String(error);
+  const stack = error instanceof Error ? error.stack : undefined;
   const webhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL;
-  if (!webhookUrl) return;
+  if (!webhookUrl) return "disabled";
+
+  const fingerprint = errorFingerprint(context, message, extra);
+  const now = Date.now();
+  if ((localSuppressionUntil.get(fingerprint) ?? 0) > now) return "suppressed";
+
+  // Runtime Cache is shared by every function instance in the deployment's
+  // region, so repeated serverless invocations observe the same suppression
+  // marker. The local map is only a fallback if shared cache is unavailable.
+  try {
+    const cache = getCache({ namespace: "sal-error-reporting" });
+    if (await cache.get(fingerprint)) {
+      localSuppressionUntil.set(fingerprint, now + ERROR_DEDUPE_TTL_SECONDS * 1_000);
+      return "suppressed";
+    }
+    await cache.set(
+      fingerprint,
+      { firstSeenAt: new Date(now).toISOString() },
+      {
+        ttl: ERROR_DEDUPE_TTL_SECONDS,
+        tags: ["error-report-deduplication"],
+        name: "error-report-deduplication",
+      },
+    );
+  } catch {
+    // Console logging still preserves every event when shared cache is down.
+  }
+  localSuppressionUntil.set(fingerprint, now + ERROR_DEDUPE_TTL_SECONDS * 1_000);
 
   const fields = [
     { name: "Message", value: truncate(message) || "(empty)" },
@@ -27,25 +74,37 @@ export function reportError(context: string, error: unknown, extra?: Record<stri
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
-  void fetch(webhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal: controller.signal,
-    body: JSON.stringify({
-      embeds: [
-        {
-          title: truncate(`🚨 ${context}`, 250),
-          color: 0xef4444,
-          fields,
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    }),
-  })
-    .catch(() => {
-      // Reporting failures are intentionally swallowed.
-    })
-    .finally(() => clearTimeout(timer));
+  try {
+    await fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({
+        embeds: [
+          {
+            title: truncate(`🚨 ${context}`, 250),
+            color: 0xef4444,
+            fields,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      }),
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+  return "sent";
+}
+
+function errorFingerprint(
+  context: string,
+  message: string,
+  extra?: Record<string, unknown>,
+): string {
+  const digest = createHash("sha256")
+    .update(`${context}\n${message}\n${JSON.stringify(extra ?? {})}`)
+    .digest("hex");
+  return `availability:${digest}`;
 }
 
 /**

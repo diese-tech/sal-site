@@ -40,10 +40,19 @@ function canServeMockLeagueData(): boolean {
 // MOCK_LEAGUE_DATA. In dev/E2E, behavior is unchanged. In production, throws
 // so the caller's nearest error boundary (or route handler) can surface an
 // explicit "unavailable" state instead of fabricated data.
-function unavailableOrMock(context: string, reason: string): LeagueData {
+function unavailableOrMock(
+  context: string,
+  reason: string,
+  extra?: Record<string, unknown>,
+): LeagueData {
   if (canServeMockLeagueData()) return MOCK_LEAGUE_DATA;
-  reportError(context, new LeagueDataUnavailableError(reason));
+  reportError(context, new LeagueDataUnavailableError(reason), extra);
   throw new LeagueDataUnavailableError(reason);
+}
+
+function missingIds(requestedIds: string[], loadedIds: string[]): string[] {
+  const loaded = new Set(loadedIds);
+  return [...new Set(requestedIds.filter((id) => !loaded.has(id)))];
 }
 
 type DbDivision = Omit<Division, "accentColor"> & { accent_color: string };
@@ -286,7 +295,7 @@ function fromDbAnnouncement(row: DbAnnouncement): Announcement {
   };
 }
 
-async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
+export async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return unavailableOrMock("getLeagueData", "Supabase env is not configured.");
 
@@ -353,7 +362,21 @@ async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
       rosterAssignments,
     );
     if (scoped.orgs.length !== orgAssignments.length || scoped.players.length !== rosterAssignments.length) {
-      return unavailableOrMock("getLeagueData", "Season assignments reference unavailable identities.");
+      return unavailableOrMock(
+        "getLeagueData",
+        "Season assignments reference unavailable identities.",
+        {
+          seasonId: seasonRow.id,
+          missingOrgIds: missingIds(
+            orgIds,
+            ((orgRes.data ?? []) as Array<{ id: string }>).map((org) => org.id),
+          ),
+          missingPlayerIds: missingIds(
+            playerIds,
+            ((playerRes.data ?? []) as Array<{ id: string }>).map((player) => player.id),
+          ),
+        },
+      );
     }
 
     const matches = (matchRes.data as DbMatch[]).map(fromDbMatch);
@@ -606,6 +629,15 @@ export async function saveSeasonOrgAssignment(
 ): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
+  const { data: org, error: orgError } = await supabase
+    .from("orgs")
+    .select("id")
+    .eq("id", orgId)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (orgError) throw orgError;
+  if (!org) throw new Error("Cannot enroll unavailable org.");
+
   const { error } = await supabase.from("season_orgs").upsert({
     season_id: seasonId,
     org_id: orgId,
@@ -634,8 +666,26 @@ export async function saveSeasonRosterAssignment(input: {
 }): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
+  const { data: player, error: playerError } = await supabase
+    .from("players")
+    .select("id")
+    .eq("id", input.playerId)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (playerError) throw playerError;
+  if (!player) throw new Error("Cannot enroll unavailable player.");
+
   let divisionId = input.divisionId;
   if (input.orgId) {
+    const { data: org, error: orgError } = await supabase
+      .from("orgs")
+      .select("id")
+      .eq("id", input.orgId)
+      .is("archived_at", null)
+      .maybeSingle();
+    if (orgError) throw orgError;
+    if (!org) throw new Error("Cannot enroll unavailable org.");
+
     const { data, error } = await supabase
       .from("season_orgs")
       .select("division_id")
@@ -708,9 +758,53 @@ export async function saveOrg(org: Org): Promise<void> {
 
 type SoftDeleteTable = "players" | "orgs" | "matches";
 
+async function retireSeasonParticipationBeforeArchive(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  table: SoftDeleteTable,
+  id: string,
+): Promise<void> {
+  if (table === "players") {
+    // The shared schema requires free agents to have no org/division, while an
+    // inactive roster row must retain both. Free-agent participation therefore
+    // cannot be inactivated without fabricating team membership; remove those
+    // rows and preserve team-assigned history by marking active rows inactive.
+    const { error: freeAgentError } = await supabase
+      .from("season_rosters")
+      .delete()
+      .eq("player_id", id)
+      .eq("roster_status", "free_agent");
+    if (freeAgentError) throw freeAgentError;
+
+    const { error: activeRosterError } = await supabase
+      .from("season_rosters")
+      .update({ roster_status: "inactive" })
+      .eq("player_id", id)
+      .eq("roster_status", "active");
+    if (activeRosterError) throw activeRosterError;
+    return;
+  }
+
+  if (table === "orgs") {
+    const { error: rosterError } = await supabase
+      .from("season_rosters")
+      .update({ roster_status: "inactive" })
+      .eq("org_id", id)
+      .eq("roster_status", "active");
+    if (rosterError) throw rosterError;
+
+    const { error: orgAssignmentError } = await supabase
+      .from("season_orgs")
+      .update({ status: "inactive" })
+      .eq("org_id", id)
+      .eq("status", "active");
+    if (orgAssignmentError) throw orgAssignmentError;
+  }
+}
+
 export async function archiveRecord(table: SoftDeleteTable, id: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
+  await retireSeasonParticipationBeforeArchive(supabase, table, id);
   const { error } = await supabase.from(table).update({ archived_at: new Date().toISOString() }).eq("id", id);
   if (error) throw error;
   await writeAuditLog("archive", table.slice(0, -1), id, {});
@@ -727,6 +821,7 @@ export async function unarchiveRecord(table: SoftDeleteTable, id: string): Promi
 export async function scheduleDelete(table: SoftDeleteTable, id: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
+  await retireSeasonParticipationBeforeArchive(supabase, table, id);
   const now = new Date().toISOString();
   const { error } = await supabase.from(table).update({ deletion_scheduled_at: now, archived_at: now }).eq("id", id);
   if (error) throw error;

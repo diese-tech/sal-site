@@ -61,6 +61,11 @@ class FakeQuery {
     return this;
   }
 
+  is(column: string, value: unknown) {
+    this.state.eqs.push([column, value]);
+    return this;
+  }
+
   single() {
     return this.execute();
   }
@@ -100,6 +105,8 @@ function defaultHandler(overrides: Partial<Record<string, QueryResult>> = {}, cu
   return (query) => {
     const override = overrides[query.table];
     if (override) return override;
+    if (query.table === "players") return { data: { id: "available-player" }, error: null };
+    if (query.table === "orgs") return { data: { id: "available-org" }, error: null };
     if (query.table === "season_orgs") return { data: { division_id: "solar" }, error: null };
     if (query.table === "seasons") return { data: currentSeasonId ? { id: currentSeasonId } : null, error: null };
     return { data: null, error: null };
@@ -113,6 +120,57 @@ beforeEach(() => {
 });
 
 describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
+  it("rejects an archived player before writing a season roster assignment", async () => {
+    client = makeClient(defaultHandler({ players: { data: null, error: null } }, "season-1"));
+    const { saveSeasonRosterAssignment } = await import("./league-data");
+
+    await expect(
+      saveSeasonRosterAssignment({
+        seasonId: "season-1",
+        playerId: "archived-player",
+        orgId: null,
+        divisionId: "terra",
+        isCaptain: false,
+      }),
+    ).rejects.toThrow("Cannot enroll unavailable player.");
+
+    expect(executed.some((q) => q.table === "season_rosters" && q.op === "upsert")).toBe(false);
+  });
+
+  it("rejects a missing player before writing a season roster assignment", async () => {
+    client = makeClient(defaultHandler({ players: { data: null, error: null } }, "season-1"));
+    const { saveSeasonRosterAssignment } = await import("./league-data");
+
+    await expect(
+      saveSeasonRosterAssignment({
+        seasonId: "season-1",
+        playerId: "missing-player",
+        orgId: null,
+        divisionId: "terra",
+        isCaptain: false,
+      }),
+    ).rejects.toThrow("Cannot enroll unavailable player.");
+
+    expect(executed.some((q) => q.table === "season_rosters" && q.op === "upsert")).toBe(false);
+  });
+
+  it("rejects an unavailable org before writing an org-affiliated roster assignment", async () => {
+    client = makeClient(defaultHandler({ orgs: { data: null, error: null } }, "season-1"));
+    const { saveSeasonRosterAssignment } = await import("./league-data");
+
+    await expect(
+      saveSeasonRosterAssignment({
+        seasonId: "season-1",
+        playerId: "available-player",
+        orgId: "archived-org",
+        divisionId: null,
+        isCaptain: false,
+      }),
+    ).rejects.toThrow("Cannot enroll unavailable org.");
+
+    expect(executed.some((q) => q.table === "season_rosters" && q.op === "upsert")).toBe(false);
+  });
+
   it("mirrors org_id/is_captain/status onto the legacy players row for a captain assignment in the current season", async () => {
     client = makeClient(defaultHandler({}, "season-1"));
     const { saveSeasonRosterAssignment } = await import("./league-data");
@@ -172,7 +230,7 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
     await expect(
       saveSeasonRosterAssignment({ seasonId: "s1", playerId: "p1", orgId: null, divisionId: "terra", isCaptain: false }),
     ).rejects.toThrow("boom");
-    expect(executed.some((q) => q.table === "players")).toBe(false);
+    expect(executed.some((q) => q.table === "players" && q.op === "update")).toBe(false);
   });
 
   // Codex review (#230): editing a non-operational season (a historical
@@ -192,7 +250,118 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
 
     const rosterUpsert = executed.find((q) => q.table === "season_rosters" && q.op === "upsert");
     expect(rosterUpsert?.payload).toMatchObject({ season_id: "season-historical", player_id: "p1", org_id: "org-a" });
-    expect(executed.some((q) => q.table === "players")).toBe(false);
+    expect(executed.some((q) => q.table === "players" && q.op === "update")).toBe(false);
+  });
+});
+
+describe("saveSeasonOrgAssignment availability guard (#237)", () => {
+  it("rejects an archived org before writing a season org assignment", async () => {
+    client = makeClient(defaultHandler({ orgs: { data: null, error: null } }));
+    const { saveSeasonOrgAssignment } = await import("./league-data");
+
+    await expect(saveSeasonOrgAssignment("season-1", "archived-org", "terra"))
+      .rejects.toThrow("Cannot enroll unavailable org.");
+
+    expect(executed.some((q) => q.table === "season_orgs" && q.op === "upsert")).toBe(false);
+  });
+
+  it("rejects a missing org before writing a season org assignment", async () => {
+    client = makeClient(defaultHandler({ orgs: { data: null, error: null } }));
+    const { saveSeasonOrgAssignment } = await import("./league-data");
+
+    await expect(saveSeasonOrgAssignment("season-1", "missing-org", "terra"))
+      .rejects.toThrow("Cannot enroll unavailable org.");
+
+    expect(executed.some((q) => q.table === "season_orgs" && q.op === "upsert")).toBe(false);
+  });
+
+  it("continues to enroll an available org", async () => {
+    client = makeClient(defaultHandler());
+    const { saveSeasonOrgAssignment } = await import("./league-data");
+
+    await saveSeasonOrgAssignment("season-1", "org-available", "terra");
+
+    expect(executed.find((q) => q.table === "season_orgs" && q.op === "upsert")?.payload)
+      .toMatchObject({ season_id: "season-1", org_id: "org-available", status: "active" });
+  });
+});
+
+describe("archiveRecord season-participation cleanup (#237)", () => {
+  it("retires every active/free-agent roster assignment before archiving a player", async () => {
+    client = makeClient(defaultHandler());
+    const { archiveRecord } = await import("./league-data");
+
+    await archiveRecord("players", "player-1");
+
+    const participationWrites = executed.filter((q) =>
+      q.table === "season_rosters" || (q.table === "players" && q.op === "update")
+    );
+    expect(participationWrites).toHaveLength(3);
+    expect(participationWrites[0]).toMatchObject({
+      table: "season_rosters",
+      op: "delete",
+      eqs: [["player_id", "player-1"], ["roster_status", "free_agent"]],
+    });
+    expect(participationWrites[1]).toMatchObject({
+      table: "season_rosters",
+      op: "update",
+      payload: { roster_status: "inactive" },
+      eqs: [["player_id", "player-1"], ["roster_status", "active"]],
+    });
+    expect(participationWrites[2]).toMatchObject({
+      table: "players",
+      op: "update",
+      eqs: [["id", "player-1"]],
+    });
+  });
+
+  it("retires org roster and season participation before archiving an org", async () => {
+    client = makeClient(defaultHandler());
+    const { archiveRecord } = await import("./league-data");
+
+    await archiveRecord("orgs", "org-1");
+
+    const participationWrites = executed.filter((q) =>
+      q.table === "season_rosters" || q.table === "season_orgs" || (q.table === "orgs" && q.op === "update")
+    );
+    expect(participationWrites).toHaveLength(3);
+    expect(participationWrites[0]).toMatchObject({
+      table: "season_rosters",
+      op: "update",
+      payload: { roster_status: "inactive" },
+      eqs: [["org_id", "org-1"], ["roster_status", "active"]],
+    });
+    expect(participationWrites[1]).toMatchObject({
+      table: "season_orgs",
+      op: "update",
+      payload: { status: "inactive" },
+      eqs: [["org_id", "org-1"], ["status", "active"]],
+    });
+    expect(participationWrites[2]).toMatchObject({
+      table: "orgs",
+      op: "update",
+      eqs: [["id", "org-1"]],
+    });
+  });
+
+  it("uses the same participation cleanup when scheduling a player for deletion", async () => {
+    client = makeClient(defaultHandler());
+    const { scheduleDelete } = await import("./league-data");
+
+    await scheduleDelete("players", "player-1");
+
+    const participationWrites = executed.filter((q) =>
+      q.table === "season_rosters" || (q.table === "players" && q.op === "update")
+    );
+    expect(participationWrites.map((q) => [q.table, q.op])).toEqual([
+      ["season_rosters", "delete"],
+      ["season_rosters", "update"],
+      ["players", "update"],
+    ]);
+    expect(participationWrites[2].payload).toMatchObject({
+      archived_at: expect.any(String),
+      deletion_scheduled_at: expect.any(String),
+    });
   });
 });
 
