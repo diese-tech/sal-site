@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Season, SeasonStatus } from "@/types/league";
 import { cn } from "@/lib/utils";
+import { AdminPreseasonIngestPanel } from "@/components/admin/AdminPreseasonIngestPanel";
 
 const inputClass = "w-full rounded-lg border border-white/10 bg-black/45 px-3 py-2 text-sm font-semibold text-white outline-none focus:border-cyan-300/50";
 
@@ -252,6 +253,7 @@ export function AdminSeasonsClient({ seasons }: { seasons: Season[] }) {
                   Edit
                 </button>
               </div>
+              <AdminPreseasonIngestPanel targetSeasonId={season.id} seasons={seasons} />
             </div>
           </div>
         ))}

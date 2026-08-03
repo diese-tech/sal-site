@@ -473,7 +473,14 @@ export async function getAdminLeagueData(seasonId?: string): Promise<LeagueData>
 
 export async function getAllSeasons(): Promise<Season[]> {
   const supabase = getSupabaseServerClient();
-  if (!supabase) return [];
+  if (!supabase) {
+    // Same dev/E2E-only mock convention as fetchLeagueData/getFormFields (#153):
+    // admin pages that list seasons (import destination picker, season admin
+    // list) must still render something to interact with in local dev and the
+    // Playwright suite, which both run with no Supabase configured. Never
+    // fabricate data in real production.
+    return canServeMockLeagueData() ? [MOCK_LEAGUE_DATA.season] : [];
+  }
   const { data, error } = await supabase.from("seasons").select("*").order("start_date", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((row) => fromDbSeason(row as DbSeason));
@@ -522,7 +529,34 @@ export async function setCurrentSeason(seasonId: string): Promise<void> {
   if (!supabase) throw new Error("Supabase env is missing.");
   const { error } = await supabase.rpc("set_current_season", { p_season_id: seasonId });
   if (error) throw error;
+  // saveSeasonRosterAssignment only mirrors onto legacy `players` columns for
+  // the operational season, so edits made while this season was NOT current
+  // (e.g. an Ingest from Preseason done ahead of go-live) never reached
+  // players. Catch it up now that this season is the one captain-bot/
+  // authorization consumers actually read.
+  await syncLegacyPlayersFromSeason(seasonId);
   await writeAuditLog("set_current_season", "season", seasonId, { isCurrent: true });
+}
+
+async function syncLegacyPlayersFromSeason(seasonId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const { data, error } = await supabase
+    .from("season_rosters")
+    .select("player_id, org_id, is_captain")
+    .eq("season_id", seasonId);
+  if (error) throw error;
+  for (const row of (data ?? []) as Array<{ player_id: string; org_id: string | null; is_captain: boolean }>) {
+    const { error: playerError } = await supabase
+      .from("players")
+      .update({
+        org_id: row.org_id,
+        is_captain: row.is_captain,
+        status: row.org_id ? "org-affiliated" : "free-agent",
+      })
+      .eq("id", row.player_id);
+    if (playerError) throw playerError;
+  }
 }
 
 export interface SeasonOrgAdminAssignment extends SeasonOrgAssignment {
@@ -611,21 +645,44 @@ export async function saveSeasonRosterAssignment(input: {
     if (error) throw error;
     divisionId = (data as { division_id: DivisionId }).division_id;
   }
+  const isCaptain = input.orgId ? input.isCaptain : false;
   const { error } = await supabase.from("season_rosters").upsert({
     season_id: input.seasonId,
     player_id: input.playerId,
     org_id: input.orgId,
     division_id: divisionId,
-    is_captain: input.orgId ? input.isCaptain : false,
+    is_captain: isCaptain,
     roster_status: input.orgId ? "active" : "free_agent",
     updated_at: new Date().toISOString(),
   }, { onConflict: "season_id,player_id" });
   if (error) throw error;
+
+  // Legacy parity: the captain bot and other consumers that have not moved to
+  // season_rosters yet (e.g. getPlayerByDiscordId/resolveRole) read
+  // org_id/is_captain/status directly off the global players row — see the
+  // same pattern in finalizeDraftRosters. Only mirror when this write affects
+  // the OPERATIONAL (current) season: those consumers aren't season-aware, so
+  // editing a historical season or ingesting into a not-yet-live season would
+  // otherwise clobber the real current season's captain/org state (Codex
+  // review on #230).
+  const currentSeasonId = await getCurrentSeasonId();
+  if (input.seasonId === currentSeasonId) {
+    const { error: playerError } = await supabase
+      .from("players")
+      .update({
+        org_id: input.orgId,
+        is_captain: isCaptain,
+        status: input.orgId ? "org-affiliated" : "free-agent",
+      })
+      .eq("id", input.playerId);
+    if (playerError) throw playerError;
+  }
+
   await writeAuditLog("save_season_roster", "season", input.seasonId, {
     playerId: input.playerId,
     orgId: input.orgId,
     divisionId,
-    isCaptain: input.orgId ? input.isCaptain : false,
+    isCaptain,
   });
 }
 

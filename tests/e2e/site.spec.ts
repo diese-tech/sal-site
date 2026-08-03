@@ -641,6 +641,7 @@ for (const item of [
   { name: "Registrations", url: "/admin/registrations" },
   { name: "Form Fields", url: "/admin/form-fields" },
   { name: "Import", url: "/admin/import" },
+  { name: "Seasons", url: "/admin/seasons" },
 ]) {
   test(`admin nav opens ${item.name}`, async ({ page }) => {
     await adminLogin(page);
@@ -648,6 +649,68 @@ for (const item of [
     await expect(page).toHaveURL(item.url);
   });
 }
+
+// #230: "Ingest from Preseason" lets an admin carry participation from a
+// source preseason into a newly created real season, previewing before write.
+test("admin seasons page exposes Ingest from Preseason with a preview-before-write flow", async ({ page }) => {
+  await adminLogin(page);
+  let applyBody: { source?: string } | undefined;
+  await page.route("**/api/admin/seasons/*/ingest-preseason**", async (route) => {
+    if (route.request().method() === "POST") {
+      applyBody = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, orgsIngested: 1, playersIngested: 2 }) });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        sourceSeasonId: "preseason-2",
+        sourceSeasonName: "Preseason 2",
+        targetSeasonId: "sal-s1",
+        targetSeasonName: "Season 1",
+        orgCount: 1,
+        captainCount: 1,
+        freeAgentCount: 1,
+        totalPlayers: 2,
+        divisions: [
+          {
+            divisionId: "terra",
+            divisionName: "Terra",
+            orgs: [{ orgId: "org-a", orgName: "Obsidian Knights", orgTag: "OBS", captainId: "p1", captainIgn: "PlayerOne" }],
+            freeAgents: [{ playerId: "p2", ign: "FreeAgentAlpha" }],
+          },
+          { divisionId: "solar", divisionName: "Solar", orgs: [], freeAgents: [] },
+          { divisionId: "lunar", divisionName: "Lunar", orgs: [], freeAgents: [] },
+        ],
+      }),
+    });
+  });
+
+  await page.goto("/admin/seasons");
+  await page.getByRole("button", { name: "Ingest from Preseason" }).first().click();
+
+  // The dropdown's only real option is disabled by mock data having a single
+  // season — force-select it via JS to still exercise the preview/apply wiring.
+  const select = page.getByLabel("Source preseason");
+  await select.evaluate((el: HTMLSelectElement) => {
+    const opt = document.createElement("option");
+    opt.value = "preseason-2";
+    opt.textContent = "Preseason 2 (pre-season)";
+    el.appendChild(opt);
+    el.value = "preseason-2";
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  await page.getByRole("button", { name: "Preview" }).click();
+  await expect(page.getByText("1 orgs · 1 captains · 1 free agents · 2 players total")).toBeVisible();
+  await expect(page.getByText(/Obsidian Knights/)).toBeVisible();
+  await expect(page.getByText(/Captain:\s*PlayerOne/)).toBeVisible();
+  await expect(page.getByText("FreeAgentAlpha")).toBeVisible();
+
+  await page.getByRole("button", { name: /Apply — Ingest into/ }).click();
+  await expect.poll(() => applyBody?.source).toBe("preseason-2");
+});
 
 test("admin registrations page shows pending tab", async ({ page }) => {
   await adminLogin(page);
@@ -828,6 +891,31 @@ test("admin import sends batch to API and shows imported count", async ({ page }
   await expect(page.getByText("Imported 2 players.")).toBeVisible();
   expect(Array.isArray(sentPlayers)).toBe(true);
   expect((sentPlayers as unknown[]).length).toBe(2);
+});
+
+// #230: bulk import must enroll players into a season+division, not just
+// upsert player identities — the import UI requires picking both.
+test("admin import requires a season/division destination and sends it to the API", async ({ page }) => {
+  await adminLogin(page);
+  let sentBody: { seasonId?: string; divisionId?: string } | undefined;
+  await page.route("**/api/admin/import/players", async (route) => {
+    sentBody = route.request().postDataJSON();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ imported: 1, errors: [] }) });
+  });
+  await page.goto("/admin/import");
+  await expect(page.getByLabel("Season")).toBeVisible();
+  await expect(page.getByLabel("Division")).toBeVisible();
+  await page.getByLabel("Division").selectOption("solar");
+  await page.locator("textarea").fill("IGN,Discord,Role\nSlayer99,slayer99#0001,Jungle");
+  await page.getByRole("button", { name: /Import/ }).click();
+  await expect(page.getByText("Imported 1 player.")).toBeVisible();
+  expect(sentBody?.seasonId).toBeTruthy();
+  expect(sentBody?.divisionId).toBe("solar");
+  // Manage-imported-players link points at the season roster admin page.
+  await expect(page.getByRole("link", { name: /Manage imported players/ })).toHaveAttribute(
+    "href",
+    new RegExp(`/admin/seasons/${encodeURIComponent(sentBody!.seasonId!)}/roster`),
+  );
 });
 
 // --- Admin draft flows ---
