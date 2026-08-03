@@ -59,6 +59,14 @@ export interface LeaguePlayer {
   displayAlias?: string;
   avatarInitials: string;
   avatarGradient: string;
+  /**
+   * Discord CDN profile picture, captured from the OAuth session at
+   * register/claim/admin-approval time (players.avatar_url) — never set by
+   * bulk import or manual admin edits, since it must only ever come from a
+   * verified Discord session. Read-only everywhere else: falls back to
+   * avatarInitials/avatarGradient when unset.
+   */
+  avatarUrl?: string;
   primaryRole: import("@/types/card-lab").PlayerRole;
   secondaryRoles: import("@/types/card-lab").PlayerRole[];
   isStarter: boolean;

@@ -65,3 +65,17 @@ export function getDiscordUsername(user: User): string {
 export function getDiscordDisplayName(user: User): string {
   return (user.user_metadata?.full_name as string | undefined) ?? getDiscordUsername(user);
 }
+
+/**
+ * Discord CDN profile picture URL, if the OAuth session returned one.
+ * Confirmed present as a fully-formed `https://cdn.discordapp.com/avatars/...`
+ * URL in user_metadata.avatar_url for this project's Discord OIDC provider —
+ * no need to construct/size it ourselves.
+ */
+export function getDiscordAvatarUrl(user: User): string | undefined {
+  const discordIdentity = user.identities?.find((i) => i.provider === "discord");
+  return (
+    (user.user_metadata?.avatar_url as string | undefined) ??
+    (discordIdentity?.identity_data?.avatar_url as string | undefined)
+  );
+}

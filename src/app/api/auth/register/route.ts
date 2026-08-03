@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { createRegistration, getCurrentSeasonId, getRegistrationByDiscordId } from "@/lib/league-data";
-import { getAuthUser, getDiscordId, getDiscordUsername, getDiscordDisplayName } from "@/lib/supabase-auth-server";
+import { getAuthUser, getDiscordAvatarUrl, getDiscordId, getDiscordUsername, getDiscordDisplayName } from "@/lib/supabase-auth-server";
 import { checkRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
 
 const schema = z.object({
@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
     discordId,
     discordUsername,
     discordDisplayName: getDiscordDisplayName(user),
+    avatarUrl: getDiscordAvatarUrl(user),
     seasonId,
     formData: parsed.data.formData,
   });

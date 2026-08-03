@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getAdminRequestSession } from "@/lib/admin-auth";
-import { errorMessage } from "@/lib/error-monitor";
+import { errorMessage, reportError } from "@/lib/error-monitor";
+import { copyRegistrationAvatarToPlayer } from "@/lib/league-data";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 const schema = z
@@ -37,6 +38,11 @@ interface RegistrationReviewDependencies {
     decision: "approve" | "reject";
     reviewerNote?: string;
   }) => Promise<unknown>;
+  // The shared resolve_registration_review RPC predates avatar_url and
+  // doesn't copy it — this carries the avatar the registrant's session
+  // captured onto the resulting player row. Best-effort: a failure here must
+  // not undo an already-successful approval.
+  copyRegistrationAvatar?: (registrationId: string, playerId: string) => Promise<void>;
 }
 
 export function createRegistrationReviewHandler(dependencies: RegistrationReviewDependencies) {
@@ -77,6 +83,13 @@ export function createRegistrationReviewHandler(dependencies: RegistrationReview
       }
 
       if (parsed.data.status === "approved") {
+        if (result.data.playerId && dependencies.copyRegistrationAvatar) {
+          try {
+            await dependencies.copyRegistrationAvatar(id, result.data.playerId);
+          } catch (avatarError) {
+            reportError("registration review: avatar copy failed", avatarError, { registrationId: id, playerId: result.data.playerId });
+          }
+        }
         return NextResponse.json({ ok: true, playerId: result.data.playerId });
       }
       return NextResponse.json({ ok: true });
@@ -122,4 +135,5 @@ async function resolveRegistration(input: {
 export const PATCH = createRegistrationReviewHandler({
   getSession: getAdminRequestSession,
   resolveRegistration,
+  copyRegistrationAvatar: copyRegistrationAvatarToPlayer,
 });

@@ -4,7 +4,7 @@ import {
   getPlayerByDiscordId,
   getRegistrationByDiscordId,
 } from "@/lib/league-data";
-import { getAuthUser, getDiscordId, getDiscordUsername } from "@/lib/supabase-auth-server";
+import { getAuthUser, getDiscordAvatarUrl, getDiscordId, getDiscordUsername } from "@/lib/supabase-auth-server";
 import { checkRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
   // Match entirely server-side by discord_username — no client-supplied playerId
   // accepted, which prevents cross-profile identity theft (issue #57).
-  const result = await claimPlayerByDiscordUsername(discordId, discordUsername);
+  const result = await claimPlayerByDiscordUsername(discordId, discordUsername, getDiscordAvatarUrl(user));
   if (!result.ok) {
     const msgs: Record<string, string> = {
       not_found: "No player profile found matching your Discord username. Contact an admin if you believe this is incorrect.",

@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { User } from "@supabase/supabase-js";
-import { getDiscordDisplayName, getDiscordId, getDiscordUsername } from "./supabase-auth-server";
+import { getDiscordAvatarUrl, getDiscordDisplayName, getDiscordId, getDiscordUsername } from "./supabase-auth-server";
 
 function makeUser(overrides: { user_metadata?: Record<string, unknown>; email?: string; identities?: unknown[] } = {}): User {
   return {
@@ -84,5 +84,24 @@ describe("getDiscordId", () => {
   it("still resolves normally (unaffected by the username fix)", () => {
     const user = makeUser({ user_metadata: { provider_id: "123456789" } });
     expect(getDiscordId(user)).toBe("123456789");
+  });
+});
+
+describe("getDiscordAvatarUrl", () => {
+  it("returns user_metadata.avatar_url when present", () => {
+    const user = makeUser({ user_metadata: { avatar_url: "https://cdn.discordapp.com/avatars/1/abc.png" } });
+    expect(getDiscordAvatarUrl(user)).toBe("https://cdn.discordapp.com/avatars/1/abc.png");
+  });
+
+  it("falls back to the Discord identity's identity_data.avatar_url", () => {
+    const user = makeUser({
+      identities: [{ provider: "discord", identity_data: { avatar_url: "https://cdn.discordapp.com/avatars/1/identity.png" } }],
+    });
+    expect(getDiscordAvatarUrl(user)).toBe("https://cdn.discordapp.com/avatars/1/identity.png");
+  });
+
+  it("returns undefined when no avatar is available anywhere", () => {
+    const user = makeUser({});
+    expect(getDiscordAvatarUrl(user)).toBeUndefined();
   });
 });

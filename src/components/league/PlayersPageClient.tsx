@@ -46,7 +46,12 @@ function PlayerCard({ player, org }: { player: LeaguePlayer; org?: { id: string;
       <div className="absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-white/5 to-slate-950/90" />
 
       <div className="relative flex items-center gap-3">
-        <AvatarMark initials={player.avatarInitials} gradient={player.avatarGradient} className="h-12 w-12 shrink-0 rounded-xl text-sm" />
+        <AvatarMark
+          initials={player.avatarInitials}
+          gradient={player.avatarGradient}
+          avatarUrl={player.avatarUrl}
+          className="h-12 w-12 shrink-0 rounded-xl text-sm"
+        />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <p className="truncate font-black text-white group-hover:text-cyan-100 transition">{player.displayAlias ?? player.ign}</p>
