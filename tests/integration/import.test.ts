@@ -43,7 +43,14 @@ vi.mock("@/lib/league-data", () => ({
 // Chainable stub covering both the season-existence check (select().eq().maybeSingle())
 // and the org lookup (select()) the route runs against the same client. Tests
 // that need a resolvable org override `orgRows` via the module-level var below.
-let orgRows: Array<{ id: string; name: string; tag: string; division_id: string }> = [];
+let orgRows: Array<{
+  id: string;
+  name: string;
+  tag: string;
+  division_id: string;
+  archived_at: string | null;
+}> = [];
+let existingPlayerRows: Array<{ id: string; archived_at: string | null }> = [];
 vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServerClient: vi.fn(() => ({
     from: (table: string) => ({
@@ -56,7 +63,22 @@ vi.mock("@/lib/supabase-server", () => ({
           };
         }
         if (table === "orgs") {
-          return Promise.resolve({ data: orgRows, error: null });
+          return {
+            is: (_column: string, value: null) =>
+              Promise.resolve({
+                data: orgRows.filter((org) => org.archived_at === value),
+                error: null,
+              }),
+          };
+        }
+        if (table === "players") {
+          return {
+            in: (_column: string, ids: string[]) =>
+              Promise.resolve({
+                data: existingPlayerRows.filter((player) => ids.includes(player.id)),
+                error: null,
+              }),
+          };
         }
         return Promise.resolve({ data: [], error: null });
       },
@@ -66,6 +88,7 @@ vi.mock("@/lib/supabase-server", () => ({
 
 beforeEach(() => {
   orgRows = [];
+  existingPlayerRows = [];
 });
 
 function makeRequest(body: Record<string, unknown>): NextRequest {
@@ -250,7 +273,7 @@ describe("POST /api/admin/import/players — season enrollment (#230)", () => {
   });
 
   it("enrolls a resolved existing org into the selected season before assigning the player to it", async () => {
-    orgRows = [{ id: "org-a", name: "Obsidian Knights", tag: "OBS", division_id: "terra" }];
+    orgRows = [{ id: "org-a", name: "Obsidian Knights", tag: "OBS", division_id: "terra", archived_at: null }];
     const { POST } = await import("@/app/api/admin/import/players/route");
     const { saveSeasonOrgAssignment, saveSeasonRosterAssignment } = await import("@/lib/league-data");
     vi.mocked(saveSeasonOrgAssignment).mockClear();
@@ -298,5 +321,63 @@ describe("POST /api/admin/import/players — season enrollment (#230)", () => {
     expect(data.errors[0].error).toMatch(/failed to enroll in season/i);
 
     vi.mocked(saveSeasonRosterAssignment).mockReset().mockResolvedValue(undefined);
+  });
+});
+
+describe("POST /api/admin/import/players - archived identity guards", () => {
+  it("rejects an archived player id before any identity or roster write", async () => {
+    existingPlayerRows = [
+      { id: "archived-player", archived_at: "2026-08-03T21:26:58.243Z" },
+    ];
+    const { POST } = await import("@/app/api/admin/import/players/route");
+    const { savePlayersBulk, savePlayer, saveSeasonRosterAssignment } = await import("@/lib/league-data");
+    vi.mocked(savePlayersBulk).mockClear();
+    vi.mocked(savePlayer).mockClear();
+    vi.mocked(saveSeasonRosterAssignment).mockClear();
+
+    const req = makeRequest({
+      players: [validPlayer({ id: "archived-player", ign: "ArchivedPlayer" })],
+    });
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.imported).toBe(0);
+    expect(data.errors).toEqual([
+      {
+        ign: "ArchivedPlayer",
+        error: "Player already exists but is archived. Restore the player before enrolling them.",
+      },
+    ]);
+    expect(savePlayersBulk).not.toHaveBeenCalled();
+    expect(savePlayer).not.toHaveBeenCalled();
+    expect(saveSeasonRosterAssignment).not.toHaveBeenCalled();
+  });
+
+  it("does not resolve or enroll an archived org", async () => {
+    orgRows = [{
+      id: "archived-org",
+      name: "Archived Organization",
+      tag: "ARC",
+      division_id: "terra",
+      archived_at: "2026-08-03T20:00:00.000Z",
+    }];
+    const { POST } = await import("@/app/api/admin/import/players/route");
+    const { saveSeasonOrgAssignment, saveSeasonRosterAssignment } = await import("@/lib/league-data");
+    vi.mocked(saveSeasonOrgAssignment).mockClear();
+    vi.mocked(saveSeasonRosterAssignment).mockClear();
+
+    const req = makeRequest({
+      players: [validPlayer({ id: "player-archived-org", ign: "NoArchivedOrg", orgId: "archived-org" })],
+    });
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(data.imported).toBe(1);
+    expect(data.warnings[0].warning).toMatch(/unknown team/i);
+    expect(saveSeasonOrgAssignment).not.toHaveBeenCalled();
+    expect(saveSeasonRosterAssignment).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: "player-archived-org", orgId: null }),
+    );
   });
 });
