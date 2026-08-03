@@ -68,6 +68,24 @@ describe("getDiscordUsername", () => {
     });
     expect(getDiscordUsername(user)).toBe("");
   });
+
+  // Confirmed against live incident data (#233 follow-up): every affected
+  // account had user_name AND identity_data completely empty, but
+  // user_metadata.full_name held the real Discord handle (Discord's newer
+  // global-handle accounts have no separate display name, so Supabase's
+  // full_name = global_name ?? username ends up being the actual handle).
+  it("recovers the username from user_metadata.full_name when user_name is unavailable anywhere", () => {
+    const user = makeUser({ user_metadata: { full_name: "rteki" }, email: "totskablade8@gmail.com" });
+    expect(getDiscordUsername(user)).toBe("rteki");
+  });
+
+  it("recovers the username from the Discord identity's identity_data.full_name as a last resort", () => {
+    const user = makeUser({
+      email: "realperson@example.com",
+      identities: [{ provider: "discord", identity_data: { full_name: "identity_full_name_handle" } }],
+    });
+    expect(getDiscordUsername(user)).toBe("identity_full_name_handle");
+  });
 });
 
 describe("getDiscordDisplayName", () => {
