@@ -10,7 +10,6 @@ import type { BugReportSubmissionPayload } from "@/types/bug-report";
 export function BugReportConfirmationModal({
   open,
   report,
-  attachmentNames,
   submissionEnabled,
   submitting,
   onCancel,
@@ -18,7 +17,6 @@ export function BugReportConfirmationModal({
 }: {
   open: boolean;
   report: BugReportSubmissionPayload;
-  attachmentNames: string[];
   submissionEnabled: boolean;
   submitting: boolean;
   onCancel: () => void;
@@ -74,7 +72,7 @@ export function BugReportConfirmationModal({
             Ready to send this report?
           </h2>
           <p id="bug-report-confirm-description" className="mt-2 text-sm leading-6 text-slate-400">
-            Check the details below. Your report remains anonymous unless you requested private Discord replies.
+            Check the details below. The report is submitted anonymously.
           </p>
         </div>
 
@@ -82,14 +80,6 @@ export function BugReportConfirmationModal({
           <dl className="grid grid-cols-2 gap-px bg-white/10">
             <SummaryItem label="Category" value={category ?? report.category} />
             <SummaryItem label="Severity" value={severity ?? report.severity} />
-            <SummaryItem
-              label="Images"
-              value={attachmentNames.length === 1 ? "1 image" : `${attachmentNames.length} images`}
-            />
-            <SummaryItem
-              label="Private replies"
-              value={report.replyRelayConsent ? "Allowed" : "Not linked"}
-            />
           </dl>
 
           <div className="space-y-5 p-5 sm:p-6">
@@ -98,19 +88,6 @@ export function BugReportConfirmationModal({
             <ReviewText label="Steps to reproduce" value={report.reproductionSteps} />
             <ReviewText label="Expected behavior" value={report.expectedBehavior} />
             {report.environment ? <ReviewText label="Environment" value={report.environment} /> : null}
-            {attachmentNames.length > 0 ? (
-              <div>
-                <p className="text-xs font-black uppercase tracking-wide text-slate-500">Images</p>
-                <ul className="mt-2 space-y-1 text-sm text-slate-300">
-                  {attachmentNames.map((name, index) => (
-                    <li key={`${name}-${index}`} className="break-all">
-                      {name}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
             {!submissionEnabled ? (
               <div className="rounded-lg border border-amber-300/25 bg-amber-300/[0.08] p-3 text-xs leading-5 text-amber-100">
                 Bug reports are temporarily unavailable. This report has not been sent.

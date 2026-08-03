@@ -82,6 +82,7 @@ const SOURCE_LABELS: Record<TicketSourceHealth["source"], string> = {
   stat_review: "Stat Reviews",
   registration: "Registrations",
   match_report: "Match Reports",
+  bug_report: "Bug Reports",
 };
 
 function formatTimestamp(iso: string): string {
@@ -209,6 +210,18 @@ function TicketDetail({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {ticket.details && ticket.details.length > 0 && (
+        <div className="mb-4 space-y-3 rounded-xl border border-white/8 bg-black/20 p-4">
+          <p className="text-[0.6rem] font-black uppercase tracking-wider text-slate-500">Report details</p>
+          {ticket.details.map((detail) => (
+            <div key={detail.label}>
+              <p className="text-[0.6rem] font-black uppercase tracking-wider text-slate-500">{detail.label}</p>
+              <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-300">{detail.value}</p>
+            </div>
+          ))}
         </div>
       )}
 

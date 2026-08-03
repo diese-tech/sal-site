@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { BugReportForm } from "@/components/bug-report/BugReportForm";
-import { getAuthUser, getDiscordId } from "@/lib/supabase-auth-server";
 import { getBugReportRuntime } from "@/lib/bug-reports/runtime";
 
 export const dynamic = "force-dynamic";
@@ -11,8 +10,6 @@ export const metadata: Metadata = {
 };
 
 export default async function ReportABugPage() {
-  const user = await getAuthUser();
-  const relayAvailable = Boolean(user && getDiscordId(user));
   const submissionEnabled = getBugReportRuntime().ready;
 
   return (
@@ -34,15 +31,15 @@ export default async function ReportABugPage() {
         </div>
 
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:gap-8">
-          <BugReportForm relayAvailable={relayAvailable} submissionEnabled={submissionEnabled} />
+          <BugReportForm submissionEnabled={submissionEnabled} />
           <aside className="space-y-4 lg:sticky lg:top-32">
             <InfoCard
               eyebrow="Privacy"
-              title="Anonymous by default"
+              title="Anonymous report"
               tone="cyan"
               items={[
                 "Your name is not shown in the staff ticket.",
-                "Sign in only if you want private Discord replies.",
+                "No sign-in is required for this release.",
               ]}
             />
             <InfoCard
@@ -51,7 +48,7 @@ export default async function ReportABugPage() {
               tone="emerald"
               items={[
                 "You receive a private link to check the report status.",
-                "Staff may ask for more details and will record the resolution.",
+                "The report appears immediately in the private admin queue.",
               ]}
             />
             <div className="rounded-[var(--sal-card-radius)] border border-amber-300/20 bg-amber-300/[0.06] p-4">

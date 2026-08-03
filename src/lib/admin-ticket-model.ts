@@ -77,6 +77,22 @@ export type MatchReportSourceRow = Pick<
   | "screenshot_urls"
 >;
 
+export type BugReportSourceRow = Pick<
+  Tables["bug_reports"]["Row"],
+  | "id"
+  | "ticket_id"
+  | "status"
+  | "category"
+  | "severity"
+  | "subject"
+  | "description"
+  | "reproduction_steps"
+  | "expected_behavior"
+  | "environment"
+  | "created_at"
+  | "updated_at"
+>;
+
 // Raw statuses each source uses for finished work. The reader excludes these
 // when fetching unresolved rows, so open work is never crowded out of the
 // queue by newer terminal records; statuses not listed here (including
@@ -100,6 +116,7 @@ export const PENDING_STAT_TERMINAL_STATUSES = [
 ] as const;
 export const REGISTRATION_TERMINAL_STATUSES = ["approved", "rejected"] as const;
 export const MATCH_REPORT_TERMINAL_STATUSES = ["done"] as const;
+export const BUG_REPORT_TERMINAL_STATUSES = ["resolved", "no_response"] as const;
 
 export const PENDING_ACTION_COLUMNS =
   "id,type,status,created_at,updated_at,division_id,match_id,admin_note,source_discord_message_url,approved_at";
@@ -109,6 +126,8 @@ export const REGISTRATION_COLUMNS =
   "id,status,created_at,reviewed_at,reviewer_note,season_id,player_id,discord_username,discord_display_name,form_data";
 export const MATCH_REPORT_COLUMNS =
   "id,status,created_at,reviewed_at,match_id,season_id,division_id,home_score,away_score,total_games,screenshot_urls";
+export const BUG_REPORT_COLUMNS =
+  "id,ticket_id,status,category,severity,subject,description,reproduction_steps,expected_behavior,environment,created_at,updated_at";
 
 // ─── Small safe helpers ────────────────────────────────────────────────────────
 
@@ -117,6 +136,7 @@ const DISPLAY_PREFIX: Partial<Record<TicketCategory, string>> = {
   stat_review: "SR",
   registration: "RG",
   match_report: "MR",
+  bug_report: "BR",
 };
 
 function displayIdFor(category: TicketCategory, sourceId: string): string {
@@ -204,6 +224,15 @@ const MATCH_REPORT_STATUS: Record<string, TicketStatus> = {
   done: "resolved",
 };
 
+const BUG_REPORT_STATUS: Record<string, TicketStatus> = {
+  open: "open",
+  acknowledged: "claimed",
+  investigating: "claimed",
+  waiting_on_reporter: "needs_info",
+  resolved: "resolved",
+  no_response: "cancelled",
+};
+
 function mapStatus(table: Record<string, TicketStatus>, raw: string): TicketStatus {
   return table[raw] ?? "open";
 }
@@ -222,7 +251,7 @@ function mapStatus(table: Record<string, TicketStatus>, raw: string): TicketStat
  *   window keeps corrections landing while the match is still fresh.
  * - registration: gates one player's onboarding but blocks no live standings,
  *   so it gets a longer 72h window.
- * Future categories (bug_report, ruling, scout_review) have no backend yet;
+ * Future categories (ruling, scout_review) have no backend yet;
  * they get entries here when their normalizers land.
  */
 export const SLA_TARGET_HOURS: Record<
@@ -233,6 +262,7 @@ export const SLA_TARGET_HOURS: Record<
   stat_review: 48,
   registration: 72,
   match_report: 48,
+  bug_report: 48,
 };
 
 const HOUR_MS = 3_600_000;
@@ -443,11 +473,60 @@ export function normalizeMatchReport(row: MatchReportSourceRow): AdminTicket {
   };
 }
 
+export function normalizeBugReport(row: BugReportSourceRow): AdminTicket {
+  const status = mapStatus(BUG_REPORT_STATUS, row.status);
+  const priority: TicketPriority =
+    row.severity === "critical"
+      ? "urgent"
+      : row.severity === "high"
+        ? "high"
+        : row.severity === "low"
+          ? "low"
+          : "normal";
+  const summary = row.description.length > 180
+    ? `${row.description.slice(0, 177)}...`
+    : row.description;
+  const details = [
+    { label: "Category", value: humanizeToken(row.category) },
+    { label: "Severity", value: humanizeToken(row.severity) },
+    { label: "What happened", value: row.description },
+    { label: "Steps to reproduce", value: row.reproduction_steps },
+    { label: "Expected behavior", value: row.expected_behavior },
+    ...(row.environment ? [{ label: "Environment", value: row.environment }] : []),
+  ];
+
+  return {
+    id: `bug_report:${row.id}`,
+    displayId: row.ticket_id || displayIdFor("bug_report", row.id),
+    sourceId: row.id,
+    category: "bug_report",
+    status,
+    sourceStatus: row.status,
+    priority,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    slaDeadline: slaDeadlineFor("bug_report", row.created_at, status),
+    title: row.subject,
+    summary,
+    details,
+    privacy: "anonymous",
+    links: [],
+    timeline: timeline([
+      { at: row.created_at, label: "Anonymous report submitted" },
+      row.updated_at !== row.created_at
+        ? { at: row.updated_at, label: `Status changed to ${humanizeToken(row.status)}` }
+        : null,
+    ]),
+    workflow: { kind: "unsupported", label: "Managed in this admin queue" },
+  };
+}
+
 export interface TicketSourceRows {
   pendingActions: PendingActionSourceRow[];
   pendingStatRecords: PendingStatRecordSourceRow[];
   registrations: RegistrationSourceRow[];
   matchReports: MatchReportSourceRow[];
+  bugReports?: BugReportSourceRow[];
 }
 
 export function normalizeTicketSources(rows: TicketSourceRows): AdminTicket[] {
@@ -456,6 +535,7 @@ export function normalizeTicketSources(rows: TicketSourceRows): AdminTicket[] {
     ...rows.pendingStatRecords.map(normalizePendingStatRecord),
     ...rows.registrations.map(normalizeRegistration),
     ...rows.matchReports.map(normalizeMatchReport),
+    ...(rows.bugReports ?? []).map(normalizeBugReport),
   ];
 }
 

@@ -136,6 +136,27 @@ describe("POST /api/bug-reports", () => {
     expect(persist).not.toHaveBeenCalled();
   });
 
+  it("rejects oversized bodies even when the client omits content-length", async () => {
+    const persist = vi.fn();
+    const handler = createBugReportPostHandler({
+      isEnabled: () => true,
+      persistence: { persist },
+      abuseProtection: allowedSubmission,
+      resolveReporter: anonymousReporter,
+    });
+    const request = new NextRequest("https://sal.example/api/bug-reports", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "x".repeat(64 * 1024 + 1),
+    });
+
+    expect(request.headers.has("content-length")).toBe(false);
+    const response = await handler(request);
+
+    expect(response.status).toBe(413);
+    expect(persist).not.toHaveBeenCalled();
+  });
+
   it("returns field-level validation errors for an invalid submission", async () => {
     const handler = createBugReportPostHandler({
       isEnabled: () => true,
@@ -234,7 +255,7 @@ describe("POST /api/bug-reports", () => {
     );
   });
 
-  it("passes only finalized opaque attachment claims through the ticket boundary", async () => {
+  it("rejects finalized attachment claims until quarantine storage is enabled", async () => {
     const persist = vi.fn().mockResolvedValue({
       ticketId: "BUG-0193",
       publicTicketId: strongPublicTicketId,
@@ -256,11 +277,12 @@ describe("POST /api/bug-reports", () => {
 
     const response = await handler(requestFor(validPayload, [attachment]));
 
-    expect(response.status).toBe(201);
-    expect(persist).toHaveBeenCalledWith(
-      expect.objectContaining({ attachments: [attachment] }),
-    );
-    expect(JSON.stringify(persist.mock.calls[0][0])).not.toMatch(/arrayBuffer|uploadUrl|finalizationToken/);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      code: "upload_unavailable",
+    });
+    expect(persist).not.toHaveBeenCalled();
   });
 
   it("projects a strict public receipt without leaking internal or path-based secrets", async () => {
@@ -368,17 +390,16 @@ describe("POST /api/bug-reports", () => {
     const anonymousResponse = await anonymousMismatch(requestFor());
     expect(anonymousResponse.status).toBe(503);
 
+    const signedPersist = vi.fn().mockResolvedValue({
+      ticketId: "BUG-0196",
+      publicTicketId: strongPublicTicketId,
+      status: "open",
+      reporterAccess: { kind: "signed_in" },
+      relay: { requested: true, queued: false },
+    });
     const signedMismatch = createBugReportPostHandler({
       isEnabled: () => true,
-      persistence: {
-        persist: vi.fn().mockResolvedValue({
-          ticketId: "BUG-0196",
-          publicTicketId: strongPublicTicketId,
-          status: "open",
-          reporterAccess: { kind: "signed_in" },
-          relay: { requested: true, queued: false },
-        }),
-      },
+      persistence: { persist: signedPersist },
       abuseProtection: allowedSubmission,
       resolveReporter: async () => ({
         kind: "signed_in",
@@ -390,10 +411,11 @@ describe("POST /api/bug-reports", () => {
     const signedResponse = await signedMismatch(
       requestFor({ ...validPayload, replyRelayConsent: true }),
     );
-    expect(signedResponse.status).toBe(503);
+    expect(signedResponse.status).toBe(400);
+    expect(signedPersist).not.toHaveBeenCalled();
   });
 
-  it("accepts a signed-in receipt only when the requested relay is durably queued", async () => {
+  it("rejects private relay requests until the bot consumer is enabled", async () => {
     const persist = vi.fn().mockResolvedValue({
       ticketId: "BUG-0197",
       publicTicketId: strongPublicTicketId,
@@ -415,14 +437,12 @@ describe("POST /api/bug-reports", () => {
     const response = await handler(
       requestFor({ ...validPayload, replyRelayConsent: true }),
     );
-    const result = await response.json();
-
-    expect(response.status).toBe(201);
-    expect(result.ticket.reporterAccess).toEqual({
-      kind: "signed_in",
-      accessUrl: `https://sal.example/report-a-bug/tickets/${strongPublicTicketId}`,
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      fieldErrors: { replyRelayConsent: expect.any(String) },
     });
-    expect(JSON.stringify(result)).not.toMatch(/accessToken|recoveryCode|#access=/i);
+    expect(persist).not.toHaveBeenCalled();
   });
 
   it("does not link a signed-in identity unless the reporter consents to private relay", async () => {

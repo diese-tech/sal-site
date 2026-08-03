@@ -1,16 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { BugReportConfirmationModal } from "./BugReportConfirmationModal";
 import {
-  BUG_REPORT_ATTACHMENT_LIMITS,
   BUG_REPORT_CATEGORY_OPTIONS,
   BUG_REPORT_SEVERITY_OPTIONS,
   parseBugReportPayload,
-  validateBugReportAttachments,
 } from "@/lib/bug-reports/contracts";
-import { uploadBugReportAttachments } from "@/lib/bug-reports/client-upload";
 import type {
   BugReportErrorResponse,
   BugReportSubmissionPayload,
@@ -32,16 +28,11 @@ const INITIAL_REPORT: BugReportSubmissionPayload = {
 type FieldErrors = Partial<Record<keyof BugReportSubmissionPayload | "attachments", string>>;
 
 export function BugReportForm({
-  relayAvailable,
   submissionEnabled,
 }: {
-  relayAvailable: boolean;
   submissionEnabled: boolean;
 }) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const attachmentRegionRef = useRef<HTMLDivElement>(null);
   const [report, setReport] = useState<BugReportSubmissionPayload>(INITIAL_REPORT);
-  const [attachments, setAttachments] = useState<File[]>([]);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -62,13 +53,11 @@ export function BugReportForm({
     setSubmitError(null);
 
     const payloadResult = parseBugReportPayload(report);
-    const attachmentResult = await validateBugReportAttachments(attachments);
     const nextErrors: FieldErrors = payloadResult.success ? {} : payloadResult.fieldErrors;
-    if (!attachmentResult.success) nextErrors.attachments = attachmentResult.message;
     setFieldErrors(nextErrors);
 
-    if (!payloadResult.success || !attachmentResult.success) {
-      focusFirstInvalidField(nextErrors, attachmentRegionRef.current);
+    if (!payloadResult.success) {
+      focusFirstInvalidField(nextErrors);
       return;
     }
 
@@ -82,11 +71,10 @@ export function BugReportForm({
     setSubmitError(null);
 
     try {
-      const uploadedAttachments = await uploadBugReportAttachments(attachments);
       const response = await fetch("/api/bug-reports", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ payload: report, attachments: uploadedAttachments }),
+        body: JSON.stringify({ payload: report, attachments: [] }),
       });
       let result: BugReportSubmissionResponse;
       try {
@@ -114,19 +102,6 @@ export function BugReportForm({
     } finally {
       setSubmitting(false);
     }
-  }
-
-  function addAttachments(files: FileList | null) {
-    if (!files) return;
-    const next = [...attachments, ...Array.from(files)];
-    setAttachments(next);
-    setFieldErrors((current) => ({ ...current, attachments: undefined }));
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
-
-  function removeAttachment(index: number) {
-    setAttachments((current) => current.filter((_, currentIndex) => currentIndex !== index));
-    setFieldErrors((current) => ({ ...current, attachments: undefined }));
   }
 
   if (receipt) return <BugReportReceipt receipt={receipt} />;
@@ -281,123 +256,6 @@ export function BugReportForm({
             </Field>
           </FormSection>
 
-          <FormSection
-            number="03"
-            title="Add visual evidence"
-            description="Screenshots are optional, private, and often the quickest way to understand a problem."
-          >
-            <div
-              ref={attachmentRegionRef}
-              tabIndex={fieldErrors.attachments ? -1 : undefined}
-              aria-invalid={Boolean(fieldErrors.attachments)}
-              aria-describedby={fieldErrors.attachments ? "attachments-error" : "attachments-help"}
-              className={`rounded-lg border border-dashed p-5 transition ${
-                fieldErrors.attachments
-                  ? "border-red-400/50 bg-red-400/[0.06]"
-                  : "border-white/15 bg-white/[0.025] hover:border-cyan-300/30"
-              }`}
-            >
-              <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-                <div>
-                  <p className="text-sm font-bold text-white">JPEG, PNG, or WebP</p>
-                  <p id="attachments-help" className="mt-1 text-xs leading-5 text-slate-500">
-                    Up to {BUG_REPORT_ATTACHMENT_LIMITS.maxFiles} images, 20 MB each.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="shrink-0 rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-xs font-black uppercase tracking-wide text-cyan-100 transition hover:bg-cyan-300/15"
-                >
-                  Choose images
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  className="sr-only"
-                  onChange={(event) => addAttachments(event.target.files)}
-                />
-              </div>
-
-              {attachments.length > 0 ? (
-                <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {attachments.map((file, index) => (
-                    <li
-                      key={`${file.name}-${file.lastModified}-${index}`}
-                      className="flex min-w-0 items-center gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2.5"
-                    >
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-cyan-300/10 text-cyan-300">
-                        <ImageIcon />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-semibold text-slate-200">{file.name}</span>
-                        <span className="text-[0.65rem] text-slate-500">{formatBytes(file.size)}</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeAttachment(index)}
-                        aria-label={`Remove ${file.name}`}
-                        className="rounded-md p-1.5 text-slate-500 transition hover:bg-white/[0.06] hover:text-white"
-                      >
-                        <CloseIcon />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {fieldErrors.attachments ? (
-                <p id="attachments-error" role="alert" className="mt-3 text-xs font-semibold text-red-300">
-                  {fieldErrors.attachments}
-                </p>
-              ) : null}
-            </div>
-          </FormSection>
-
-          <FormSection
-            number="04"
-            title="Choose how we follow up"
-            description="Your report stays anonymous either way."
-          >
-            {relayAvailable ? (
-              <label className="flex cursor-pointer gap-3 rounded-lg border border-indigo-300/20 bg-indigo-300/[0.06] p-4">
-                <input
-                  id="replyRelayConsent"
-                  type="checkbox"
-                  checked={report.replyRelayConsent}
-                  aria-invalid={Boolean(fieldErrors.replyRelayConsent)}
-                  aria-describedby={fieldErrors.replyRelayConsent ? "replyRelayConsent-error" : undefined}
-                  onChange={(event) => updateField("replyRelayConsent", event.target.checked)}
-                  className="mt-0.5 h-4 w-4 accent-indigo-400"
-                />
-                <span>
-                  <span className="block text-sm font-bold text-indigo-100">Allow private Discord replies</span>
-                  <span className="mt-1 block text-xs leading-5 text-slate-400">
-                    SALbot may DM you when staff asks a question. Your Discord identity is not shown in the staff ticket.
-                  </span>
-                </span>
-              </label>
-            ) : (
-              <div className="rounded-lg border border-white/10 bg-white/[0.025] p-4">
-                <p className="text-sm font-bold text-white">Need a private reply?</p>
-                <p className="mt-1 text-xs leading-5 text-slate-400">
-                  Submit anonymously, or sign in first if you want staff questions relayed through SALbot.
-                </p>
-                <Link
-                  href="/auth/signin?next=/report-a-bug"
-                  className="mt-3 inline-flex text-xs font-black uppercase tracking-wide text-indigo-300 transition hover:text-indigo-200"
-                >
-                  Sign in with Discord
-                </Link>
-              </div>
-            )}
-            {fieldErrors.replyRelayConsent ? (
-              <p id="replyRelayConsent-error" role="alert" className="text-xs font-semibold text-red-300">
-                {fieldErrors.replyRelayConsent}
-              </p>
-            ) : null}
-          </FormSection>
         </div>
 
         <div className="flex flex-col gap-4 border-t border-white/10 bg-black/20 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
@@ -422,7 +280,6 @@ export function BugReportForm({
       <BugReportConfirmationModal
         open={confirmationOpen}
         report={report}
-        attachmentNames={attachments.map((attachment) => attachment.name)}
         submissionEnabled={submissionEnabled}
         submitting={submitting}
         onCancel={() => setConfirmationOpen(false)}
@@ -504,23 +361,18 @@ function BugReportReceipt({ receipt }: { receipt: BugReportSubmissionReceipt }) 
       <h2 className="u-font-display mt-2 text-2xl font-black text-white">Report safely stored</h2>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
         {anonymousAccess
-          ? "Save the private status link and recovery code below so you can return to this report."
+          ? "Save the private status link below so you can return to this report."
           : "Use the link below while signed in with Discord to see status and reply privately."}
       </p>
-      <div className={`mt-6 grid gap-3 ${anonymousAccess ? "sm:grid-cols-[1fr_auto]" : ""}`}>
+      <div className="mt-6">
         <a
           href={receipt.reporterAccess.accessUrl}
           referrerPolicy="no-referrer"
           rel="noreferrer"
-          className="min-w-0 truncate rounded-lg border border-cyan-300/25 bg-cyan-300/[0.07] px-4 py-3 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10"
+          className="block w-full min-w-0 truncate rounded-lg border border-cyan-300/25 bg-cyan-300/[0.07] px-4 py-3 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10"
         >
           {receipt.reporterAccess.accessUrl}
         </a>
-        {receipt.reporterAccess.kind === "anonymous" ? (
-          <div className="rounded-lg border border-white/10 bg-white/[0.035] px-4 py-3 text-center font-mono text-sm font-bold text-white">
-            {receipt.reporterAccess.recoveryCode}
-          </div>
-        ) : null}
       </div>
       {anonymousAccess ? (
         <p className="mt-3 text-xs text-amber-200/80">
@@ -531,7 +383,7 @@ function BugReportReceipt({ receipt }: { receipt: BugReportSubmissionReceipt }) 
   );
 }
 
-function focusFirstInvalidField(errors: FieldErrors, attachmentRegion: HTMLDivElement | null) {
+function focusFirstInvalidField(errors: FieldErrors) {
   const order: Array<keyof FieldErrors> = [
     "category",
     "severity",
@@ -540,36 +392,7 @@ function focusFirstInvalidField(errors: FieldErrors, attachmentRegion: HTMLDivEl
     "reproductionSteps",
     "expectedBehavior",
     "environment",
-    "attachments",
-    "replyRelayConsent",
   ];
   const firstField = order.find((field) => errors[field]);
-  if (firstField === "attachments") {
-    attachmentRegion?.focus();
-  } else if (firstField) {
-    document.getElementById(firstField)?.focus();
-  }
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function ImageIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <circle cx="8.5" cy="9" r="1.5" />
-      <path d="m4 17 4.5-4.5 3.5 3 2.5-2.5 5.5 5" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4" aria-hidden="true">
-      <path d="m6 6 12 12M18 6 6 18" />
-    </svg>
-  );
+  if (firstField) document.getElementById(firstField)?.focus();
 }

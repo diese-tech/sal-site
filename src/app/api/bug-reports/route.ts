@@ -117,19 +117,25 @@ export function createBugReportPostHandler(dependencies: BugReportPostDependenci
         attachments: attachmentResult.message,
       });
     }
-
-    let reporter: BugReportReporterContext = { kind: "anonymous" };
-    if (payloadResult.data.replyRelayConsent) {
-      reporter = await dependencies.resolveReporter(request);
-      if (reporter.kind !== "signed_in" || !reporter.discordId) {
-        return errorResponse(
-          400,
-          "invalid_request",
-          "Sign in with Discord before requesting private reply relay.",
-          { replyRelayConsent: "A linked Discord identity is required for private replies." },
-        );
-      }
+    if (attachmentResult.data.length > 0) {
+      return errorResponse(
+        400,
+        "upload_unavailable",
+        "Screenshot intake is not enabled yet. Submit the text report without attachments.",
+        { attachments: "Remove attachments and submit the text report." },
+      );
     }
+
+    if (payloadResult.data.replyRelayConsent) {
+      return errorResponse(
+        400,
+        "invalid_request",
+        "Private Discord replies are not enabled yet. Submit the report anonymously.",
+        { replyRelayConsent: "Private reply relay is not available for this release." },
+      );
+    }
+
+    const reporter: BugReportReporterContext = { kind: "anonymous" };
 
     let abuseDecision;
     try {
@@ -218,9 +224,25 @@ async function readSubmissionRequest(request: NextRequest): Promise<
     };
   }
 
+  let rawBody: string;
+  try {
+    rawBody = await request.text();
+  } catch {
+    return {
+      success: false,
+      response: errorResponse(400, "invalid_request", "The report body could not be read."),
+    };
+  }
+  if (new TextEncoder().encode(rawBody).byteLength > 64 * 1024) {
+    return {
+      success: false,
+      response: errorResponse(413, "invalid_request", "The report body is too large."),
+    };
+  }
+
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(rawBody) as unknown;
   } catch {
     return {
       success: false,

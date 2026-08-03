@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import {
+  BUG_REPORT_TERMINAL_STATUSES,
   MATCH_REPORT_TERMINAL_STATUSES,
   PENDING_ACTION_TERMINAL_STATUSES,
   PENDING_STAT_TERMINAL_STATUSES,
@@ -60,6 +61,13 @@ export async function getUnresolvedAdminTicketCountFromClient(
           .from("match_reports")
           .select("id", { count: "exact", head: true })
           .not("status", "in", notIn(MATCH_REPORT_TERMINAL_STATUSES)),
+      ),
+      readExactCount(
+        "bug_report",
+        client
+          .from("bug_reports")
+          .select("id", { count: "exact", head: true })
+          .not("status", "in", notIn(BUG_REPORT_TERMINAL_STATUSES)),
       ),
     ]);
 

@@ -322,6 +322,7 @@ describe("SLA deadline derivation", () => {
       stat_review: 48,
       registration: 72,
       match_report: 48,
+      bug_report: 48,
     });
     expect(normalizePendingAction(pendingActionRow()).slaDeadline).toBe("2026-07-03T10:00:00.000Z");
     expect(normalizePendingStatRecord(statRecordRow()).slaDeadline).toBe("2026-07-04T10:00:00.000Z");

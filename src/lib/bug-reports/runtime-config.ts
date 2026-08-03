@@ -5,11 +5,14 @@ export interface BugReportRuntimeConfig {
   allowedUploadHosts: readonly string[];
 }
 
-/**
- * Release B supplies this protected adapter from database-backed platform
- * configuration. It is deliberately null in the shell: request Host headers,
- * NEXT_PUBLIC values, and arbitrary signed-target hosts are not authorities.
- */
 export function getBugReportRuntimeConfig(): BugReportRuntimeConfig | null {
-  return null;
+  const canonicalSiteOrigin = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (!canonicalSiteOrigin) return null;
+  return {
+    canonicalSiteOrigin,
+    // Screenshot quarantine is intentionally not part of the text-first
+    // release. Upload routes remain fail-closed until its storage contract
+    // lands in sal-database.
+    allowedUploadHosts: [],
+  };
 }

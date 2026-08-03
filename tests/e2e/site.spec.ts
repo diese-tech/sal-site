@@ -79,6 +79,28 @@ for (const route of ["/rules", "/report-a-bug"]) {
   });
 }
 
+test("bug report form reviews complete text without promising unavailable features", async ({ page }) => {
+  await page.goto("/report-a-bug");
+  await page.getByLabel(/Short subject/i).fill("Standings filter resets unexpectedly");
+  await page.getByLabel(/What happened/i).fill(
+    "The standings division filter returns to Solar after navigating back from a team page.",
+  );
+  await page.getByLabel(/Steps to reproduce/i).fill(
+    "Open standings, choose Lunar, open a team, then return to standings.",
+  );
+  await page.getByLabel(/What should have happened/i).fill(
+    "The Lunar division filter should remain selected.",
+  );
+
+  await page.getByRole("button", { name: "Review report" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Ready to send this report?" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("The report is submitted anonymously.");
+  await expect(dialog).not.toContainText(/Discord repl|screenshot|attachment/i);
+  await expect(dialog.getByRole("button", { name: "Submission unavailable" })).toBeDisabled();
+});
+
 test("same-page links scroll smoothly without hiding targets behind the site header", async ({ page }) => {
   await page.goto("/rules");
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollBehavior)).toBe("smooth");

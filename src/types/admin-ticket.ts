@@ -7,7 +7,8 @@
  *   stat_review   -> pending_stat_records   (bot-owned Discord review workflow)
  *   registration  -> registrations          (handled at /admin/registrations)
  *   match_report  -> match_reports          (handled at /admin/match-report)
- *   bug_report, ruling, scout_review -> reserved, no backend yet
+ *   bug_report     -> bug_reports            (handled in this queue)
+ *   ruling, scout_review -> reserved, no backend yet
  */
 export type TicketCategory =
   | "operation"
@@ -23,10 +24,10 @@ export const CURRENT_TICKET_CATEGORIES = [
   "stat_review",
   "registration",
   "match_report",
+  "bug_report",
 ] as const satisfies readonly TicketCategory[];
 
 export const FUTURE_TICKET_CATEGORIES = [
-  "bug_report",
   "ruling",
   "scout_review",
 ] as const satisfies readonly TicketCategory[];
@@ -95,6 +96,11 @@ export interface TicketLink {
   external: boolean;
 }
 
+export interface TicketDetailField {
+  label: string;
+  value: string;
+}
+
 /** Where this ticket is actually acted on. This queue stays read-only. */
 export type TicketWorkflow =
   | { kind: "site"; href: string; label: string }
@@ -132,6 +138,8 @@ export interface AdminTicket {
   title: string;
   /** Public-safe. Must not contain hidden reporter or requester identities. */
   summary: string;
+  /** Admin-only structured report content. Never rendered on a public route. */
+  details?: TicketDetailField[];
   privacy: TicketPrivacy;
   links: TicketLink[];
   timeline: TicketTimelineEvent[];

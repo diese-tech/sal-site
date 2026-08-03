@@ -3,12 +3,13 @@ import { getBugReportPersistence, getBugReportStatusReader } from "./persistence
 import { getBugReportUploadService } from "./upload-service";
 import { getBugReportRuntimeConfig } from "./runtime-config";
 import {
-  normalizeAllowedUploadHosts,
   normalizeCanonicalSiteOrigin,
 } from "./contracts";
 
 export function getBugReportRuntime() {
-  const featureEnabled = process.env.BUG_REPORT_SUBMISSIONS_ENABLED === "true";
+  // Enabled by default once every required durable adapter is present. The
+  // environment variable remains an emergency kill switch.
+  const featureEnabled = process.env.BUG_REPORT_SUBMISSIONS_ENABLED !== "false";
   const persistence = getBugReportPersistence();
   const statusReader = getBugReportStatusReader();
   const abuseProtection = getBugReportAbuseProtection();
@@ -17,13 +18,12 @@ export function getBugReportRuntime() {
   const canonicalSiteOrigin = normalizeCanonicalSiteOrigin(
     rawConfiguration?.canonicalSiteOrigin,
   );
-  const allowedUploadHosts = normalizeAllowedUploadHosts(
-    rawConfiguration?.allowedUploadHosts,
-  );
-  const configuration =
-    canonicalSiteOrigin && allowedUploadHosts
-      ? { canonicalSiteOrigin, allowedUploadHosts }
-      : null;
+  const configuration = canonicalSiteOrigin
+    ? {
+        canonicalSiteOrigin,
+        allowedUploadHosts: rawConfiguration?.allowedUploadHosts ?? [],
+      }
+    : null;
 
   return {
     featureEnabled,
@@ -37,7 +37,6 @@ export function getBugReportRuntime() {
       persistence !== null &&
       statusReader !== null &&
       abuseProtection !== null &&
-      uploadService !== null &&
       configuration !== null,
   };
 }
