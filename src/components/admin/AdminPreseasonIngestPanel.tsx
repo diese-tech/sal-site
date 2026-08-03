@@ -20,7 +20,10 @@ export function AdminPreseasonIngestPanel({
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
 
-  const candidates = seasons.filter((s) => s.id !== targetSeasonId);
+  // This action is specifically "Ingest from Preseason" — offering active/
+  // post-season/offseason sources would suggest an admin can copy any
+  // season's roster into another, which the server also rejects (#230).
+  const candidates = seasons.filter((s) => s.id !== targetSeasonId && s.status === "pre-season");
 
   async function loadPreview() {
     if (!sourceId) {

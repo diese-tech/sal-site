@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isAdminRequest } from "@/lib/admin-auth";
-import { savePlayersBulk, savePlayer, saveSeasonRosterAssignment, writeAuditLog } from "@/lib/league-data";
+import { savePlayersBulk, savePlayer, saveSeasonOrgAssignment, saveSeasonRosterAssignment, writeAuditLog } from "@/lib/league-data";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { errorMessage, reportError } from "@/lib/error-monitor";
 
@@ -94,12 +94,14 @@ export async function POST(request: NextRequest) {
   // failing the row on a foreign-key violation. Queries the orgs table
   // directly — getAdminLeagueData()'s mock fallback must not leak fake ids.
   const orgLookup = new Map<string, string>();
+  const orgDivisionById = new Map<string, string>();
   if (supabase) {
-    const { data: orgRows } = await supabase.from("orgs").select("id, name, tag");
-    for (const org of (orgRows ?? []) as Array<{ id: string; name: string; tag: string }>) {
+    const { data: orgRows } = await supabase.from("orgs").select("id, name, tag, division_id");
+    for (const org of (orgRows ?? []) as Array<{ id: string; name: string; tag: string; division_id: string }>) {
       orgLookup.set(org.id.toLowerCase(), org.id);
       orgLookup.set(org.name.toLowerCase(), org.id);
       orgLookup.set(org.tag.toLowerCase(), org.id);
+      orgDivisionById.set(org.id, org.division_id);
     }
   }
 
@@ -111,6 +113,21 @@ export async function POST(request: NextRequest) {
     warnings.push({ ign: player.ign, warning: `Unknown team "${player.orgId}" — imported as free agent. Create the team first, then re-import to assign.` });
     return { ...player, orgId: undefined, status: "free-agent" as const };
   });
+
+  // A resolved org may exist globally but not yet be enrolled in the selected
+  // season's season_orgs — saveSeasonRosterAssignment's division lookup
+  // requires that row to exist, so ensure it does before assigning players to
+  // it (idempotent upsert; a failure here just surfaces as a per-row
+  // enrollment error below instead of crashing the whole import).
+  const orgIdsToEnroll = new Set(players.flatMap((player) => (player.orgId ? [player.orgId] : [])));
+  for (const orgId of orgIdsToEnroll) {
+    try {
+      await saveSeasonOrgAssignment(parsed.data.seasonId, orgId, (orgDivisionById.get(orgId) ?? parsed.data.divisionId) as "solar" | "lunar" | "terra");
+    } catch {
+      // Swallowed: players pointing at this org will fail the season
+      // enrollment step below and surface as an explicit row error instead.
+    }
+  }
 
   // Fast path: one bulk upsert. If the batch fails (e.g. an IGN unique
   // collision with an existing player), fall back to per-row saves so the

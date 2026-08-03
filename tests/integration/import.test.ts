@@ -15,7 +15,7 @@
  *     error rather than counted as a successful import (#230).
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@/lib/admin-auth", () => ({
@@ -35,12 +35,15 @@ vi.mock("@/lib/error-monitor", () => ({
 vi.mock("@/lib/league-data", () => ({
   savePlayersBulk: vi.fn().mockResolvedValue(undefined),
   savePlayer: vi.fn().mockResolvedValue(undefined),
+  saveSeasonOrgAssignment: vi.fn().mockResolvedValue(undefined),
   saveSeasonRosterAssignment: vi.fn().mockResolvedValue(undefined),
   writeAuditLog: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Chainable stub covering both the season-existence check (select().eq().maybeSingle())
-// and the org lookup (select()) the route runs against the same client.
+// and the org lookup (select()) the route runs against the same client. Tests
+// that need a resolvable org override `orgRows` via the module-level var below.
+let orgRows: Array<{ id: string; name: string; tag: string; division_id: string }> = [];
 vi.mock("@/lib/supabase-server", () => ({
   getSupabaseServerClient: vi.fn(() => ({
     from: (table: string) => ({
@@ -52,11 +55,18 @@ vi.mock("@/lib/supabase-server", () => ({
             }),
           };
         }
+        if (table === "orgs") {
+          return Promise.resolve({ data: orgRows, error: null });
+        }
         return Promise.resolve({ data: [], error: null });
       },
     }),
   })),
 }));
+
+beforeEach(() => {
+  orgRows = [];
+});
 
 function makeRequest(body: Record<string, unknown>): NextRequest {
   return new NextRequest("http://localhost/api/admin/import/players", {
@@ -234,6 +244,35 @@ describe("POST /api/admin/import/players — season enrollment (#230)", () => {
       seasonId: "preseason-2",
       playerId: "player-enrollee",
       orgId: null,
+      divisionId: "solar",
+      isCaptain: false,
+    });
+  });
+
+  it("enrolls a resolved existing org into the selected season before assigning the player to it", async () => {
+    orgRows = [{ id: "org-a", name: "Obsidian Knights", tag: "OBS", division_id: "terra" }];
+    const { POST } = await import("@/app/api/admin/import/players/route");
+    const { saveSeasonOrgAssignment, saveSeasonRosterAssignment } = await import("@/lib/league-data");
+    vi.mocked(saveSeasonOrgAssignment).mockClear();
+    vi.mocked(saveSeasonRosterAssignment).mockClear();
+
+    const req = makeRequest({
+      seasonId: "preseason-2",
+      divisionId: "solar",
+      players: [validPlayer({ ign: "TeamPlayer", id: "player-team", orgId: "org-a" })],
+    });
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.imported).toBe(1);
+    // The org's own division ("terra") wins over the import's selected
+    // division ("solar") — the import division is for free agents, not orgs.
+    expect(saveSeasonOrgAssignment).toHaveBeenCalledWith("preseason-2", "org-a", "terra");
+    expect(saveSeasonRosterAssignment).toHaveBeenCalledWith({
+      seasonId: "preseason-2",
+      playerId: "player-team",
+      orgId: "org-a",
       divisionId: "solar",
       isCaptain: false,
     });

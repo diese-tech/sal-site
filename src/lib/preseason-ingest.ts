@@ -59,6 +59,15 @@ async function loadIngestSource(sourceSeasonId: string, targetSeasonId: string) 
   const target = seasons.find((season) => season.id === targetSeasonId);
   if (!target) throw new Error(`Target season "${targetSeasonId}" does not exist.`);
 
+  // This flow is specifically "Ingest from PRESEASON" — allowing an arbitrary
+  // active/post-season/offseason source would let an admin copy a live or
+  // historical season's roster into another season, which isn't what this
+  // action is for and bypasses the intended preseason→real-season model
+  // (Codex review, #230).
+  if (source.season.status !== "pre-season") {
+    throw new Error(`Source season "${source.season.name}" is not a preseason season.`);
+  }
+
   // Inactive rows were explicitly removed from the preseason roster by an
   // admin — carrying them forward would resurrect participation the admin
   // deliberately ended, so only active/free_agent rows ingest.
@@ -94,8 +103,13 @@ export async function getPreseasonIngestPreview(
       })
       .sort((a, b) => a.orgName.localeCompare(b.orgName));
 
+    // Only captains keep their org on ingest (see ingestSeasonFromPreseason) —
+    // an ordinary org-affiliated preseason player (sub/starter) lands as a
+    // free agent in the target season, so the preview must show them here
+    // rather than silently carrying an assignment the admin never saw
+    // (Codex review, #230).
     const freeAgents = rosterRows
-      .filter((row) => !row.org_id && row.division_id === division.id)
+      .filter((row) => !row.is_captain && row.division_id === division.id)
       .flatMap((row) => {
         const player = playerById.get(row.player_id);
         return player ? [{ playerId: player.id, ign: player.ign }] : [];
@@ -112,7 +126,7 @@ export async function getPreseasonIngestPreview(
     targetSeasonName: target.name,
     orgCount: source.orgAssignments.length,
     captainCount: rosterRows.filter((row) => row.is_captain).length,
-    freeAgentCount: rosterRows.filter((row) => !row.org_id).length,
+    freeAgentCount: rosterRows.filter((row) => !row.is_captain).length,
     totalPlayers: rosterRows.length,
     divisions,
   };
@@ -135,7 +149,10 @@ export async function ingestSeasonFromPreseason(
     await saveSeasonRosterAssignment({
       seasonId: targetSeasonId,
       playerId: row.player_id,
-      orgId: row.org_id,
+      // Default carry-forward rules (#230): only captains keep their org —
+      // an ordinary org-affiliated preseason player (sub/starter) must land
+      // as a team-unassigned free agent in the target season's draft pool.
+      orgId: row.is_captain ? row.org_id : null,
       divisionId: row.division_id,
       isCaptain: row.is_captain,
     });

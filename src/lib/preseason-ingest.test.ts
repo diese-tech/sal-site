@@ -111,6 +111,7 @@ const orgs = [
 
 const players = [
   { id: "p-captain-a", org_id: "org-a", discord_username: "capA", ign: "PlayerOne", avatar_initials: "P1", avatar_gradient: "g", primary_role: "Solo", secondary_roles: [], is_starter: false, is_captain: true, division_id: "terra", status: "org-affiliated", stats: null },
+  { id: "p-sub-a", org_id: "org-a", discord_username: "subA", ign: "SubberSam", avatar_initials: "SS", avatar_gradient: "g", primary_role: "Jungle", secondary_roles: [], is_starter: false, is_captain: false, division_id: "terra", status: "org-affiliated", stats: null },
   { id: "p-fa-1", org_id: null, discord_username: "faOne", ign: "FreeAgentAlpha", avatar_initials: "FA", avatar_gradient: "g", primary_role: "Mid", secondary_roles: [], is_starter: false, is_captain: false, division_id: "terra", status: "free-agent", stats: null },
   { id: "p-fa-2", org_id: null, discord_username: "faTwo", ign: "FreeAgentBeta", avatar_initials: "FB", avatar_gradient: "g", primary_role: "Jungle", secondary_roles: [], is_starter: false, is_captain: false, division_id: "solar", status: "free-agent", stats: null },
   { id: "p-inactive", org_id: null, discord_username: "gone", ign: "RemovedPlayer", avatar_initials: "RP", avatar_gradient: "g", primary_role: "Flex", secondary_roles: [], is_starter: false, is_captain: false, division_id: "solar", status: "free-agent", stats: null },
@@ -122,6 +123,10 @@ const seasonOrgs = [
 
 const rosterRows = [
   { player_id: "p-captain-a", org_id: "org-a", division_id: "terra", is_captain: true, roster_status: "active" },
+  // Ordinary org-affiliated player (sub/starter, not captain) — must ingest
+  // as a free agent, not carry the org forward (#230 default carry-forward
+  // rules; Codex review flagged the original implementation for this).
+  { player_id: "p-sub-a", org_id: "org-a", division_id: "terra", is_captain: false, roster_status: "active" },
   { player_id: "p-fa-1", org_id: null, division_id: "terra", is_captain: false, roster_status: "free_agent" },
   { player_id: "p-fa-2", org_id: null, division_id: "solar", is_captain: false, roster_status: "free_agent" },
   { player_id: "p-inactive", org_id: null, division_id: "solar", is_captain: false, roster_status: "inactive" },
@@ -143,16 +148,24 @@ function handlerFor(overrides: Partial<Record<string, QueryResult>> = {}): Query
 const seasonsList = [
   { id: "preseason-2", name: "Preseason 2", status: "pre-season", is_current: true, start_date: "2026-01-01", end_date: "2026-02-01", current_week: 0 },
   { id: "season-2", name: "Season 2", status: "pre-season", is_current: false, start_date: "2026-03-01", end_date: "2026-06-01", current_week: 0 },
+  { id: "season-1", name: "Season 1", status: "active", is_current: false, start_date: "2025-09-01", end_date: "2025-12-01", current_week: 5 },
 ];
 
-// getAllSeasons() queries `seasons` with no filter (order by start_date), while
-// getSeasonRosterAdminData()'s season lookup does .eq("id", seasonId).single() —
-// the fake needs to serve both shapes off the same seasonsList fixture.
+// getAllSeasons() queries `seasons` with no filter (order by start_date),
+// getSeasonRosterAdminData()'s season lookup does .eq("id", seasonId).single(),
+// and saveSeasonRosterAssignment's legacy mirror gate calls getCurrentSeasonId()
+// (.eq("is_current", true).maybeSingle()) — the fake needs to serve all three
+// shapes off the same seasonsList fixture.
 const allSeasonsHandler: QueryHandler = (query) => {
   if (query.table === "seasons") {
     const idEq = query.eqs.find(([col]) => col === "id");
     if (idEq) {
       const found = seasonsList.find((s) => s.id === idEq[1]);
+      return { data: found ?? null, error: null };
+    }
+    const isCurrentEq = query.eqs.find(([col]) => col === "is_current");
+    if (isCurrentEq) {
+      const found = seasonsList.find((s) => s.is_current === isCurrentEq[1]);
       return { data: found ?? null, error: null };
     }
     return { data: seasonsList, error: null };
@@ -177,12 +190,19 @@ describe("getPreseasonIngestPreview", () => {
     expect(preview.targetSeasonName).toBe("Season 2");
     expect(preview.orgCount).toBe(1);
     expect(preview.captainCount).toBe(1);
-    expect(preview.freeAgentCount).toBe(2); // inactive row excluded
-    expect(preview.totalPlayers).toBe(3);
+    // Free agents = everyone but the captain (the ordinary org-affiliated
+    // p-sub-a counts as a future free agent too — only captains keep a team).
+    expect(preview.freeAgentCount).toBe(3); // inactive row excluded
+    expect(preview.totalPlayers).toBe(4);
 
     const terra = preview.divisions.find((d) => d.divisionId === "terra")!;
     expect(terra.orgs).toEqual([{ orgId: "org-a", orgName: "Obsidian Knights", orgTag: "OBS", captainId: "p-captain-a", captainIgn: "PlayerOne" }]);
-    expect(terra.freeAgents).toEqual([{ playerId: "p-fa-1", ign: "FreeAgentAlpha" }]);
+    // p-sub-a is org-affiliated in the SOURCE season but must still show up
+    // as a free agent in the preview, since ingest will not carry its org.
+    expect(terra.freeAgents).toEqual([
+      { playerId: "p-fa-1", ign: "FreeAgentAlpha" },
+      { playerId: "p-sub-a", ign: "SubberSam" },
+    ]);
 
     const solar = preview.divisions.find((d) => d.divisionId === "solar")!;
     expect(solar.orgs).toEqual([]);
@@ -207,6 +227,18 @@ describe("getPreseasonIngestPreview", () => {
       'Target season "ghost-season" does not exist.',
     );
   });
+
+  // Codex review (#230): this action is specifically "Ingest from Preseason" —
+  // an active/post-season/offseason source must be rejected server-side too,
+  // not just filtered out of the UI dropdown.
+  it("rejects a source season that is not a preseason season", async () => {
+    client = makeClient(allSeasonsHandler);
+    const { getPreseasonIngestPreview } = await import("./preseason-ingest");
+
+    await expect(getPreseasonIngestPreview("season-1", "season-2")).rejects.toThrow(
+      'Source season "Season 1" is not a preseason season.',
+    );
+  });
 });
 
 describe("ingestSeasonFromPreseason", () => {
@@ -215,7 +247,7 @@ describe("ingestSeasonFromPreseason", () => {
     const { ingestSeasonFromPreseason } = await import("./preseason-ingest");
 
     const result = await ingestSeasonFromPreseason("preseason-2", "season-2");
-    expect(result).toEqual({ orgsIngested: 1, playersIngested: 3 });
+    expect(result).toEqual({ orgsIngested: 1, playersIngested: 4 });
 
     const orgUpsertIndex = executed.findIndex((q) => q.table === "season_orgs" && q.op === "upsert");
     const rosterUpsertIndexes = executed.flatMap((q, i) => (q.table === "season_rosters" && q.op === "upsert" ? [i] : []));
@@ -230,6 +262,11 @@ describe("ingestSeasonFromPreseason", () => {
     expect(rosterPayloads).toContainEqual(
       expect.objectContaining({ season_id: "season-2", player_id: "p-captain-a", org_id: "org-a", is_captain: true }),
     );
+    // Ordinary org-affiliated player (not captain) — org must NOT carry
+    // forward even though they were rostered to org-a in the source season.
+    expect(rosterPayloads).toContainEqual(
+      expect.objectContaining({ season_id: "season-2", player_id: "p-sub-a", org_id: null, is_captain: false, roster_status: "free_agent" }),
+    );
     expect(rosterPayloads).toContainEqual(
       expect.objectContaining({ season_id: "season-2", player_id: "p-fa-1", org_id: null, is_captain: false, roster_status: "free_agent" }),
     );
@@ -241,6 +278,23 @@ describe("ingestSeasonFromPreseason", () => {
 
     // Never touches matches/player_match_stats — no preseason stats copied.
     expect(executed.some((q) => q.table === "matches" || q.table === "player_match_stats")).toBe(false);
+
+    // "season-2" is not the current/operational season in this fixture
+    // ("preseason-2" is) — saveSeasonRosterAssignment's legacy players mirror
+    // must not fire for a season that isn't live yet (Codex review, #230).
+    // (getSeasonRosterAdminData does SELECT players for the catalog — that's
+    // expected; only an UPDATE would mean the legacy mirror fired.)
+    expect(executed.some((q) => q.table === "players" && q.op === "update")).toBe(false);
+  });
+
+  it("rejects a non-preseason source season without writing anything", async () => {
+    client = makeClient(allSeasonsHandler);
+    const { ingestSeasonFromPreseason } = await import("./preseason-ingest");
+
+    await expect(ingestSeasonFromPreseason("season-1", "season-2")).rejects.toThrow(
+      'Source season "Season 1" is not a preseason season.',
+    );
+    expect(executed.some((q) => q.op === "upsert")).toBe(false);
   });
 
   it("rejects ingesting a season into itself without writing anything", async () => {
