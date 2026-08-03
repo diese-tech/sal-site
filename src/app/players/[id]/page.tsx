@@ -4,7 +4,7 @@ import type { DivisionId, PlayerRole } from "@/types/league";
 import { AvatarMark, RolePill } from "@/components/card-lab/ui";
 import { GodPoolGrid } from "@/components/league/GodPoolGrid";
 import { ScouterProfileSection } from "@/components/league/ScouterProfileSection";
-import { getLeagueData } from "@/lib/league-data";
+import { getLeagueData, getPlayerById } from "@/lib/league-data";
 import { getPlayerScouterProfile } from "@/lib/scouter-profile";
 import { getPlayerGodStats, getPlayerMatchHistory, getPlayerSeasonSummaries } from "@/lib/stats-data";
 import { cn } from "@/lib/utils";
@@ -59,7 +59,7 @@ const statusLabel: Record<string, string> = {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { players } = await getLeagueData();
-  const p = players.find((x) => x.id === id);
+  const p = players.find((x) => x.id === id) ?? (await getPlayerById(id));
   return { title: p ? `${p.displayAlias ?? p.ign} — SAL` : "Player — SAL" };
 }
 
@@ -74,7 +74,11 @@ export default async function PlayerPage({
   const { season: scouterSeasonId } = await searchParams;
   const { players, orgs, season } = await getLeagueData();
 
-  const player = players.find((p) => p.id === id);
+  // A player who was never enrolled in any season's roster (e.g. a
+  // registration approved before season enrollment existed) is absent from
+  // the season-scoped catalog above but is still a real, claimable player
+  // identity — fall back to an unscoped lookup instead of 404ing (#230/#233).
+  const player = players.find((p) => p.id === id) ?? (await getPlayerById(id));
   if (!player) notFound();
 
   const org = orgs.find((o) => o.id === player.orgId);
