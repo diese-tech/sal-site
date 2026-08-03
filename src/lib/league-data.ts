@@ -741,6 +741,23 @@ export async function removeSeasonRosterAssignment(seasonId: string, playerId: s
   if (!supabase) throw new Error("Supabase env is missing.");
   const { error } = await supabase.from("season_rosters").delete().eq("season_id", seasonId).eq("player_id", playerId);
   if (error) throw error;
+
+  // Legacy parity, mirroring saveSeasonRosterAssignment's write-side behavior:
+  // clear the mirrored captain/org state too when this removal affects the
+  // operational (current) season. Without this, a player removed from the
+  // roster keeps stale org_id/is_captain/status on the global players row —
+  // still read as captain/org-affiliated by consumers like resolveRole's
+  // captain-bot check and by the profile page's unscoped fallback, even
+  // though an admin just took them off the team (Codex review on #234).
+  const currentSeasonId = await getCurrentSeasonId();
+  if (seasonId === currentSeasonId) {
+    const { error: playerError } = await supabase
+      .from("players")
+      .update({ org_id: null, is_captain: false, status: "free-agent" })
+      .eq("id", playerId);
+    if (playerError) throw playerError;
+  }
+
   await writeAuditLog("remove_season_roster", "season", seasonId, { playerId });
 }
 
@@ -1293,6 +1310,26 @@ export async function getPlayerByDiscordId(discordId: string): Promise<LeaguePla
     .from("players")
     .select("*")
     .eq("discord_id", discordId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? fromDbPlayer(data) : null;
+}
+
+/**
+ * Unscoped-by-season player identity lookup. A player row can exist with no
+ * season_rosters entry in any season (e.g. a registration approved before
+ * season enrollment was wired up — see #230/#233 follow-up), so the public
+ * profile page falls back to this when the season-scoped catalog doesn't
+ * have the id, rather than 404ing on an otherwise-real player.
+ */
+export async function getPlayerById(id: string): Promise<LeaguePlayer | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("players")
+    .select("*")
+    .eq("id", id)
+    .is("archived_at", null)
     .maybeSingle();
   if (error) throw error;
   return data ? fromDbPlayer(data) : null;

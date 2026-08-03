@@ -343,6 +343,39 @@ describe("archiveRecord season-participation guard (#237)", () => {
   });
 });
 
+describe("removeSeasonRosterAssignment legacy player mirror (#234)", () => {
+  it("clears org_id/is_captain/status on the legacy players row when removing from the current season", async () => {
+    client = makeClient(defaultHandler({}, "season-current"));
+    const { removeSeasonRosterAssignment } = await import("./league-data");
+
+    await removeSeasonRosterAssignment("season-current", "p1");
+
+    const rosterDelete = executed.find((q) => q.table === "season_rosters" && q.op === "delete");
+    expect(rosterDelete?.eqs).toEqual([["season_id", "season-current"], ["player_id", "p1"]]);
+
+    const playerUpdate = executed.find((q) => q.table === "players" && q.op === "update");
+    expect(playerUpdate?.payload).toEqual({ org_id: null, is_captain: false, status: "free-agent" });
+    expect(playerUpdate?.eqs).toEqual([["id", "p1"]]);
+  });
+
+  it("does NOT touch the legacy players row when removing from a non-operational season", async () => {
+    client = makeClient(defaultHandler({}, "season-current"));
+    const { removeSeasonRosterAssignment } = await import("./league-data");
+
+    await removeSeasonRosterAssignment("season-historical", "p1");
+
+    expect(executed.some((q) => q.table === "players" && q.op === "update")).toBe(false);
+  });
+
+  it("throws and never touches the legacy players row when the season_rosters delete fails", async () => {
+    client = makeClient(defaultHandler({ season_rosters: { data: null, error: { message: "boom" } } }, "season-current"));
+    const { removeSeasonRosterAssignment } = await import("./league-data");
+
+    await expect(removeSeasonRosterAssignment("season-current", "p1")).rejects.toThrow("boom");
+    expect(executed.some((q) => q.table === "players")).toBe(false);
+  });
+});
+
 describe("setCurrentSeason legacy resync (#230)", () => {
   it("mirrors every season_rosters row for the newly-current season onto players", async () => {
     const rpc = vi.fn().mockResolvedValue({ data: null, error: null });
