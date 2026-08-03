@@ -758,53 +758,59 @@ export async function saveOrg(org: Org): Promise<void> {
 
 type SoftDeleteTable = "players" | "orgs" | "matches";
 
-async function retireSeasonParticipationBeforeArchive(
+async function assertNoSeasonParticipationBeforeArchive(
   supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
   table: SoftDeleteTable,
   id: string,
 ): Promise<void> {
   if (table === "players") {
-    // The shared schema requires free agents to have no org/division, while an
-    // inactive roster row must retain both. Free-agent participation therefore
-    // cannot be inactivated without fabricating team membership; remove those
-    // rows and preserve team-assigned history by marking active rows inactive.
-    const { error: freeAgentError } = await supabase
+    const { data, error } = await supabase
       .from("season_rosters")
-      .delete()
+      .select("season_id")
       .eq("player_id", id)
-      .eq("roster_status", "free_agent");
-    if (freeAgentError) throw freeAgentError;
-
-    const { error: activeRosterError } = await supabase
-      .from("season_rosters")
-      .update({ roster_status: "inactive" })
-      .eq("player_id", id)
-      .eq("roster_status", "active");
-    if (activeRosterError) throw activeRosterError;
+      .in("roster_status", ["active", "free_agent"])
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) {
+      throw new Error(
+        "Cannot archive or schedule deletion for a player with active season participation. Remove the player from active season rosters first.",
+      );
+    }
     return;
   }
 
   if (table === "orgs") {
-    const { error: rosterError } = await supabase
-      .from("season_rosters")
-      .update({ roster_status: "inactive" })
-      .eq("org_id", id)
-      .eq("roster_status", "active");
-    if (rosterError) throw rosterError;
-
-    const { error: orgAssignmentError } = await supabase
-      .from("season_orgs")
-      .update({ status: "inactive" })
-      .eq("org_id", id)
-      .eq("status", "active");
-    if (orgAssignmentError) throw orgAssignmentError;
+    const [rosterResult, assignmentResult] = await Promise.all([
+      supabase
+        .from("season_rosters")
+        .select("season_id")
+        .eq("org_id", id)
+        .eq("roster_status", "active")
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("season_orgs")
+        .select("season_id")
+        .eq("org_id", id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const error = rosterResult.error ?? assignmentResult.error;
+    if (error) throw error;
+    if (rosterResult.data || assignmentResult.data) {
+      throw new Error(
+        "Cannot archive or schedule deletion for an org with active season participation. Remove the org from active season assignments first.",
+      );
+    }
   }
 }
 
 export async function archiveRecord(table: SoftDeleteTable, id: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
-  await retireSeasonParticipationBeforeArchive(supabase, table, id);
+  await assertNoSeasonParticipationBeforeArchive(supabase, table, id);
   const { error } = await supabase.from(table).update({ archived_at: new Date().toISOString() }).eq("id", id);
   if (error) throw error;
   await writeAuditLog("archive", table.slice(0, -1), id, {});
@@ -821,7 +827,7 @@ export async function unarchiveRecord(table: SoftDeleteTable, id: string): Promi
 export async function scheduleDelete(table: SoftDeleteTable, id: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
-  await retireSeasonParticipationBeforeArchive(supabase, table, id);
+  await assertNoSeasonParticipationBeforeArchive(supabase, table, id);
   const now = new Date().toISOString();
   const { error } = await supabase.from(table).update({ deletion_scheduled_at: now, archived_at: now }).eq("id", id);
   if (error) throw error;

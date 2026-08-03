@@ -46,13 +46,14 @@ export async function deliverErrorReport(
   // Runtime Cache is shared by every function instance in the deployment's
   // region, so repeated serverless invocations observe the same suppression
   // marker. The local map is only a fallback if shared cache is unavailable.
+  let sharedCache: ReturnType<typeof getCache> | undefined;
   try {
-    const cache = getCache({ namespace: "sal-error-reporting" });
-    if (await cache.get(fingerprint)) {
+    sharedCache = getCache({ namespace: "sal-error-reporting" });
+    if (await sharedCache.get(fingerprint)) {
       localSuppressionUntil.set(fingerprint, now + ERROR_DEDUPE_TTL_SECONDS * 1_000);
       return "suppressed";
     }
-    await cache.set(
+    await sharedCache.set(
       fingerprint,
       { firstSeenAt: new Date(now).toISOString() },
       {
@@ -75,7 +76,7 @@ export async function deliverErrorReport(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
   try {
-    await fetch(webhookUrl, {
+    const response = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
@@ -90,6 +91,22 @@ export async function deliverErrorReport(
         ],
       }),
     });
+    if (!response.ok) {
+      throw new Error(`Discord error webhook returned ${response.status}.`);
+    }
+  } catch (deliveryError) {
+    // The shared marker is provisional until Discord confirms delivery. A
+    // timeout/network/HTTP failure must allow the next identical report to
+    // retry instead of creating a silent five-minute alert gap.
+    localSuppressionUntil.delete(fingerprint);
+    if (sharedCache) {
+      try {
+        await sharedCache.delete(fingerprint);
+      } catch {
+        // Cache cleanup failures are logged by the next report's console path.
+      }
+    }
+    throw deliveryError;
   } finally {
     clearTimeout(timer);
   }

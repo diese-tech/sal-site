@@ -61,6 +61,15 @@ class FakeQuery {
     return this;
   }
 
+  in(column: string, value: unknown[]) {
+    this.state.eqs.push([column, value]);
+    return this;
+  }
+
+  limit() {
+    return this;
+  }
+
   is(column: string, value: unknown) {
     this.state.eqs.push([column, value]);
     return this;
@@ -286,82 +295,51 @@ describe("saveSeasonOrgAssignment availability guard (#237)", () => {
   });
 });
 
-describe("archiveRecord season-participation cleanup (#237)", () => {
-  it("retires every active/free-agent roster assignment before archiving a player", async () => {
+describe("archiveRecord season-participation guard (#237)", () => {
+  it("rejects a player archive before any mutation when active participation exists", async () => {
+    client = makeClient(defaultHandler({
+      season_rosters: { data: { season_id: "season-1" }, error: null },
+    }));
+    const { archiveRecord } = await import("./league-data");
+
+    await expect(archiveRecord("players", "player-1"))
+      .rejects.toThrow("Remove the player from active season rosters first.");
+
+    expect(executed.some((q) => q.op !== "select")).toBe(false);
+  });
+
+  it("rejects an org archive before any mutation when active participation exists", async () => {
+    client = makeClient(defaultHandler({
+      season_orgs: { data: { season_id: "season-1" }, error: null },
+    }));
+    const { archiveRecord } = await import("./league-data");
+
+    await expect(archiveRecord("orgs", "org-1"))
+      .rejects.toThrow("Remove the org from active season assignments first.");
+
+    expect(executed.some((q) => q.op !== "select")).toBe(false);
+  });
+
+  it("uses the same fail-closed guard when scheduling deletion", async () => {
+    client = makeClient(defaultHandler({
+      season_rosters: { data: { season_id: "season-1" }, error: null },
+    }));
+    const { scheduleDelete } = await import("./league-data");
+
+    await expect(scheduleDelete("players", "player-1"))
+      .rejects.toThrow("Remove the player from active season rosters first.");
+
+    expect(executed.some((q) => q.op !== "select")).toBe(false);
+  });
+
+  it("archives normally when the player has no active participation", async () => {
     client = makeClient(defaultHandler());
     const { archiveRecord } = await import("./league-data");
 
     await archiveRecord("players", "player-1");
 
-    const participationWrites = executed.filter((q) =>
-      q.table === "season_rosters" || (q.table === "players" && q.op === "update")
-    );
-    expect(participationWrites).toHaveLength(3);
-    expect(participationWrites[0]).toMatchObject({
-      table: "season_rosters",
-      op: "delete",
-      eqs: [["player_id", "player-1"], ["roster_status", "free_agent"]],
-    });
-    expect(participationWrites[1]).toMatchObject({
-      table: "season_rosters",
-      op: "update",
-      payload: { roster_status: "inactive" },
-      eqs: [["player_id", "player-1"], ["roster_status", "active"]],
-    });
-    expect(participationWrites[2]).toMatchObject({
-      table: "players",
-      op: "update",
-      eqs: [["id", "player-1"]],
-    });
-  });
-
-  it("retires org roster and season participation before archiving an org", async () => {
-    client = makeClient(defaultHandler());
-    const { archiveRecord } = await import("./league-data");
-
-    await archiveRecord("orgs", "org-1");
-
-    const participationWrites = executed.filter((q) =>
-      q.table === "season_rosters" || q.table === "season_orgs" || (q.table === "orgs" && q.op === "update")
-    );
-    expect(participationWrites).toHaveLength(3);
-    expect(participationWrites[0]).toMatchObject({
-      table: "season_rosters",
-      op: "update",
-      payload: { roster_status: "inactive" },
-      eqs: [["org_id", "org-1"], ["roster_status", "active"]],
-    });
-    expect(participationWrites[1]).toMatchObject({
-      table: "season_orgs",
-      op: "update",
-      payload: { status: "inactive" },
-      eqs: [["org_id", "org-1"], ["status", "active"]],
-    });
-    expect(participationWrites[2]).toMatchObject({
-      table: "orgs",
-      op: "update",
-      eqs: [["id", "org-1"]],
-    });
-  });
-
-  it("uses the same participation cleanup when scheduling a player for deletion", async () => {
-    client = makeClient(defaultHandler());
-    const { scheduleDelete } = await import("./league-data");
-
-    await scheduleDelete("players", "player-1");
-
-    const participationWrites = executed.filter((q) =>
-      q.table === "season_rosters" || (q.table === "players" && q.op === "update")
-    );
-    expect(participationWrites.map((q) => [q.table, q.op])).toEqual([
-      ["season_rosters", "delete"],
-      ["season_rosters", "update"],
-      ["players", "update"],
-    ]);
-    expect(participationWrites[2].payload).toMatchObject({
-      archived_at: expect.any(String),
-      deletion_scheduled_at: expect.any(String),
-    });
+    expect(executed.find((q) => q.table === "players" && q.op === "update")?.payload)
+      .toMatchObject({ archived_at: expect.any(String) });
   });
 });
 
