@@ -159,6 +159,172 @@ export type Database = {
           },
         ]
       }
+      bug_report_abuse_decisions: {
+        Row: {
+          action: string
+          bucket_hash: string
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          parent_decision_id: string | null
+          phase: string
+        }
+        Insert: {
+          action: string
+          bucket_hash: string
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          parent_decision_id?: string | null
+          phase: string
+        }
+        Update: {
+          action?: string
+          bucket_hash?: string
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          parent_decision_id?: string | null
+          phase?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bug_report_abuse_decisions_parent_decision_id_fkey"
+            columns: ["parent_decision_id"]
+            isOneToOne: false
+            referencedRelation: "bug_report_abuse_decisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bug_report_messages: {
+        Row: {
+          bug_report_id: string
+          created_at: string
+          delivery_status: string
+          direction: string
+          id: string
+          message: string
+        }
+        Insert: {
+          bug_report_id: string
+          created_at?: string
+          delivery_status?: string
+          direction: string
+          id?: string
+          message: string
+        }
+        Update: {
+          bug_report_id?: string
+          created_at?: string
+          delivery_status?: string
+          direction?: string
+          id?: string
+          message?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bug_report_messages_bug_report_id_fkey"
+            columns: ["bug_report_id"]
+            isOneToOne: false
+            referencedRelation: "bug_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bug_report_rate_limits: {
+        Row: {
+          action: string
+          attempt_count: number
+          bucket_hash: string
+          consumed_count: number
+          updated_at: string
+          window_started_at: string
+        }
+        Insert: {
+          action: string
+          attempt_count?: number
+          bucket_hash: string
+          consumed_count?: number
+          updated_at?: string
+          window_started_at?: string
+        }
+        Update: {
+          action?: string
+          attempt_count?: number
+          bucket_hash?: string
+          consumed_count?: number
+          updated_at?: string
+          window_started_at?: string
+        }
+        Relationships: []
+      }
+      bug_reports: {
+        Row: {
+          anonymous_access_token_hash: string | null
+          category: string
+          created_at: string
+          description: string
+          environment: string | null
+          expected_behavior: string
+          id: string
+          public_ticket_id: string
+          recovery_code_hash: string | null
+          reply_relay_consent: boolean
+          reporter_auth_user_id: string | null
+          reporter_discord_id: string | null
+          reproduction_steps: string
+          severity: string
+          status: string
+          subject: string
+          ticket_id: string
+          updated_at: string
+        }
+        Insert: {
+          anonymous_access_token_hash?: string | null
+          category: string
+          created_at?: string
+          description: string
+          environment?: string | null
+          expected_behavior: string
+          id?: string
+          public_ticket_id: string
+          recovery_code_hash?: string | null
+          reply_relay_consent?: boolean
+          reporter_auth_user_id?: string | null
+          reporter_discord_id?: string | null
+          reproduction_steps: string
+          severity: string
+          status?: string
+          subject: string
+          ticket_id: string
+          updated_at?: string
+        }
+        Update: {
+          anonymous_access_token_hash?: string | null
+          category?: string
+          created_at?: string
+          description?: string
+          environment?: string | null
+          expected_behavior?: string
+          id?: string
+          public_ticket_id?: string
+          recovery_code_hash?: string | null
+          reply_relay_consent?: boolean
+          reporter_auth_user_id?: string | null
+          reporter_discord_id?: string | null
+          reproduction_steps?: string
+          severity?: string
+          status?: string
+          subject?: string
+          ticket_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       captain_shortlists: {
         Row: {
           created_at: string
@@ -1885,6 +2051,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      begin_bug_report_attempt: {
+        Args: {
+          p_action: string
+          p_attempt_limit?: number
+          p_bucket_hash: string
+          p_window_seconds?: number
+        }
+        Returns: Json
+      }
       claim_operation_outbox: {
         Args: { p_limit?: number; p_worker_id: string }
         Returns: {
@@ -1936,6 +2111,36 @@ export type Database = {
         }
         Returns: Json
       }
+      consume_bug_report_allowance: {
+        Args: {
+          p_action: string
+          p_attempt_decision_id: string
+          p_bucket_hash: string
+          p_submission_limit?: number
+          p_window_seconds?: number
+        }
+        Returns: Json
+      }
+      create_bug_report: {
+        Args: {
+          p_abuse_decision_id: string
+          p_anonymous_access_token_hash?: string
+          p_category: string
+          p_description: string
+          p_environment?: string
+          p_expected_behavior: string
+          p_public_ticket_id: string
+          p_recovery_code_hash?: string
+          p_reply_relay_consent?: boolean
+          p_reporter_auth_user_id?: string
+          p_reporter_discord_id?: string
+          p_reproduction_steps: string
+          p_severity: string
+          p_subject: string
+          p_ticket_id: string
+        }
+        Returns: Json
+      }
       create_pending_action: {
         Args: {
           p_division_id: string
@@ -1979,6 +2184,14 @@ export type Database = {
           p_season_id: string
           p_smite_match_id?: string
           p_winning_side: string
+        }
+        Returns: Json
+      }
+      read_bug_report_status: {
+        Args: {
+          p_access_token_hash?: string
+          p_auth_user_id?: string
+          p_public_ticket_id: string
         }
         Returns: Json
       }
@@ -2051,6 +2264,14 @@ export type Database = {
         Returns: undefined
       }
       undo_last_pick: { Args: { p_draft_room_id: string }; Returns: undefined }
+      update_bug_report_status: {
+        Args: {
+          p_actor_discord_id: string
+          p_bug_report_id: string
+          p_status: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

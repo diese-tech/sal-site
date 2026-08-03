@@ -3,6 +3,8 @@ import type { Database } from "@/types/database.types";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import type { AdminTicket, TicketSourceHealth } from "@/types/admin-ticket";
 import {
+  BUG_REPORT_COLUMNS,
+  BUG_REPORT_TERMINAL_STATUSES,
   MATCH_REPORT_COLUMNS,
   MATCH_REPORT_TERMINAL_STATUSES,
   PENDING_ACTION_COLUMNS,
@@ -14,6 +16,7 @@ import {
   normalizeTicketSources,
   sortTickets,
   type MatchReportSourceRow,
+  type BugReportSourceRow,
   type PendingActionSourceRow,
   type PendingStatRecordSourceRow,
   type RegistrationSourceRow,
@@ -97,7 +100,7 @@ export async function getAdminTicketQueueFromClient(
     return {
       tickets: [],
       sourceHealth: (
-        ["operation", "stat_review", "registration", "match_report"] as const
+        ["operation", "stat_review", "registration", "match_report", "bug_report"] as const
       ).map((source) => ({ source, ok: false, reason: NOT_CONFIGURED })),
       seasonNames: {},
       divisionNames: {},
@@ -106,7 +109,7 @@ export async function getAdminTicketQueueFromClient(
 
   const health: TicketSourceHealth[] = [];
   const notIn = (statuses: readonly string[]) => `(${statuses.join(",")})`;
-  const [pendingActions, pendingStatRecords, registrations, matchReports, seasonNames, divisionNames] =
+  const [pendingActions, pendingStatRecords, registrations, matchReports, bugReports, seasonNames, divisionNames] =
     await Promise.all([
       fetchRows<PendingActionSourceRow>("operation", health, () => [
         client
@@ -164,16 +167,36 @@ export async function getAdminTicketQueueFromClient(
           .order("created_at", { ascending: false })
           .limit(HISTORY_LIMIT),
       ]),
+      fetchRows<BugReportSourceRow>("bug_report", health, () => [
+        client
+          .from("bug_reports")
+          .select(BUG_REPORT_COLUMNS)
+          .not("status", "in", notIn(BUG_REPORT_TERMINAL_STATUSES))
+          .order("created_at", { ascending: true })
+          .limit(UNRESOLVED_LIMIT),
+        client
+          .from("bug_reports")
+          .select(BUG_REPORT_COLUMNS)
+          .in("status", [...BUG_REPORT_TERMINAL_STATUSES])
+          .order("created_at", { ascending: false })
+          .limit(HISTORY_LIMIT),
+      ]),
       fetchNameMap(client, "seasons"),
       fetchNameMap(client, "divisions"),
     ]);
 
-  const sourceOrder: TicketSource[] = ["operation", "stat_review", "registration", "match_report"];
+  const sourceOrder: TicketSource[] = [
+    "operation",
+    "stat_review",
+    "registration",
+    "match_report",
+    "bug_report",
+  ];
   health.sort((a, b) => sourceOrder.indexOf(a.source) - sourceOrder.indexOf(b.source));
 
   return {
     tickets: sortTickets(
-      normalizeTicketSources({ pendingActions, pendingStatRecords, registrations, matchReports }),
+      normalizeTicketSources({ pendingActions, pendingStatRecords, registrations, matchReports, bugReports }),
     ),
     sourceHealth: health,
     seasonNames,

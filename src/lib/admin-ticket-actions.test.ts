@@ -117,6 +117,41 @@ describe("runTicketAction", () => {
       body: JSON.stringify({ games }),
     });
   });
+
+  it("updates a bug report through its dedicated admin endpoint", async () => {
+    const ticket: AdminTicket = {
+      ...registrationTicket(),
+      id: "bug_report:11111111-1111-4111-8111-111111111111",
+      sourceId: "11111111-1111-4111-8111-111111111111",
+      category: "bug_report",
+      displayId: "BUG-ABCDEF012345",
+      privacy: "anonymous",
+    };
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const onOptimistic = vi.fn();
+
+    await runTicketAction({
+      ticket,
+      action: { kind: "update_bug_report_status", status: "investigating" },
+      fetcher,
+      now: () => "2026-08-02T22:00:00.000Z",
+      onOptimistic,
+      onRollback: vi.fn(),
+      onSuccess: vi.fn(),
+    });
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "/api/admin/bug-reports/11111111-1111-4111-8111-111111111111",
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "investigating" }),
+      },
+    );
+    expect(onOptimistic).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "claimed", sourceStatus: "investigating" }),
+    );
+  });
 });
 
 describe("getTicketActionMode", () => {
@@ -135,6 +170,8 @@ describe("getTicketActionMode", () => {
     expect(getTicketActionMode({ ...registration, category: "stat_review" }, canAct)).toBe("read_only");
     expect(getTicketActionMode(registration, canAct)).toBe("registration");
     expect(getTicketActionMode({ ...registration, category: "match_report" }, canAct)).toBe("match_report");
+    expect(getTicketActionMode({ ...registration, category: "bug_report" }, canAct)).toBe("bug_report");
+    expect(getTicketActionMode({ ...registration, category: "bug_report", status: "claimed" }, canAct)).toBe("bug_report");
     expect(getTicketActionMode({ ...registration, status: "resolved" }, canAct)).toBe("read_only");
   });
 });

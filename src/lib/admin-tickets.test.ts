@@ -70,7 +70,7 @@ describe("getAdminTicketQueueFromClient", () => {
   it("reports every source unavailable when the database is not configured", async () => {
     const queue = await getAdminTicketQueueFromClient(null);
     expect(queue.tickets).toEqual([]);
-    expect(queue.sourceHealth).toHaveLength(4);
+    expect(queue.sourceHealth).toHaveLength(5);
     expect(queue.sourceHealth.every((s) => !s.ok)).toBe(true);
     expect(queue.sourceHealth[0].reason).toBe("Database connection is not configured.");
   });
@@ -108,7 +108,7 @@ describe("getAdminTicketQueueFromClient", () => {
     const registrationHealth = queue.sourceHealth.find((s) => s.source === "registration");
     expect(registrationHealth?.ok).toBe(false);
     expect(registrationHealth?.reason).toBe("Source unavailable, showing the rest of the queue.");
-    expect(queue.sourceHealth.filter((s) => s.ok)).toHaveLength(3);
+    expect(queue.sourceHealth.filter((s) => s.ok)).toHaveLength(4);
   });
 
   it("merges unresolved rows with recent terminal history for a source", async () => {

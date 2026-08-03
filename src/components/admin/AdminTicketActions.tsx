@@ -51,12 +51,90 @@ export function AdminTicketActions({
     );
   }
 
+  if (mode === "bug_report") {
+    return (
+      <BugReportActions
+        ticket={ticket}
+        onTicketChange={onTicketChange}
+        onActionSuccess={onActionSuccess}
+      />
+    );
+  }
+
   return (
     <p className="mt-2 text-[0.65rem] text-slate-500">
       {capabilities.canActOnTickets
         ? "This ticket has no safe queue action available. Use the owning workflow."
         : "This queue is read-only for your account. Use the owning workflow."}
     </p>
+  );
+}
+
+function BugReportActions({
+  ticket,
+  onTicketChange,
+  onActionSuccess,
+}: Omit<AdminTicketActionsProps, "capabilities">) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function updateStatus(status: "acknowledged" | "investigating" | "resolved") {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const result = await runTicketAction({
+      ticket,
+      action: { kind: "update_bug_report_status", status },
+      fetcher: fetch,
+      onOptimistic: onTicketChange,
+      onRollback: onTicketChange,
+      onSuccess: onTicketChange,
+    });
+    if (!result.ok) {
+      setBusy(false);
+      setError(result.error);
+      return;
+    }
+    onActionSuccess();
+  }
+
+  return (
+    <div className="mt-3 border-t border-white/8 pt-3">
+      <p className="mb-2 text-[0.65rem] text-slate-400">
+        Update the private status shown to the reporter.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {ticket.sourceStatus === "open" ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void updateStatus("acknowledged")}
+            className="rounded-lg border border-cyan-300/35 bg-cyan-300/10 px-3 py-1.5 text-xs font-black uppercase text-cyan-100 disabled:opacity-50"
+          >
+            Acknowledge
+          </button>
+        ) : null}
+        {ticket.sourceStatus !== "investigating" ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void updateStatus("investigating")}
+            className="rounded-lg border border-amber-300/35 bg-amber-300/10 px-3 py-1.5 text-xs font-black uppercase text-amber-100 disabled:opacity-50"
+          >
+            Investigate
+          </button>
+        ) : null}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void updateStatus("resolved")}
+          className="rounded-lg border border-emerald-300/40 bg-emerald-300/15 px-3 py-1.5 text-xs font-black uppercase text-emerald-100 disabled:opacity-50"
+        >
+          {busy ? "Saving..." : "Resolve"}
+        </button>
+      </div>
+      {error ? <p role="alert" className="mt-2 text-xs font-semibold text-red-300">{error}</p> : null}
+    </div>
   );
 }
 

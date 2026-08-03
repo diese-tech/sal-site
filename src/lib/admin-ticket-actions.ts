@@ -23,7 +23,11 @@ export interface MatchReportResolutionGame {
 export type TicketAction =
   | { kind: "approve_registration"; reviewerNote?: string }
   | { kind: "reject_registration"; reviewerNote?: string }
-  | { kind: "resolve_match_report"; games: MatchReportResolutionGame[] };
+  | { kind: "resolve_match_report"; games: MatchReportResolutionGame[] }
+  | {
+      kind: "update_bug_report_status";
+      status: "acknowledged" | "investigating" | "resolved";
+    };
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -39,13 +43,17 @@ interface RunTicketActionOptions {
 
 export type TicketActionResult = { ok: true } | { ok: false; error: string };
 
-export type TicketActionMode = "registration" | "match_report" | "read_only";
+export type TicketActionMode = "registration" | "match_report" | "bug_report" | "read_only";
 
 export function getTicketActionMode(
   ticket: AdminTicket,
   capabilities: TicketViewerCapabilities,
 ): TicketActionMode {
-  if (!capabilities.canActOnTickets || ticket.status !== "open") return "read_only";
+  if (!capabilities.canActOnTickets) return "read_only";
+  if (ticket.category === "bug_report" && !["resolved", "denied", "cancelled"].includes(ticket.status)) {
+    return "bug_report";
+  }
+  if (ticket.status !== "open") return "read_only";
   if (ticket.category === "registration") return "registration";
   if (ticket.category === "match_report") return "match_report";
   return "read_only";
@@ -81,6 +89,16 @@ export async function runTicketAction({
 }
 
 function actionRequest(ticket: AdminTicket, action: TicketAction): { url: string; init: RequestInit } {
+  if (action.kind === "update_bug_report_status") {
+    return {
+      url: `/api/admin/bug-reports/${encodeURIComponent(ticket.sourceId)}`,
+      init: {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: action.status }),
+      },
+    };
+  }
   if (action.kind === "resolve_match_report") {
     return {
       url: `/api/admin/match-reports/${encodeURIComponent(ticket.sourceId)}/submit`,
@@ -104,6 +122,25 @@ function actionRequest(ticket: AdminTicket, action: TicketAction): { url: string
 }
 
 function optimisticTicket(ticket: AdminTicket, action: TicketAction, updatedAt: string): AdminTicket {
+  if (action.kind === "update_bug_report_status") {
+    return {
+      ...ticket,
+      status: action.status === "resolved" ? "resolved" : "claimed",
+      sourceStatus: action.status,
+      updatedAt,
+      timeline: [
+        ...ticket.timeline,
+        {
+          at: updatedAt,
+          label: action.status === "resolved"
+            ? "Bug report resolved"
+            : action.status === "investigating"
+              ? "Investigation started"
+              : "Bug report acknowledged",
+        },
+      ],
+    };
+  }
   const denied = action.kind === "reject_registration";
   const sourceStatus = action.kind === "resolve_match_report" ? "done" : denied ? "rejected" : "approved";
   const label = action.kind === "resolve_match_report" ? "Match report resolved" : denied ? "Registration rejected" : "Registration approved";
