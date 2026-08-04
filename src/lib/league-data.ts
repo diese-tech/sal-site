@@ -829,6 +829,24 @@ export async function saveOrgForCurrentSeason(org: Org): Promise<void> {
       divisionId: org.divisionId,
       isCaptain: true,
     });
+  } else {
+    const supabase = getSupabaseServerClient();
+    if (!supabase) throw new Error("Supabase env is missing.");
+    const updatedAt = new Date().toISOString();
+    const { error: rosterError } = await supabase
+      .from("season_rosters")
+      .update({ is_captain: false, updated_at: updatedAt })
+      .eq("season_id", seasonId)
+      .eq("org_id", org.id)
+      .eq("is_captain", true);
+    if (rosterError) throw rosterError;
+
+    const { error: playerError } = await supabase
+      .from("players")
+      .update({ is_captain: false })
+      .eq("org_id", org.id)
+      .eq("is_captain", true);
+    if (playerError) throw playerError;
   }
 }
 
