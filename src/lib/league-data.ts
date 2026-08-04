@@ -82,6 +82,12 @@ type DbOrg = Omit<Org, "divisionId" | "logoInitials" | "logoGradient" | "primary
 
 type DbPlayer = Database["public"]["Tables"]["players"]["Row"];
 type DbPlayerInsert = Database["public"]["Tables"]["players"]["Insert"];
+// avatar_url is not yet in the vendored database.types.ts (that file is a
+// strict content-hash match against diese-tech/sal-database and can't be
+// hand-edited — see check:db-contract). Read it defensively off the raw row
+// instead of widening DbPlayer, so this keeps working once the pinned
+// contract catches up.
+type DbPlayerRowWithAvatar = DbPlayer & { avatar_url?: string | null };
 
 type DbMatch = Omit<Match, "divisionId" | "homeOrgId" | "awayOrgId" | "scheduledDate" | "scheduledTime" | "homeScore" | "awayScore" | "streamUrl" | "vodUrl" | "archivedAt" | "deletionScheduledAt" | "seasonId"> & {
   division_id: Match["divisionId"];
@@ -189,6 +195,7 @@ function fromDbPlayer(row: DbPlayer): LeaguePlayer {
     displayAlias: row.display_alias ?? undefined,
     avatarInitials: row.avatar_initials,
     avatarGradient: row.avatar_gradient,
+    avatarUrl: (row as DbPlayerRowWithAvatar).avatar_url ?? undefined,
     primaryRole: playerRoleSchema.parse(row.primary_role),
     secondaryRoles: z.array(playerRoleSchema).parse(row.secondary_roles),
     isStarter: row.is_starter,
@@ -1147,6 +1154,7 @@ function fromDbRegistration(row: Record<string, unknown>): Registration {
     discordId: row.discord_id as string,
     discordUsername: row.discord_username as string,
     discordDisplayName: row.discord_display_name as string | undefined,
+    avatarUrl: (row.avatar_url as string | null | undefined) ?? undefined,
     seasonId: (row.season_id as string | null) ?? undefined,
     playerId: row.player_id as string | undefined,
     formData: (row.form_data as Record<string, string>) ?? {},
@@ -1180,18 +1188,53 @@ export async function getRegistrationByDiscordId(discordId: string): Promise<Reg
   return data ? fromDbRegistration(data) : null;
 }
 
+/**
+ * The shared resolve_registration_review RPC (owned by sal-database) creates
+ * or updates the approved registration's player row, but it predates
+ * avatar_url and copies a fixed column set that doesn't include it. Call this
+ * right after a successful approval to carry the avatar the admin's session
+ * captured at registration time onto the resulting player, without needing
+ * to touch that RPC.
+ */
+export async function copyRegistrationAvatarToPlayer(registrationId: string, playerId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+  const { data, error } = await supabase
+    .from("registrations")
+    .select("avatar_url")
+    .eq("id", registrationId)
+    .maybeSingle();
+  if (error) throw error;
+  const avatarUrl = (data as { avatar_url?: string | null } | null)?.avatar_url;
+  if (!avatarUrl) return;
+  const update: DbPlayerUpdateWithAvatar = { avatar_url: avatarUrl };
+  const { error: playerError } = await supabase
+    .from("players")
+    .update(update as unknown as Database["public"]["Tables"]["players"]["Update"])
+    .eq("id", playerId);
+  if (playerError) throw playerError;
+}
+
+// avatar_url is not yet in the vendored database.types.ts (see
+// DbPlayerRowWithAvatar above) — same treatment for registrations.
+type RegistrationInsertWithAvatar = Database["public"]["Tables"]["registrations"]["Insert"] & { avatar_url?: string | null };
+
 export async function createRegistration(reg: Omit<Registration, "status" | "createdAt">): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
-  const { error } = await supabase.from("registrations").insert({
+  const payload: RegistrationInsertWithAvatar = {
     id: reg.id,
     discord_id: reg.discordId,
     discord_username: reg.discordUsername,
     discord_display_name: reg.discordDisplayName ?? null,
+    avatar_url: reg.avatarUrl ?? null,
     season_id: reg.seasonId ?? null,
     player_id: reg.playerId ?? null,
     form_data: reg.formData,
-  });
+  };
+  const { error } = await supabase
+    .from("registrations")
+    .insert(payload as unknown as Database["public"]["Tables"]["registrations"]["Insert"]);
   if (error) throw error;
 }
 
@@ -1210,12 +1253,18 @@ export async function updateRegistrationStatus(
   await writeAuditLog("update_registration", "registration", id, { status, reviewerNote });
 }
 
-export async function claimPlayerProfile(discordId: string, playerId: string): Promise<void> {
+type DbPlayerUpdateWithAvatar = Database["public"]["Tables"]["players"]["Update"] & { avatar_url?: string };
+
+export async function claimPlayerProfile(discordId: string, playerId: string, avatarUrl?: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
+  const update: DbPlayerUpdateWithAvatar = { discord_id: discordId, profile_claimed: true };
+  // Only set on claim, never cleared — a claimed player without a fresh
+  // Discord session shouldn't lose whatever avatar they already captured.
+  if (avatarUrl) update.avatar_url = avatarUrl;
   const { error } = await supabase
     .from("players")
-    .update({ discord_id: discordId, profile_claimed: true })
+    .update(update as unknown as Database["public"]["Tables"]["players"]["Update"])
     .eq("id", playerId);
   if (error) throw error;
   await writeAuditLog("claim_player_profile", "player", playerId, { discordId });
@@ -1230,6 +1279,7 @@ export async function claimPlayerProfile(discordId: string, playerId: string): P
 export async function claimPlayerByDiscordUsername(
   discordId: string,
   discordUsername: string,
+  avatarUrl?: string,
 ): Promise<
   { ok: true; playerId: string } | { ok: false; reason: "not_found" | "already_claimed" | "discord_taken" | "ambiguous" }
 > {
@@ -1267,7 +1317,7 @@ export async function claimPlayerByDiscordUsername(
     .limit(1);
   if (existing?.length) return { ok: false, reason: "discord_taken" };
 
-  await claimPlayerProfile(discordId, player.id as string);
+  await claimPlayerProfile(discordId, player.id as string, avatarUrl);
   return { ok: true, playerId: player.id as string };
 }
 

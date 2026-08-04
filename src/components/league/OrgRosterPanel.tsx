@@ -23,6 +23,7 @@ function PlayerRow({ player, divisionId }: { player: LeaguePlayer; divisionId: D
         <AvatarMark
           initials={player.avatarInitials}
           gradient={player.avatarGradient}
+          avatarUrl={player.avatarUrl}
           className="h-11 w-11 shrink-0 rounded-xl text-sm"
         />
         <div className="min-w-0 flex-1">
