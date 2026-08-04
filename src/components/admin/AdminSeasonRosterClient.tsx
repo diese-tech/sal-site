@@ -12,6 +12,16 @@ import type {
 const selectClass = "rounded-lg border border-white/10 bg-black/45 px-2.5 py-2 text-xs font-semibold text-white outline-none focus:border-cyan-300/50";
 const buttonClass = "rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-xs font-black uppercase text-cyan-100 disabled:opacity-50";
 
+type Notice = { tone: "success" | "error"; text: string } | null;
+
+function NoticeText({ notice }: { notice: Notice }) {
+  if (!notice) return null;
+  if (notice.tone === "success") {
+    return <p role="status" className="mt-2 text-xs font-semibold text-emerald-300">{notice.text}</p>;
+  }
+  return <p role="alert" className="mt-2 text-xs font-semibold text-rose-200">{notice.text}</p>;
+}
+
 async function rosterRequest(seasonId: string, method: "POST" | "DELETE", body: unknown) {
   const response = await fetch(`/api/admin/seasons/${encodeURIComponent(seasonId)}/roster`, {
     method,
@@ -24,30 +34,69 @@ async function rosterRequest(seasonId: string, method: "POST" | "DELETE", body: 
   }
 }
 
+/** Form-state seed for an org row — pure so the mount and re-sync paths share one source of truth. */
+export function orgRowFormState(org: Org, assignment?: SeasonOrgAdminAssignment): { divisionId: DivisionId } {
+  return { divisionId: assignment?.division_id ?? org.divisionId };
+}
+
+/** Changes only when this org's own season assignment changes — a sibling row's refresh must not disturb it. */
+export function orgRowSyncKey(assignment?: SeasonOrgAdminAssignment): string {
+  if (!assignment) return "unassigned";
+  return `${assignment.division_id}`;
+}
+
+/** Form-state seed for a player row — mirrors the pre-existing mount-only initializer semantics. */
+export function playerRowFormState(
+  player: LeaguePlayer,
+  assignment?: SeasonRosterAdminAssignment,
+): { orgId: string; freeAgentDivision: DivisionId | ""; isCaptain: boolean } {
+  return {
+    orgId: assignment?.org_id ?? "",
+    freeAgentDivision: assignment?.division_id ?? player.divisionId ?? "",
+    isCaptain: assignment?.is_captain ?? false,
+  };
+}
+
+/** Changes only when this player's own season assignment changes. */
+export function playerRowSyncKey(assignment?: SeasonRosterAdminAssignment): string {
+  if (!assignment) return "unassigned";
+  return `${assignment.org_id ?? ""}|${assignment.division_id ?? ""}|${assignment.is_captain}`;
+}
+
 function OrgAssignmentRow({
   seasonId,
+  seasonName,
   org,
   assignment,
   divisions,
 }: {
   seasonId: string;
+  seasonName: string;
   org: Org;
   assignment?: SeasonOrgAdminAssignment;
   divisions: SeasonRosterAdminData["divisions"];
 }) {
   const router = useRouter();
-  const [divisionId, setDivisionId] = useState<DivisionId>(assignment?.division_id ?? org.divisionId);
+  const syncKey = orgRowSyncKey(assignment);
+  const [lastSyncKey, setLastSyncKey] = useState(syncKey);
+  const [divisionId, setDivisionId] = useState<DivisionId>(() => orgRowFormState(org, assignment).divisionId);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState<Notice>(null);
+
+  if (lastSyncKey !== syncKey) {
+    setLastSyncKey(syncKey);
+    setDivisionId(orgRowFormState(org, assignment).divisionId);
+  }
 
   async function save() {
     setBusy(true);
-    setMessage("");
+    setNotice(null);
     try {
       await rosterRequest(seasonId, "POST", { entity: "org", orgId: org.id, divisionId });
+      setNotice({ tone: "success", text: assignment ? `Saved ${org.name}.` : `Enrolled ${org.name} in ${seasonName}.` });
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to save organization.");
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Unable to save organization." });
     } finally {
       setBusy(false);
     }
@@ -55,12 +104,13 @@ function OrgAssignmentRow({
 
   async function remove() {
     setBusy(true);
-    setMessage("");
+    setNotice(null);
     try {
       await rosterRequest(seasonId, "DELETE", { entity: "org", orgId: org.id });
+      setNotice({ tone: "success", text: `Removed ${org.name} from ${seasonName}.` });
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Remove players and matches first.");
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Remove players and matches first." });
     } finally {
       setBusy(false);
     }
@@ -76,20 +126,21 @@ function OrgAssignmentRow({
         <select aria-label={`Division for ${org.name}`} value={divisionId} onChange={(event) => setDivisionId(event.target.value as DivisionId)} className={selectClass}>
           {divisions.map((division) => <option key={division.id} value={division.id}>{division.name}</option>)}
         </select>
-        <button onClick={() => void save()} disabled={busy} className={buttonClass}>{assignment ? "Save" : "Enroll"}</button>
+        <button onClick={() => void save()} disabled={busy} className={buttonClass}>{assignment ? "Save" : "Enroll Returning Org"}</button>
         {assignment && (
           <button onClick={() => void remove()} disabled={busy} className="rounded-lg border border-rose-300/25 px-3 py-2 text-xs font-black uppercase text-rose-200 disabled:opacity-50">
             Remove
           </button>
         )}
       </div>
-      {message && <p role="alert" className="mt-2 text-xs font-semibold text-rose-200">{message}</p>}
+      <NoticeText notice={notice} />
     </div>
   );
 }
 
 function PlayerAssignmentRow({
   seasonId,
+  seasonName,
   player,
   assignment,
   enrolledOrgs,
@@ -97,6 +148,7 @@ function PlayerAssignmentRow({
   divisions,
 }: {
   seasonId: string;
+  seasonName: string;
   player: LeaguePlayer;
   assignment?: SeasonRosterAdminAssignment;
   enrolledOrgs: SeasonOrgAdminAssignment[];
@@ -104,17 +156,29 @@ function PlayerAssignmentRow({
   divisions: SeasonRosterAdminData["divisions"];
 }) {
   const router = useRouter();
-  const [orgId, setOrgId] = useState(assignment?.org_id ?? "");
-  const [freeAgentDivision, setFreeAgentDivision] = useState<DivisionId | "">(assignment?.division_id ?? player.divisionId ?? "");
-  const [isCaptain, setIsCaptain] = useState(assignment?.is_captain ?? false);
+  const syncKey = playerRowSyncKey(assignment);
+  const [lastSyncKey, setLastSyncKey] = useState(syncKey);
+  const [orgId, setOrgId] = useState(() => playerRowFormState(player, assignment).orgId);
+  const [freeAgentDivision, setFreeAgentDivision] = useState<DivisionId | "">(() => playerRowFormState(player, assignment).freeAgentDivision);
+  const [isCaptain, setIsCaptain] = useState(() => playerRowFormState(player, assignment).isCaptain);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState<Notice>(null);
+
+  if (lastSyncKey !== syncKey) {
+    setLastSyncKey(syncKey);
+    const next = playerRowFormState(player, assignment);
+    setOrgId(next.orgId);
+    setFreeAgentDivision(next.freeAgentDivision);
+    setIsCaptain(next.isCaptain);
+  }
+
   const enrolledOrg = enrolledOrgs.find((row) => row.org_id === orgId);
   const orgName = (id: string) => orgCatalog.find((org) => org.id === id)?.name ?? id;
+  const displayName = player.displayAlias ?? player.ign;
 
   async function save() {
     setBusy(true);
-    setMessage("");
+    setNotice(null);
     try {
       await rosterRequest(seasonId, "POST", {
         entity: "player",
@@ -123,9 +187,10 @@ function PlayerAssignmentRow({
         divisionId: (enrolledOrg?.division_id ?? freeAgentDivision) || null,
         isCaptain: orgId ? isCaptain : false,
       });
+      setNotice({ tone: "success", text: assignment ? `Saved ${displayName}.` : `Enrolled ${displayName} in ${seasonName}.` });
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to save player.");
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Unable to save player." });
     } finally {
       setBusy(false);
     }
@@ -133,12 +198,13 @@ function PlayerAssignmentRow({
 
   async function remove() {
     setBusy(true);
-    setMessage("");
+    setNotice(null);
     try {
       await rosterRequest(seasonId, "DELETE", { entity: "player", playerId: player.id });
+      setNotice({ tone: "success", text: `Removed ${displayName} from ${seasonName}.` });
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to remove player.");
+      setNotice({ tone: "error", text: error instanceof Error ? error.message : "Unable to remove player." });
     } finally {
       setBusy(false);
     }
@@ -148,7 +214,7 @@ function PlayerAssignmentRow({
     <div className="rounded-xl border border-white/8 bg-black/20 p-3">
       <div className="grid gap-2 lg:grid-cols-[minmax(10rem,1fr)_minmax(11rem,1fr)_minmax(9rem,0.7fr)_auto_auto] lg:items-center">
         <div>
-          <p className="font-black text-white">{player.displayAlias ?? player.ign}</p>
+          <p className="font-black text-white">{displayName}</p>
           <p className="text-[0.65rem] font-semibold text-slate-500">@{player.discordUsername} · {assignment ? assignment.roster_status : "not enrolled"}</p>
         </div>
         <select aria-label={`Team for ${player.ign}`} value={orgId} onChange={(event) => { setOrgId(event.target.value); if (!event.target.value) setIsCaptain(false); }} className={selectClass}>
@@ -167,11 +233,11 @@ function PlayerAssignmentRow({
           <input type="checkbox" checked={isCaptain} disabled={!orgId} onChange={(event) => setIsCaptain(event.target.checked)} /> Captain
         </label>
         <div className="flex gap-2">
-          <button onClick={() => void save()} disabled={busy} className={buttonClass}>{assignment ? "Save" : "Enroll"}</button>
+          <button onClick={() => void save()} disabled={busy} className={buttonClass}>{assignment ? "Save" : "Enroll Returning Org"}</button>
           {assignment && <button onClick={() => void remove()} disabled={busy} className="rounded-lg border border-rose-300/25 px-3 py-2 text-xs font-black uppercase text-rose-200 disabled:opacity-50">Remove</button>}
         </div>
       </div>
-      {message && <p role="alert" className="mt-2 text-xs font-semibold text-rose-200">{message}</p>}
+      <NoticeText notice={notice} />
     </div>
   );
 }
@@ -180,6 +246,8 @@ export function AdminSeasonRosterClient({ data }: { data: SeasonRosterAdminData 
   const [search, setSearch] = useState("");
   const orgAssignmentById = new Map(data.orgAssignments.map((row) => [row.org_id, row]));
   const rosterByPlayerId = new Map(data.rosterAssignments.map((row) => [row.player_id, row]));
+  const enrolledOrgs = data.orgCatalog.filter((org) => orgAssignmentById.has(org.id));
+  const availableOrgs = data.orgCatalog.filter((org) => !orgAssignmentById.has(org.id));
   const visiblePlayers = data.playerCatalog.filter((player) => {
     const value = `${player.ign} ${player.displayAlias ?? ""} ${player.discordUsername}`.toLowerCase();
     return value.includes(search.trim().toLowerCase());
@@ -187,13 +255,40 @@ export function AdminSeasonRosterClient({ data }: { data: SeasonRosterAdminData 
 
   return (
     <div className="space-y-8">
+      <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 p-4">
+        <p className="text-sm font-semibold text-slate-200">
+          Orgs and players are league-wide identities. This screen only controls who is enrolled in <strong className="text-white">{data.season.name}</strong>.
+          A team returning from a previous season already exists in the catalog below — <strong className="text-white">enroll it, don&apos;t recreate it</strong> on the Teams screen.
+        </p>
+      </div>
+
       <section className="space-y-3">
         <div>
-          <h2 className="text-lg font-black text-white">Season Organizations</h2>
-          <p className="text-sm font-semibold text-slate-400">Enroll teams first. Removing a team is blocked while roster or match rows still reference it.</p>
+          <h2 className="text-lg font-black text-white">Enrolled in {data.season.name} ({enrolledOrgs.length})</h2>
+          <p className="text-sm font-semibold text-slate-400">Removing a team is blocked while roster or match rows still reference it.</p>
         </div>
-        {data.orgCatalog.map((org) => (
-          <OrgAssignmentRow key={org.id} seasonId={data.season.id} org={org} assignment={orgAssignmentById.get(org.id)} divisions={data.divisions} />
+        {enrolledOrgs.length === 0 && (
+          <p role="status" className="rounded-xl border border-white/8 bg-black/20 p-3 text-sm font-semibold text-slate-500">
+            No orgs enrolled yet. Enroll returning orgs from the list below.
+          </p>
+        )}
+        {enrolledOrgs.map((org) => (
+          <OrgAssignmentRow key={org.id} seasonId={data.season.id} seasonName={data.season.name} org={org} assignment={orgAssignmentById.get(org.id)} divisions={data.divisions} />
+        ))}
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-black text-white">Available Returning Orgs ({availableOrgs.length})</h2>
+          <p className="text-sm font-semibold text-slate-400">These orgs already exist league-wide. Enroll a returning org into {data.season.name} instead of creating a duplicate on the Teams screen.</p>
+        </div>
+        {availableOrgs.length === 0 && (
+          <p role="status" className="rounded-xl border border-white/8 bg-black/20 p-3 text-sm font-semibold text-slate-500">
+            Every org in the catalog is enrolled in this season.
+          </p>
+        )}
+        {availableOrgs.map((org) => (
+          <OrgAssignmentRow key={org.id} seasonId={data.season.id} seasonName={data.season.name} org={org} assignment={orgAssignmentById.get(org.id)} divisions={data.divisions} />
         ))}
       </section>
 
@@ -209,6 +304,7 @@ export function AdminSeasonRosterClient({ data }: { data: SeasonRosterAdminData 
           <PlayerAssignmentRow
             key={player.id}
             seasonId={data.season.id}
+            seasonName={data.season.name}
             player={player}
             assignment={rosterByPlayerId.get(player.id)}
             enrolledOrgs={data.orgAssignments}
