@@ -40,10 +40,19 @@ function canServeMockLeagueData(): boolean {
 // MOCK_LEAGUE_DATA. In dev/E2E, behavior is unchanged. In production, throws
 // so the caller's nearest error boundary (or route handler) can surface an
 // explicit "unavailable" state instead of fabricated data.
-function unavailableOrMock(context: string, reason: string): LeagueData {
+function unavailableOrMock(
+  context: string,
+  reason: string,
+  extra?: Record<string, unknown>,
+): LeagueData {
   if (canServeMockLeagueData()) return MOCK_LEAGUE_DATA;
-  reportError(context, new LeagueDataUnavailableError(reason));
+  reportError(context, new LeagueDataUnavailableError(reason), extra);
   throw new LeagueDataUnavailableError(reason);
+}
+
+function missingIds(requestedIds: string[], loadedIds: string[]): string[] {
+  const loaded = new Set(loadedIds);
+  return [...new Set(requestedIds.filter((id) => !loaded.has(id)))];
 }
 
 type DbDivision = Omit<Division, "accentColor"> & { accent_color: string };
@@ -293,7 +302,7 @@ function fromDbAnnouncement(row: DbAnnouncement): Announcement {
   };
 }
 
-async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
+export async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return unavailableOrMock("getLeagueData", "Supabase env is not configured.");
 
@@ -360,7 +369,21 @@ async function fetchLeagueData(seasonId?: string): Promise<LeagueData> {
       rosterAssignments,
     );
     if (scoped.orgs.length !== orgAssignments.length || scoped.players.length !== rosterAssignments.length) {
-      return unavailableOrMock("getLeagueData", "Season assignments reference unavailable identities.");
+      return unavailableOrMock(
+        "getLeagueData",
+        "Season assignments reference unavailable identities.",
+        {
+          seasonId: seasonRow.id,
+          missingOrgIds: missingIds(
+            orgIds,
+            ((orgRes.data ?? []) as Array<{ id: string }>).map((org) => org.id),
+          ),
+          missingPlayerIds: missingIds(
+            playerIds,
+            ((playerRes.data ?? []) as Array<{ id: string }>).map((player) => player.id),
+          ),
+        },
+      );
     }
 
     const matches = (matchRes.data as DbMatch[]).map(fromDbMatch);
@@ -613,6 +636,15 @@ export async function saveSeasonOrgAssignment(
 ): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
+  const { data: org, error: orgError } = await supabase
+    .from("orgs")
+    .select("id")
+    .eq("id", orgId)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (orgError) throw orgError;
+  if (!org) throw new Error("Cannot enroll unavailable org.");
+
   const { error } = await supabase.from("season_orgs").upsert({
     season_id: seasonId,
     org_id: orgId,
@@ -641,8 +673,26 @@ export async function saveSeasonRosterAssignment(input: {
 }): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
+  const { data: player, error: playerError } = await supabase
+    .from("players")
+    .select("id")
+    .eq("id", input.playerId)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (playerError) throw playerError;
+  if (!player) throw new Error("Cannot enroll unavailable player.");
+
   let divisionId = input.divisionId;
   if (input.orgId) {
+    const { data: org, error: orgError } = await supabase
+      .from("orgs")
+      .select("id")
+      .eq("id", input.orgId)
+      .is("archived_at", null)
+      .maybeSingle();
+    if (orgError) throw orgError;
+    if (!org) throw new Error("Cannot enroll unavailable org.");
+
     const { data, error } = await supabase
       .from("season_orgs")
       .select("division_id")
@@ -698,6 +748,23 @@ export async function removeSeasonRosterAssignment(seasonId: string, playerId: s
   if (!supabase) throw new Error("Supabase env is missing.");
   const { error } = await supabase.from("season_rosters").delete().eq("season_id", seasonId).eq("player_id", playerId);
   if (error) throw error;
+
+  // Legacy parity, mirroring saveSeasonRosterAssignment's write-side behavior:
+  // clear the mirrored captain/org state too when this removal affects the
+  // operational (current) season. Without this, a player removed from the
+  // roster keeps stale org_id/is_captain/status on the global players row —
+  // still read as captain/org-affiliated by consumers like resolveRole's
+  // captain-bot check and by the profile page's unscoped fallback, even
+  // though an admin just took them off the team (Codex review on #234).
+  const currentSeasonId = await getCurrentSeasonId();
+  if (seasonId === currentSeasonId) {
+    const { error: playerError } = await supabase
+      .from("players")
+      .update({ org_id: null, is_captain: false, status: "free-agent" })
+      .eq("id", playerId);
+    if (playerError) throw playerError;
+  }
+
   await writeAuditLog("remove_season_roster", "season", seasonId, { playerId });
 }
 
@@ -715,9 +782,59 @@ export async function saveOrg(org: Org): Promise<void> {
 
 type SoftDeleteTable = "players" | "orgs" | "matches";
 
+async function assertNoSeasonParticipationBeforeArchive(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  table: SoftDeleteTable,
+  id: string,
+): Promise<void> {
+  if (table === "players") {
+    const { data, error } = await supabase
+      .from("season_rosters")
+      .select("season_id")
+      .eq("player_id", id)
+      .in("roster_status", ["active", "free_agent"])
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) {
+      throw new Error(
+        "Cannot archive or schedule deletion for a player with active season participation. Remove the player from active season rosters first.",
+      );
+    }
+    return;
+  }
+
+  if (table === "orgs") {
+    const [rosterResult, assignmentResult] = await Promise.all([
+      supabase
+        .from("season_rosters")
+        .select("season_id")
+        .eq("org_id", id)
+        .eq("roster_status", "active")
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("season_orgs")
+        .select("season_id")
+        .eq("org_id", id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const error = rosterResult.error ?? assignmentResult.error;
+    if (error) throw error;
+    if (rosterResult.data || assignmentResult.data) {
+      throw new Error(
+        "Cannot archive or schedule deletion for an org with active season participation. Remove the org from active season assignments first.",
+      );
+    }
+  }
+}
+
 export async function archiveRecord(table: SoftDeleteTable, id: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
+  await assertNoSeasonParticipationBeforeArchive(supabase, table, id);
   const { error } = await supabase.from(table).update({ archived_at: new Date().toISOString() }).eq("id", id);
   if (error) throw error;
   await writeAuditLog("archive", table.slice(0, -1), id, {});
@@ -734,6 +851,7 @@ export async function unarchiveRecord(table: SoftDeleteTable, id: string): Promi
 export async function scheduleDelete(table: SoftDeleteTable, id: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
+  await assertNoSeasonParticipationBeforeArchive(supabase, table, id);
   const now = new Date().toISOString();
   const { error } = await supabase.from(table).update({ deletion_scheduled_at: now, archived_at: now }).eq("id", id);
   if (error) throw error;
@@ -1242,6 +1360,26 @@ export async function getPlayerByDiscordId(discordId: string): Promise<LeaguePla
     .from("players")
     .select("*")
     .eq("discord_id", discordId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? fromDbPlayer(data) : null;
+}
+
+/**
+ * Unscoped-by-season player identity lookup. A player row can exist with no
+ * season_rosters entry in any season (e.g. a registration approved before
+ * season enrollment was wired up — see #230/#233 follow-up), so the public
+ * profile page falls back to this when the season-scoped catalog doesn't
+ * have the id, rather than 404ing on an otherwise-real player.
+ */
+export async function getPlayerById(id: string): Promise<LeaguePlayer | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("players")
+    .select("*")
+    .eq("id", id)
+    .is("archived_at", null)
     .maybeSingle();
   if (error) throw error;
   return data ? fromDbPlayer(data) : null;

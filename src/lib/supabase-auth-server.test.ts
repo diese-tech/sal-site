@@ -68,6 +68,44 @@ describe("getDiscordUsername", () => {
     });
     expect(getDiscordUsername(user)).toBe("");
   });
+
+  // Confirmed against live incident data (#233 follow-up, auth.users.raw_user_meta_data):
+  // every affected account had user_name AND identity_data.user_name empty,
+  // but the raw OIDC `name` claim held "handle#0" (Discord's discriminator
+  // placeholder for accounts on the newer global-handle system).
+  it("recovers the username by stripping the discriminator off user_metadata.name", () => {
+    const user = makeUser({ user_metadata: { name: "rteki#0" }, email: "totskablade8@gmail.com" });
+    expect(getDiscordUsername(user)).toBe("rteki");
+  });
+
+  it("recovers the username from the Discord identity's identity_data.name as a last resort", () => {
+    const user = makeUser({
+      email: "realperson@example.com",
+      identities: [{ provider: "discord", identity_data: { name: "identity_handle#1234" } }],
+    });
+    expect(getDiscordUsername(user)).toBe("identity_handle");
+  });
+
+  // Codex review (#235): full_name/global_name can be a distinct, non-unique
+  // display name Discord users set separately from their real handle (e.g.
+  // real handle "ne1217" shown on Discord as "XGN Ninjaa") — accepting it as
+  // the username could match/claim the wrong player. name#discriminator
+  // parsing must win over any display-name-shaped field.
+  it("never returns full_name or global_name — even when name parsing is unavailable", () => {
+    const user = makeUser({
+      user_metadata: { full_name: "XGN Ninjaa" },
+      email: "njengels@eagles.usi.edu",
+      identities: [{ provider: "discord", identity_data: { global_name: "XGN Ninjaa" } }],
+    });
+    expect(getDiscordUsername(user)).toBe("");
+  });
+
+  it("prefers name#discriminator parsing over full_name/global_name when both are present", () => {
+    const user = makeUser({
+      user_metadata: { name: "ne1217#0", full_name: "XGN Ninjaa" },
+    });
+    expect(getDiscordUsername(user)).toBe("ne1217");
+  });
 });
 
 describe("getDiscordDisplayName", () => {
