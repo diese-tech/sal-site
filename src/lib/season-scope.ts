@@ -52,3 +52,13 @@ export function scopeSeasonEntities(
 
   return { orgs, players };
 }
+
+// Admin Teams catalog view: season-scoped orgs already carry one row per org-division
+// team (an org can field independent teams in multiple divisions). The full identity
+// catalog is unfiltered by season enrollment, so only fold in the orgs missing from the
+// season — a just-created or not-yet-enrolled team — without clobbering the per-division
+// rows already resolved for the current season.
+export function mergeSeasonAndCatalogOrgs(seasonOrgs: Org[], catalogOrgs: Org[]): Org[] {
+  const seasonOrgIds = new Set(seasonOrgs.map((org) => org.id));
+  return [...seasonOrgs, ...catalogOrgs.filter((org) => !seasonOrgIds.has(org.id))];
+}

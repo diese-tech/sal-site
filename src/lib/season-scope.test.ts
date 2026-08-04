@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LeaguePlayer, Org } from "@/types/league";
-import { scopeSeasonEntities } from "./season-scope";
+import { mergeSeasonAndCatalogOrgs, scopeSeasonEntities } from "./season-scope";
 
 const org: Org = {
   id: "org-old",
@@ -78,5 +78,26 @@ describe("scopeSeasonEntities", () => {
       expect.objectContaining({ id: "org-old", divisionId: "lunar", captainId: "captain-lunar" }),
       expect.objectContaining({ id: "org-old", divisionId: "solar", captainId: "captain-solar" }),
     ]);
+  });
+});
+
+describe("mergeSeasonAndCatalogOrgs", () => {
+  it("keeps every season-scoped divisional team for an org fielding multiple divisions", () => {
+    const lunarTeam = { ...org, divisionId: "lunar" as const };
+    const solarTeam = { ...org, divisionId: "solar" as const };
+    const terraTeam = { ...org, divisionId: "terra" as const };
+
+    const merged = mergeSeasonAndCatalogOrgs([lunarTeam, solarTeam, terraTeam], [{ ...org, divisionId: "terra" }]);
+
+    expect(merged).toEqual([lunarTeam, solarTeam, terraTeam]);
+  });
+
+  it("adds catalog orgs that have no season enrollment yet, without duplicating enrolled ones", () => {
+    const seasonTeam = { ...org, divisionId: "solar" as const };
+    const unenrolledOrg: Org = { ...org, id: "org-new", name: "Brand New Org", divisionId: "terra" };
+
+    const merged = mergeSeasonAndCatalogOrgs([seasonTeam], [{ ...org, divisionId: "terra" }, unenrolledOrg]);
+
+    expect(merged).toEqual([seasonTeam, unenrolledOrg]);
   });
 });

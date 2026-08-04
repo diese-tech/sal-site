@@ -133,7 +133,7 @@ export function AdminTeamsClient({
 
     return (
       <div
-        key={org.id}
+        key={`${org.id}:${org.divisionId}`}
         className={cn(
           "flex flex-wrap items-center gap-3 border-b border-white/5 px-4 py-3 last:border-0",
           isScheduled && "bg-red-950/20",
