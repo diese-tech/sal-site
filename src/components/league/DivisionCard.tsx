@@ -42,7 +42,7 @@ export function DivisionCard({
   orgs: Org[];
 }) {
   const accent = divisionAccent[division.id];
-  const topOrgs = standings.slice(0, 3).map((s) => orgs.find((o) => o.id === s.orgId)).filter(Boolean) as Org[];
+  const topOrgs = standings.slice(0, 3).map((s) => orgs.find((o) => o.id === s.orgId && o.divisionId === s.divisionId)).filter(Boolean) as Org[];
   const art = division.id === "solar" || division.id === "lunar" ? BRAND_ASSETS.division[division.id] : undefined;
 
   return (
@@ -78,8 +78,8 @@ export function DivisionCard({
           const standing = standings[i];
           return (
             <Link
-              key={org.id}
-              href={`/teams/${org.id}`}
+              key={`${org.id}:${org.divisionId}`}
+              href={`/teams/${org.id}?division=${org.divisionId}`}
               className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 transition-colors hover:bg-white/[0.06]"
             >
               <span className="w-4 shrink-0 text-xs font-black text-slate-600">{i + 1}</span>

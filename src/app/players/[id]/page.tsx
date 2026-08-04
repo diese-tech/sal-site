@@ -81,7 +81,7 @@ export default async function PlayerPage({
   const player = players.find((p) => p.id === id) ?? (await getPlayerById(id));
   if (!player) notFound();
 
-  const org = orgs.find((o) => o.id === player.orgId);
+  const org = orgs.find((o) => o.id === player.orgId && o.divisionId === player.divisionId);
   const kda =
     player.stats && player.stats.deaths > 0
       ? ((player.stats.kills + player.stats.assists) / player.stats.deaths).toFixed(2)
@@ -165,7 +165,7 @@ export default async function PlayerPage({
           <p className="mb-3 text-[0.65rem] font-black uppercase text-slate-300">Team</p>
           {org ? (
             <Link
-              href={`/teams/${org.id}`}
+              href={`/teams/${org.id}?division=${org.divisionId}`}
               className="flex items-center gap-2 text-sm font-black text-white transition hover:text-cyan-200"
             >
               <span className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-0.5 font-mono text-xs text-slate-400">{org.tag}</span>
@@ -250,7 +250,7 @@ export default async function PlayerPage({
                     <td className="py-2 pr-3">
                       {row.opponentOrgId ? (
                         <Link
-                          href={`/teams/${row.opponentOrgId}`}
+                          href={`/teams/${row.opponentOrgId}?division=${row.divisionId}`}
                           className="inline-flex items-center gap-1 font-black text-slate-300 transition-colors hover:text-cyan-200"
                         >
                           <span className="rounded border border-white/10 bg-white/[0.04] px-1 py-0.5 font-mono text-[0.6rem] text-slate-500">
@@ -327,7 +327,7 @@ export default async function PlayerPage({
                     <td className="py-2 pr-3">
                       {s.orgId ? (
                         <Link
-                          href={`/teams/${s.orgId}`}
+                          href={`/teams/${s.orgId}?division=${s.divisionId}`}
                           className="inline-flex items-center gap-1 font-black text-slate-300 transition-colors hover:text-cyan-200"
                         >
                           <span className="rounded border border-white/10 bg-white/[0.04] px-1 py-0.5 font-mono text-[0.6rem] text-slate-500">

@@ -14,10 +14,10 @@ vi.mock("next/navigation", () => ({
 
 import {
   AdminSeasonRosterClient,
-  orgRowFormState,
-  orgRowSyncKey,
+  playerRosterRequestBody,
   playerRowFormState,
   playerRowSyncKey,
+  seasonTeamKey,
 } from "@/components/admin/AdminSeasonRosterClient";
 
 function division(id: DivisionId): Division {
@@ -66,27 +66,9 @@ function season(overrides: Partial<Season> = {}): Season {
   return { id: "season-1", name: "Season One", status: "pre-season", isCurrent: true, startDate: "2026-01-01", endDate: "2026-06-01", currentWeek: 0, ...overrides };
 }
 
-describe("orgRowFormState / orgRowSyncKey", () => {
-  it("falls back to the org's own division when there is no season assignment", () => {
-    expect(orgRowFormState(org({ divisionId: "lunar" }), undefined)).toEqual({ divisionId: "lunar" });
-  });
-
-  it("uses the season assignment's division when enrolled", () => {
-    expect(orgRowFormState(org({ divisionId: "lunar" }), orgAssignment({ division_id: "solar" }))).toEqual({ divisionId: "solar" });
-  });
-
-  it("sync key changes when the assignment's division changes", () => {
-    const before = orgRowSyncKey(orgAssignment({ division_id: "terra" }));
-    const after = orgRowSyncKey(orgAssignment({ division_id: "solar" }));
-    expect(before).not.toEqual(after);
-  });
-
-  it("sync key is stable for an unchanged assignment", () => {
-    expect(orgRowSyncKey(orgAssignment({ division_id: "terra" }))).toEqual(orgRowSyncKey(orgAssignment({ division_id: "terra" })));
-  });
-
-  it("sync key differs between enrolled and unenrolled", () => {
-    expect(orgRowSyncKey(undefined)).not.toEqual(orgRowSyncKey(orgAssignment()));
+describe("seasonTeamKey", () => {
+  it("distinguishes one organization's divisional teams", () => {
+    expect(seasonTeamKey("org-1", "lunar")).not.toEqual(seasonTeamKey("org-1", "solar"));
   });
 });
 
@@ -94,6 +76,7 @@ describe("playerRowFormState / playerRowSyncKey", () => {
   it("falls back to the player's own division and unassigned/no-captain when there is no season assignment", () => {
     expect(playerRowFormState(player({ divisionId: "lunar" }), undefined)).toEqual({
       orgId: "",
+      teamDivisionId: "",
       freeAgentDivision: "lunar",
       isCaptain: false,
     });
@@ -102,6 +85,7 @@ describe("playerRowFormState / playerRowSyncKey", () => {
   it("maps org, division, and captain flag from the season assignment", () => {
     expect(playerRowFormState(player(), rosterAssignment({ org_id: "org-9", division_id: "solar", is_captain: true }))).toEqual({
       orgId: "org-9",
+      teamDivisionId: "solar",
       freeAgentDivision: "solar",
       isCaptain: true,
     });
@@ -121,6 +105,22 @@ describe("playerRowFormState / playerRowSyncKey", () => {
 
   it("sync key is stable for an unchanged assignment", () => {
     expect(playerRowSyncKey(rosterAssignment())).toEqual(playerRowSyncKey(rosterAssignment()));
+  });
+
+  it("keeps the captain flag in the roster request while the player is unassigned", () => {
+    expect(playerRosterRequestBody({
+      playerId: "player-1",
+      orgId: "",
+      freeAgentDivision: "lunar",
+      teamDivisionId: "",
+      isCaptain: true,
+    })).toEqual({
+      entity: "player",
+      playerId: "player-1",
+      orgId: null,
+      divisionId: "lunar",
+      isCaptain: true,
+    });
   });
 });
 
@@ -145,11 +145,31 @@ describe("AdminSeasonRosterClient render", () => {
     expect(html).toContain("Available Returning Orgs (1)");
     expect(html).toContain("Enrolled Org");
     expect(html).toContain("Available Org");
-    expect(html).toContain("Enroll Returning Org");
-    // The enrolled org's row renders "Save", not "Enroll Returning Org".
+    expect(html).toContain("Enroll in Terra");
     const enrolledSectionAndAfter = html.slice(html.indexOf("Enrolled in Season One"));
     const availableSectionStart = enrolledSectionAndAfter.indexOf("Available Returning Orgs");
-    expect(enrolledSectionAndAfter.slice(0, availableSectionStart)).toContain(">Save<");
+    expect(enrolledSectionAndAfter.slice(0, availableSectionStart)).toContain("Remove from Terra");
+  });
+
+  it("shows every division independently when one org fields multiple season teams", () => {
+    const data: SeasonRosterAdminData = {
+      season: season(),
+      divisions: [division("terra"), division("solar"), division("lunar")],
+      orgCatalog: [org({ id: "org-shared", name: "Shared Org" })],
+      playerCatalog: [player()],
+      orgAssignments: [
+        orgAssignment({ org_id: "org-shared", division_id: "solar" }),
+        orgAssignment({ org_id: "org-shared", division_id: "lunar" }),
+      ],
+      rosterAssignments: [],
+    };
+
+    const html = renderRoster(data);
+
+    expect(html).toContain("2 season teams across 1 organization");
+    expect(html).toContain("Shared Org — Solar");
+    expect(html).toContain("Shared Org — Lunar");
+    expect(html).toContain("Enroll in Terra");
   });
 
   it("renders empty states for an empty org catalog", () => {
@@ -199,6 +219,23 @@ describe("AdminSeasonRosterClient render", () => {
     expect(html).toContain("Enroll Player");
     // save() posts entity: "player" for this row -- the button must not claim to enroll an org.
     expect(html.slice(html.indexOf("Season Players"))).not.toContain("Enroll Returning Org");
+  });
+
+  it("allows an unassigned preseason player to be marked as a captain", () => {
+    const data: SeasonRosterAdminData = {
+      season: season(),
+      divisions: [division("lunar")],
+      orgCatalog: [],
+      playerCatalog: [player({ divisionId: "lunar" })],
+      orgAssignments: [],
+      rosterAssignments: [rosterAssignment({ org_id: null, division_id: "lunar", is_captain: false, roster_status: "free_agent" })],
+    };
+
+    const html = renderRoster(data);
+    const playerRow = html.slice(html.indexOf("SomePlayer"));
+
+    expect(playerRow).toContain('type="checkbox"');
+    expect(playerRow.slice(0, playerRow.indexOf("Captain"))).not.toContain("disabled");
   });
 });
 

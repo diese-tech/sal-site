@@ -498,6 +498,7 @@ export async function finalizeDraftRosters(draftRoomId: string): Promise<{ assig
       .from("season_orgs")
       .select("org_id")
       .eq("season_id", room.seasonId)
+      .eq("division_id", room.divisionId)
       .in("org_id", orgIds);
     if (error) throw new Error(error.message);
     const assigned = new Set((data ?? []).map((r: { org_id: string }) => r.org_id));

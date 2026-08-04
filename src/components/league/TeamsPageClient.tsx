@@ -33,7 +33,7 @@ export function TeamsPageClient({ data }: { data: LeagueData }) {
     });
   }, [orgs, divisionFilter, search]);
 
-  const getStanding = (orgId: string) => standings.find((s) => s.orgId === orgId);
+  const getStanding = (orgId: string, divisionId: DivisionId) => standings.find((s) => s.orgId === orgId && s.divisionId === divisionId);
   const getCaptainIgn = (captainId?: string) => {
     const captain = captainId ? players.find((p) => p.id === captainId) : undefined;
     return captain ? captain.displayAlias ?? captain.ign : undefined;
@@ -77,7 +77,7 @@ export function TeamsPageClient({ data }: { data: LeagueData }) {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((org) => (
-            <OrgCard key={org.id} org={org} standing={getStanding(org.id)} captainIgn={getCaptainIgn(org.captainId)} />
+            <OrgCard key={`${org.id}:${org.divisionId}`} org={org} standing={getStanding(org.id, org.divisionId)} captainIgn={getCaptainIgn(org.captainId)} />
           ))}
         </div>
       )}

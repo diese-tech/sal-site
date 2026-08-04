@@ -384,6 +384,26 @@ describe("recalcStandings()", () => {
   });
 
   describe("division isolation", () => {
+    it("keeps one organization's teams independent across divisions", () => {
+      const orgs = [
+        makeOrg("shared", "solar"),
+        makeOrg("shared", "lunar"),
+        makeOrg("solar-opponent", "solar"),
+        makeOrg("lunar-opponent", "lunar"),
+      ];
+      const matches = [
+        makeMatch("shared", "solar-opponent", 2, 0, "completed", "solar"),
+        makeMatch("shared", "lunar-opponent", 0, 2, "completed", "lunar"),
+      ];
+
+      const result = recalcStandings({ orgs, matches });
+
+      expect(result.find((row) => row.orgId === "shared" && row.divisionId === "solar"))
+        .toMatchObject({ wins: 1, losses: 0, matchesPlayed: 1 });
+      expect(result.find((row) => row.orgId === "shared" && row.divisionId === "lunar"))
+        .toMatchObject({ wins: 0, losses: 1, matchesPlayed: 1 });
+    });
+
     it("teams in 'solar' division are ranked separately from 'lunar' division", () => {
       const orgs = [
         makeOrg("solar1", "solar"),

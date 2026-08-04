@@ -26,7 +26,7 @@ const saveSchema = z.discriminatedUnion("entity", [
   }),
 ]);
 const removeSchema = z.discriminatedUnion("entity", [
-  z.object({ entity: z.literal("org"), orgId: z.string().min(1) }),
+  z.object({ entity: z.literal("org"), orgId: z.string().min(1), divisionId: divisionSchema }),
   z.object({ entity: z.literal("player"), playerId: z.string().min(1) }),
 ]);
 
@@ -64,7 +64,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   const { id: seasonId } = await params;
   try {
     if (parsed.data.entity === "org") {
-      await removeSeasonOrgAssignment(seasonId, parsed.data.orgId);
+      await removeSeasonOrgAssignment(seasonId, parsed.data.orgId, parsed.data.divisionId);
     } else {
       await removeSeasonRosterAssignment(seasonId, parsed.data.playerId);
     }

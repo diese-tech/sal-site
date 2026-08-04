@@ -606,6 +606,26 @@ export interface SeasonRosterAdminData {
   rosterAssignments: SeasonRosterAdminAssignment[];
 }
 
+export async function getAdminIdentityCatalog(): Promise<{ orgs: Org[]; players: LeaguePlayer[] }> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) {
+    if (canServeMockLeagueData()) {
+      return { orgs: MOCK_LEAGUE_DATA.orgs, players: MOCK_LEAGUE_DATA.players };
+    }
+    throw new LeagueDataUnavailableError("Supabase env is missing.");
+  }
+  const [orgRes, playerRes] = await Promise.all([
+    supabase.from("orgs").select("*").order("name"),
+    supabase.from("players").select("*").order("ign"),
+  ]);
+  const error = orgRes.error ?? playerRes.error;
+  if (error) throw error;
+  return {
+    orgs: (orgRes.data as DbOrg[]).map(fromDbOrg),
+    players: (playerRes.data as DbPlayer[]).map(fromDbPlayer),
+  };
+}
+
 export async function getSeasonRosterAdminData(seasonId: string): Promise<SeasonRosterAdminData> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
@@ -651,17 +671,22 @@ export async function saveSeasonOrgAssignment(
     division_id: divisionId,
     status: "active",
     updated_at: new Date().toISOString(),
-  }, { onConflict: "season_id,org_id" });
+  }, { onConflict: "season_id,org_id,division_id" });
   if (error) throw error;
   await writeAuditLog("save_season_org", "season", seasonId, { orgId, divisionId });
 }
 
-export async function removeSeasonOrgAssignment(seasonId: string, orgId: string): Promise<void> {
+export async function removeSeasonOrgAssignment(seasonId: string, orgId: string, divisionId: DivisionId): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
-  const { error } = await supabase.from("season_orgs").delete().eq("season_id", seasonId).eq("org_id", orgId);
+  const { error } = await supabase
+    .from("season_orgs")
+    .delete()
+    .eq("season_id", seasonId)
+    .eq("org_id", orgId)
+    .eq("division_id", divisionId);
   if (error) throw error;
-  await writeAuditLog("remove_season_org", "season", seasonId, { orgId });
+  await writeAuditLog("remove_season_org", "season", seasonId, { orgId, divisionId });
 }
 
 export async function saveSeasonRosterAssignment(input: {
@@ -683,8 +708,9 @@ export async function saveSeasonRosterAssignment(input: {
   if (playerError) throw playerError;
   if (!player) throw new Error("Cannot enroll unavailable player.");
 
-  let divisionId = input.divisionId;
+  const divisionId = input.divisionId;
   if (input.orgId) {
+    if (!divisionId) throw new Error("A team assignment requires a division.");
     const { data: org, error: orgError } = await supabase
       .from("orgs")
       .select("id")
@@ -699,25 +725,30 @@ export async function saveSeasonRosterAssignment(input: {
       .select("division_id")
       .eq("season_id", input.seasonId)
       .eq("org_id", input.orgId)
-      .single();
+      .eq("division_id", divisionId)
+      .maybeSingle();
     if (error) throw error;
-    divisionId = (data as { division_id: DivisionId }).division_id;
+    if (!data) throw new Error("Cannot assign player to an organization that is not enrolled in that season division.");
   }
-  const isCaptain = input.orgId ? input.isCaptain : false;
+  const isCaptain = input.isCaptain;
   const updatedAt = new Date().toISOString();
+  let replacedCaptainIds: string[] = [];
 
-  // A season/org has one captain. Clear the previous row first so replacing a
+  // A season/org/division team has one captain. Clear the previous row first so replacing a
   // captain through either admin surface cannot leave two captain badges. The
   // database contract also enforces this invariant to close concurrent races.
-  if (input.orgId && isCaptain) {
-    const { error: clearCaptainError } = await supabase
+  if (input.orgId && divisionId && isCaptain) {
+    const { data: replacedCaptains, error: clearCaptainError } = await supabase
       .from("season_rosters")
       .update({ is_captain: false, updated_at: updatedAt })
       .eq("season_id", input.seasonId)
       .eq("org_id", input.orgId)
+      .eq("division_id", divisionId)
       .eq("is_captain", true)
-      .neq("player_id", input.playerId);
+      .neq("player_id", input.playerId)
+      .select("player_id");
     if (clearCaptainError) throw clearCaptainError;
+    replacedCaptainIds = (replacedCaptains ?? []).map((row: { player_id: string }) => row.player_id);
   }
 
   const { error } = await supabase.from("season_rosters").upsert({
@@ -751,28 +782,17 @@ export async function saveSeasonRosterAssignment(input: {
       .eq("id", input.playerId);
     if (playerError) throw playerError;
 
-    if (input.orgId && isCaptain) {
-      const { error: priorCaptainError } = await supabase
+    if (replacedCaptainIds.length > 0) {
+      const { error: replacedPlayerError } = await supabase
         .from("players")
         .update({ is_captain: false })
-        .eq("org_id", input.orgId)
-        .eq("is_captain", true)
-        .neq("id", input.playerId);
-      if (priorCaptainError) throw priorCaptainError;
-
-      const { error: orgCaptainError } = await supabase
-        .from("orgs")
-        .update({ captain_id: input.playerId })
-        .eq("id", input.orgId);
-      if (orgCaptainError) throw orgCaptainError;
-    } else if (input.orgId) {
-      const { error: orgCaptainError } = await supabase
-        .from("orgs")
-        .update({ captain_id: null })
-        .eq("id", input.orgId)
-        .eq("captain_id", input.playerId);
-      if (orgCaptainError) throw orgCaptainError;
+        .in("id", replacedCaptainIds);
+      if (replacedPlayerError) throw replacedPlayerError;
     }
+
+    // `players.is_captain` remains a compatibility mirror per player. Do not
+    // clear sibling captains or update `orgs.captain_id`: one global org row
+    // cannot represent separate captains for multiple divisional teams.
   }
 
   await writeAuditLog("save_season_roster", "season", input.seasonId, {
@@ -842,20 +862,32 @@ export async function saveOrgForCurrentSeason(org: Org): Promise<void> {
     const supabase = getSupabaseServerClient();
     if (!supabase) throw new Error("Supabase env is missing.");
     const updatedAt = new Date().toISOString();
+    const { data: existingCaptains, error: existingCaptainError } = await supabase
+      .from("season_rosters")
+      .select("player_id")
+      .eq("season_id", seasonId)
+      .eq("org_id", org.id)
+      .eq("division_id", org.divisionId)
+      .eq("is_captain", true);
+    if (existingCaptainError) throw existingCaptainError;
+    const captainIds = (existingCaptains ?? []).map((row: { player_id: string }) => row.player_id);
+
     const { error: rosterError } = await supabase
       .from("season_rosters")
       .update({ is_captain: false, updated_at: updatedAt })
       .eq("season_id", seasonId)
       .eq("org_id", org.id)
+      .eq("division_id", org.divisionId)
       .eq("is_captain", true);
     if (rosterError) throw rosterError;
 
-    const { error: playerError } = await supabase
-      .from("players")
-      .update({ is_captain: false })
-      .eq("org_id", org.id)
-      .eq("is_captain", true);
-    if (playerError) throw playerError;
+    if (captainIds.length > 0) {
+      const { error: playerError } = await supabase
+        .from("players")
+        .update({ is_captain: false })
+        .in("id", captainIds);
+      if (playerError) throw playerError;
+    }
   }
 }
 

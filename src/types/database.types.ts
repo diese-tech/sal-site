@@ -1038,10 +1038,10 @@ export type Database = {
           },
           {
             foreignKeyName: "matches_away_season_org_fkey"
-            columns: ["season_id", "away_org_id"]
+            columns: ["season_id", "away_org_id", "division_id"]
             isOneToOne: false
             referencedRelation: "season_orgs"
-            referencedColumns: ["season_id", "org_id"]
+            referencedColumns: ["season_id", "org_id", "division_id"]
           },
           {
             foreignKeyName: "matches_division_id_fkey"
@@ -1059,10 +1059,10 @@ export type Database = {
           },
           {
             foreignKeyName: "matches_home_season_org_fkey"
-            columns: ["season_id", "home_org_id"]
+            columns: ["season_id", "home_org_id", "division_id"]
             isOneToOne: false
             referencedRelation: "season_orgs"
-            referencedColumns: ["season_id", "org_id"]
+            referencedColumns: ["season_id", "org_id", "division_id"]
           },
           {
             foreignKeyName: "matches_season_id_fkey"

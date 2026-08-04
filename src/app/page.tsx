@@ -103,9 +103,9 @@ async function PulseSection() {
                   </Link>
                   <div className="space-y-0.5">
                     {divStandings.map((s, rank) => {
-                      const org = getOrg(s.orgId);
+                      const org = orgs.find((candidate) => candidate.id === s.orgId && candidate.divisionId === s.divisionId)!;
                       return (
-                        <div key={s.orgId} className="flex items-center gap-2 rounded px-1 py-1 transition hover:bg-white/[0.04]">
+                        <div key={`${s.orgId}:${s.divisionId}`} className="flex items-center gap-2 rounded px-1 py-1 transition hover:bg-white/[0.04]">
                           <span className="w-4 font-mono text-[0.6rem] text-slate-600">#{rank + 1}</span>
                           <span className="flex-1 truncate text-[0.75rem] font-semibold text-slate-200">{org.tag}</span>
                           <span className="font-mono text-[0.65rem] font-semibold text-slate-400">

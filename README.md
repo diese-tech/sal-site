@@ -199,8 +199,8 @@ For local development and technical setup, see [DEVELOPMENT.md](./DEVELOPMENT.md
 - [`diese-tech/sal-database`](https://github.com/diese-tech/sal-database) is the
   approved sole owner for shared Supabase migrations, generated types, contract
   releases, and production database pushes. This application vendors the
-  generated types from immutable release `db-v1.2.0` at commit
-  `195a0792a396354d7809d7dcbb85a9cdfd4d8030`; `db-contract.lock.json` and
+  generated types from immutable release `db-v1.9.0` at commit
+  `a6d9917af803916191335f77f90dd58f7ee8089b`; `db-contract.lock.json` and
   `npm run check:db-contract` enforce the exact contract.
 
 ## License

@@ -110,13 +110,13 @@ export function AdminPreseasonIngestPanel({
       {preview && (
         <div className="mt-3 space-y-4">
           <p className="text-sm font-black text-white">
-            {preview.orgCount} orgs · {preview.captainCount} captains · {preview.freeAgentCount} free agents · {preview.totalPlayers} players total
+            {preview.orgCount} divisional teams · {preview.captainCount} captains · {preview.freeAgentCount} free agents · {preview.totalPlayers} players total
           </p>
 
           <div>
             <p className="mb-1.5 text-[0.65rem] font-black uppercase text-slate-500">Orgs &amp; Captains</p>
             {preview.orgCount === 0 ? (
-              <p className="text-xs text-slate-500">No organizations enrolled in the source season.</p>
+              <p className="text-xs text-slate-500">No divisional teams enrolled in the source season.</p>
             ) : (
               <div className="space-y-2">
                 {preview.divisions.filter((d) => d.orgs.length > 0).map((division) => (

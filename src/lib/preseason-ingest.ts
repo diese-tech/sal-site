@@ -84,10 +84,11 @@ export async function getPreseasonIngestPreview(
   const orgById = new Map(source.orgCatalog.map((org) => [org.id, org]));
   const playerById = new Map(source.playerCatalog.map((player) => [player.id, player]));
 
-  const captainByOrg = new Map<string, string>();
+  const captainByTeam = new Map<string, string>();
   for (const row of rosterRows) {
-    if (row.is_captain && row.org_id && !captainByOrg.has(row.org_id)) {
-      captainByOrg.set(row.org_id, row.player_id);
+    if (row.is_captain && row.org_id && row.division_id) {
+      const key = `${row.org_id}:${row.division_id}`;
+      if (!captainByTeam.has(key)) captainByTeam.set(key, row.player_id);
     }
   }
 
@@ -97,7 +98,7 @@ export async function getPreseasonIngestPreview(
       .flatMap((assignment) => {
         const org = orgById.get(assignment.org_id);
         if (!org) return [];
-        const captainId = captainByOrg.get(assignment.org_id) ?? null;
+        const captainId = captainByTeam.get(`${assignment.org_id}:${assignment.division_id}`) ?? null;
         const captainIgn = captainId ? playerById.get(captainId)?.ign ?? null : null;
         return [{ orgId: org.id, orgName: org.name, orgTag: org.tag, captainId, captainIgn }];
       })
