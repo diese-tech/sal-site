@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { DraftState } from "@/types/draft";
 import type { LeaguePlayer, Org } from "@/types/league";
 import type { ShortlistEntry } from "@/lib/draft-data";
+import { formatDraftTeamLabel } from "@/lib/draft-team";
 import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 3000;
@@ -158,7 +159,13 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
     });
   }
 
-  const getOrg = (id: string) => orgs.find((o) => o.id === id);
+  const getOrg = (id: string) => orgs.find(
+    (o) => o.id === id && o.divisionId === room.divisionId,
+  );
+  const getTeamLabel = (id: string) => {
+    const org = getOrg(id);
+    return org ? formatDraftTeamLabel(org.name, room.divisionId) : "Unknown team";
+  };
   const getPlayer = (id: string) => players.find((p) => p.id === id);
   const pickedIds = new Set(picks.map((p) => p.playerId));
   const shortlistedIds = new Set(shortlist.map((e) => e.playerId));
@@ -195,7 +202,7 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
           <div className="flex items-center gap-3">
             {!connected && <span className="text-xs font-semibold text-orange-300">Reconnecting…</span>}
             {captainOrgId ? (
-              <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-3 py-1 text-xs font-black text-emerald-100">Captain: {getOrg(captainOrgId)?.name}</span>
+              <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-3 py-1 text-xs font-black text-emerald-100">Captain: {getTeamLabel(captainOrgId)}</span>
             ) : (
               <span className="rounded-full border border-slate-600/60 bg-white/[0.03] px-3 py-1 text-xs font-black text-slate-300">Spectator mode</span>
             )}
@@ -225,7 +232,7 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
             ) : (
               <>
                 <p className="text-sm font-black uppercase text-slate-400">On the clock</p>
-                <p className="text-xl font-black text-white">{getOrg(currentOrgId)?.name}</p>
+                <p className="text-xl font-black text-white">{getTeamLabel(currentOrgId)}</p>
               </>
             )}
             {secondsRemaining !== null && (
@@ -411,14 +418,14 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
                     entry.kind === "pick" ? (
                       <div key={entry.pick.id} className="flex items-center gap-2 rounded-lg border border-white/5 bg-black/20 px-3 py-1.5">
                         <span className="w-6 shrink-0 text-right font-mono text-[0.6rem] text-slate-500">{entry.pick.pickNumber}</span>
-                        <span className="text-xs text-slate-400">{getOrg(entry.pick.orgId)?.tag ?? entry.pick.orgId}</span>
+                        <span className="text-xs text-slate-400">{getTeamLabel(entry.pick.orgId)}</span>
                         <span className="text-slate-600">→</span>
                         <span className="min-w-0 truncate font-black text-white">{getPlayer(entry.pick.playerId)?.displayAlias ?? getPlayer(entry.pick.playerId)?.ign ?? entry.pick.playerId}</span>
                       </div>
                     ) : (
                       <div key={`skip-${entry.pickNumber}`} className="flex items-center gap-2 rounded-lg border border-red-300/15 bg-red-300/[0.04] px-3 py-1.5">
                         <span className="w-6 shrink-0 text-right font-mono text-[0.6rem] text-slate-500">{entry.pickNumber}</span>
-                        <span className="text-xs text-slate-400">{getOrg(entry.orgId)?.tag ?? entry.orgId}</span>
+                        <span className="text-xs text-slate-400">{getTeamLabel(entry.orgId)}</span>
                         <span className="text-slate-600">→</span>
                         <span className="text-xs font-black uppercase text-red-300/80">Skipped (timed out)</span>
                       </div>
@@ -436,7 +443,7 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
                   {pickSequence.slice(room.currentPickIndex, room.currentPickIndex + 5).map((orgId, i) => (
                     <div key={i} className={cn("flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm", i === 0 ? "bg-orange-300/10 font-black text-orange-100" : "text-slate-400")}>
                       <span className="w-5 text-right font-mono text-xs text-slate-500">{room.currentPickIndex + i + 1}.</span>
-                      {getOrg(orgId)?.name ?? orgId}
+                      {getTeamLabel(orgId)}
                       {captainOrgId === orgId && <span className="ml-auto text-[0.6rem] font-black uppercase text-emerald-300">You</span>}
                     </div>
                   ))}

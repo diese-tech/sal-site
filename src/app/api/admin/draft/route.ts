@@ -4,6 +4,7 @@ import { isAdminRequest } from "@/lib/admin-auth";
 import { createDraftRoom, getDraftRooms } from "@/lib/draft-data";
 import { writeAuditLog } from "@/lib/league-data";
 import { errorMessage } from "@/lib/error-monitor";
+import { draftDivisionName } from "@/lib/draft-team";
 
 const createSchema = z.object({
   id: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, "id must be lowercase alphanumeric with hyphens"),
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
   );
   if (conflict) {
     return NextResponse.json(
-      { error: `A draft room for division "${result.data.divisionId}" is already ${conflict.status}. Complete or cancel it before creating another.` },
+      { error: `A ${draftDivisionName(result.data.divisionId)} draft is already ${conflict.status}. Complete or cancel it before creating another.` },
       { status: 409 }
     );
   }
