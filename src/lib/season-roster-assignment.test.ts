@@ -375,6 +375,36 @@ describe("legacy admin forms synchronize the current season", () => {
         ["is_captain", true],
       ],
     });
+
+    expect(executed.find((q) =>
+      q.table === "players"
+      && q.op === "update"
+      && (q.payload as { is_captain?: boolean }).is_captain === false,
+    )).toMatchObject({
+      payload: { is_captain: false },
+      eqs: [
+        ["org_id", "org-returning"],
+        ["is_captain", true],
+      ],
+    });
+  });
+
+  it("preserves the selected legacy status for an unassigned player", async () => {
+    client = makeClient(defaultHandler({}, "preseason-s2"));
+    const { savePlayerForCurrentSeason } = await import("./league-data");
+
+    await savePlayerForCurrentSeason({
+      ...player,
+      orgId: undefined,
+      isCaptain: false,
+      status: "drafted",
+    });
+
+    const playerUpdates = executed.filter((q) => q.table === "players" && q.op === "update");
+    expect(playerUpdates).toContainEqual(expect.objectContaining({
+      payload: { org_id: null, is_captain: false, status: "drafted" },
+      eqs: [["id", "player-captain"]],
+    }));
   });
 
   it("keeps identity-only writes working when no current season exists", async () => {

@@ -663,6 +663,7 @@ export async function saveSeasonRosterAssignment(input: {
   orgId: string | null;
   divisionId: DivisionId | null;
   isCaptain: boolean;
+  legacyStatus?: LeaguePlayer["status"];
 }): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
@@ -738,7 +739,7 @@ export async function saveSeasonRosterAssignment(input: {
       .update({
         org_id: input.orgId,
         is_captain: isCaptain,
-        status: input.orgId ? "org-affiliated" : "free-agent",
+        status: input.legacyStatus ?? (input.orgId ? "org-affiliated" : "free-agent"),
       })
       .eq("id", input.playerId);
     if (playerError) throw playerError;
@@ -772,6 +773,7 @@ export async function saveSeasonRosterAssignment(input: {
     orgId: input.orgId,
     divisionId,
     isCaptain,
+    legacyStatus: input.legacyStatus,
   });
 }
 
@@ -1113,6 +1115,7 @@ export async function savePlayerForCurrentSeason(player: LeaguePlayer): Promise<
     orgId: player.orgId ?? null,
     divisionId: player.divisionId ?? null,
     isCaptain: player.isCaptain,
+    legacyStatus: player.status,
   });
 }
 
