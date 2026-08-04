@@ -61,6 +61,11 @@ class FakeQuery {
     return this;
   }
 
+  neq(column: string, value: unknown) {
+    this.state.eqs.push([`${column} not`, value]);
+    return this;
+  }
+
   in(column: string, value: unknown[]) {
     this.state.eqs.push([column, value]);
     return this;
@@ -207,6 +212,32 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
     expect(playerUpdate?.eqs).toEqual([["id", "p1"]]);
   });
 
+  it("clears any prior captain for the same season org before assigning the replacement", async () => {
+    client = makeClient(defaultHandler({}, "season-1"));
+    const { saveSeasonRosterAssignment } = await import("./league-data");
+
+    await saveSeasonRosterAssignment({
+      seasonId: "season-1",
+      playerId: "p-new",
+      orgId: "org-a",
+      divisionId: null,
+      isCaptain: true,
+    });
+
+    const rosterWrites = executed.filter((q) => q.table === "season_rosters" && q.op !== "select");
+    expect(rosterWrites[0]).toMatchObject({
+      op: "update",
+      payload: { is_captain: false, updated_at: expect.any(String) },
+      eqs: [
+        ["season_id", "season-1"],
+        ["org_id", "org-a"],
+        ["is_captain", true],
+        ["player_id not", "p-new"],
+      ],
+    });
+    expect(rosterWrites[1]).toMatchObject({ op: "upsert", payload: { player_id: "p-new", is_captain: true } });
+  });
+
   it("clears captain/org legacy state for a free-agent (no-org) preseason enrollment", async () => {
     client = makeClient(defaultHandler({}, "preseason-2"));
     const { saveSeasonRosterAssignment } = await import("./league-data");
@@ -260,6 +291,80 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
     const rosterUpsert = executed.find((q) => q.table === "season_rosters" && q.op === "upsert");
     expect(rosterUpsert?.payload).toMatchObject({ season_id: "season-historical", player_id: "p1", org_id: "org-a" });
     expect(executed.some((q) => q.table === "players" && q.op === "update")).toBe(false);
+  });
+});
+
+describe("legacy admin forms synchronize the current season", () => {
+  const player = {
+    id: "player-captain",
+    orgId: "org-returning",
+    discordUsername: "captain",
+    ign: "Captain",
+    avatarInitials: "C",
+    avatarGradient: "from-cyan-500 to-blue-500",
+    primaryRole: "Support" as const,
+    secondaryRoles: [],
+    isStarter: false,
+    isCaptain: true,
+    divisionId: "terra" as const,
+    status: "org-affiliated" as const,
+  };
+
+  const org = {
+    id: "org-returning",
+    name: "Returning Org",
+    tag: "RET",
+    divisionId: "terra" as const,
+    logoInitials: "RET",
+    logoGradient: "from-cyan-500 to-blue-500",
+    primaryColor: "#22d3ee",
+    accentGradient: "from-cyan-500 to-blue-500",
+    captainId: "player-captain",
+    socialLinks: {},
+  };
+
+  it("enrolls a returning org and persists a captain assignment when saving a player", async () => {
+    client = makeClient(defaultHandler({}, "preseason-s2"));
+    const { savePlayerForCurrentSeason } = await import("./league-data");
+
+    await savePlayerForCurrentSeason(player);
+
+    expect(executed.find((q) => q.table === "players" && q.op === "upsert")?.payload)
+      .toMatchObject({ id: "player-captain", org_id: "org-returning", is_captain: true });
+    expect(executed.find((q) => q.table === "season_orgs" && q.op === "upsert")?.payload)
+      .toMatchObject({ season_id: "preseason-s2", org_id: "org-returning", division_id: "terra" });
+    expect(executed.find((q) => q.table === "season_rosters" && q.op === "upsert")?.payload)
+      .toMatchObject({
+        season_id: "preseason-s2",
+        player_id: "player-captain",
+        org_id: "org-returning",
+        is_captain: true,
+      });
+  });
+
+  it("enrolls a returning org and its selected captain when saving the org", async () => {
+    client = makeClient(defaultHandler({}, "preseason-s2"));
+    const { saveOrgForCurrentSeason } = await import("./league-data");
+
+    await saveOrgForCurrentSeason(org);
+
+    expect(executed.find((q) => q.table === "orgs" && q.op === "upsert")?.payload)
+      .toMatchObject({ id: "org-returning", captain_id: "player-captain" });
+    expect(executed.find((q) => q.table === "season_orgs" && q.op === "upsert")?.payload)
+      .toMatchObject({ season_id: "preseason-s2", org_id: "org-returning", division_id: "terra" });
+    expect(executed.find((q) => q.table === "season_rosters" && q.op === "upsert")?.payload)
+      .toMatchObject({ player_id: "player-captain", org_id: "org-returning", is_captain: true });
+  });
+
+  it("keeps identity-only writes working when no current season exists", async () => {
+    client = makeClient(defaultHandler({}, null));
+    const { savePlayerForCurrentSeason } = await import("./league-data");
+
+    await savePlayerForCurrentSeason(player);
+
+    expect(executed.some((q) => q.table === "players" && q.op === "upsert")).toBe(true);
+    expect(executed.some((q) => q.table === "season_orgs" && q.op === "upsert")).toBe(false);
+    expect(executed.some((q) => q.table === "season_rosters" && q.op === "upsert")).toBe(false);
   });
 });
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isSuperAdminRequest } from "@/lib/admin-auth";
-import { saveOrg } from "@/lib/league-data";
+import { saveOrgForCurrentSeason } from "@/lib/league-data";
 import { errorMessage } from "@/lib/error-monitor";
 
 const orgSchema = z.object({
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   const data = result.data;
 
   try {
-    await saveOrg({
+    await saveOrgForCurrentSeason({
       id: data.id,
       name: data.name,
       tag: data.tag.toUpperCase(),

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
 import { isSuperAdminRequest } from "@/lib/admin-auth";
-import { savePlayer } from "@/lib/league-data";
+import { savePlayerForCurrentSeason } from "@/lib/league-data";
 import { errorMessage } from "@/lib/error-monitor";
 
 const playerSchema = z.object({
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await savePlayer(result.data as Parameters<typeof savePlayer>[0]);
+    await savePlayerForCurrentSeason(result.data as Parameters<typeof savePlayerForCurrentSeason>[0]);
     revalidateTag("league-data", {});
     return NextResponse.json({ ok: true });
   } catch (err) {
