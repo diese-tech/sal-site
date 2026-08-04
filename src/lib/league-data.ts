@@ -608,7 +608,12 @@ export interface SeasonRosterAdminData {
 
 export async function getAdminIdentityCatalog(): Promise<{ orgs: Org[]; players: LeaguePlayer[] }> {
   const supabase = getSupabaseServerClient();
-  if (!supabase) throw new Error("Supabase env is missing.");
+  if (!supabase) {
+    if (canServeMockLeagueData()) {
+      return { orgs: MOCK_LEAGUE_DATA.orgs, players: MOCK_LEAGUE_DATA.players };
+    }
+    throw new LeagueDataUnavailableError("Supabase env is missing.");
+  }
   const [orgRes, playerRes] = await Promise.all([
     supabase.from("orgs").select("*").order("name"),
     supabase.from("players").select("*").order("ign"),

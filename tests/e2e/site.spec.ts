@@ -703,7 +703,7 @@ test("admin seasons page exposes Ingest from Preseason with a preview-before-wri
   });
 
   await page.getByRole("button", { name: "Preview" }).click();
-  await expect(page.getByText("1 orgs · 1 captains · 1 free agents · 2 players total")).toBeVisible();
+  await expect(page.getByText("1 divisional teams · 1 captains · 1 free agents · 2 players total")).toBeVisible();
   await expect(page.getByText(/Obsidian Knights/)).toBeVisible();
   await expect(page.getByText(/Captain:\s*PlayerOne/)).toBeVisible();
   await expect(page.getByText("FreeAgentAlpha")).toBeVisible();
