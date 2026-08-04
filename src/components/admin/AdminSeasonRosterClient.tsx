@@ -63,25 +63,33 @@ export function playerRowSyncKey(assignment?: SeasonRosterAdminAssignment): stri
   return `${assignment.org_id ?? ""}|${assignment.division_id ?? ""}|${assignment.is_captain}`;
 }
 
+// Org notice state lives in the parent (keyed by org id) rather than local useState: enrolling
+// or removing an org moves its row between the "Enrolled" and "Available" sections, which are
+// separate map() calls over separate lists. React unmounts/remounts the row across that move
+// even though the key is unchanged, so row-local state would discard the just-set success
+// notice the instant router.refresh() lands.
 function OrgAssignmentRow({
   seasonId,
   seasonName,
   org,
   assignment,
   divisions,
+  notice,
+  setNotice,
 }: {
   seasonId: string;
   seasonName: string;
   org: Org;
   assignment?: SeasonOrgAdminAssignment;
   divisions: SeasonRosterAdminData["divisions"];
+  notice: Notice;
+  setNotice: (notice: Notice) => void;
 }) {
   const router = useRouter();
   const syncKey = orgRowSyncKey(assignment);
   const [lastSyncKey, setLastSyncKey] = useState(syncKey);
   const [divisionId, setDivisionId] = useState<DivisionId>(() => orgRowFormState(org, assignment).divisionId);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<Notice>(null);
 
   if (lastSyncKey !== syncKey) {
     setLastSyncKey(syncKey);
@@ -233,7 +241,7 @@ function PlayerAssignmentRow({
           <input type="checkbox" checked={isCaptain} disabled={!orgId} onChange={(event) => setIsCaptain(event.target.checked)} /> Captain
         </label>
         <div className="flex gap-2">
-          <button onClick={() => void save()} disabled={busy} className={buttonClass}>{assignment ? "Save" : "Enroll Returning Org"}</button>
+          <button onClick={() => void save()} disabled={busy} className={buttonClass}>{assignment ? "Save" : "Enroll Player"}</button>
           {assignment && <button onClick={() => void remove()} disabled={busy} className="rounded-lg border border-rose-300/25 px-3 py-2 text-xs font-black uppercase text-rose-200 disabled:opacity-50">Remove</button>}
         </div>
       </div>
@@ -244,6 +252,7 @@ function PlayerAssignmentRow({
 
 export function AdminSeasonRosterClient({ data }: { data: SeasonRosterAdminData }) {
   const [search, setSearch] = useState("");
+  const [orgNotices, setOrgNotices] = useState<Record<string, Notice>>({});
   const orgAssignmentById = new Map(data.orgAssignments.map((row) => [row.org_id, row]));
   const rosterByPlayerId = new Map(data.rosterAssignments.map((row) => [row.player_id, row]));
   const enrolledOrgs = data.orgCatalog.filter((org) => orgAssignmentById.has(org.id));
@@ -273,7 +282,16 @@ export function AdminSeasonRosterClient({ data }: { data: SeasonRosterAdminData 
           </p>
         )}
         {enrolledOrgs.map((org) => (
-          <OrgAssignmentRow key={org.id} seasonId={data.season.id} seasonName={data.season.name} org={org} assignment={orgAssignmentById.get(org.id)} divisions={data.divisions} />
+          <OrgAssignmentRow
+            key={org.id}
+            seasonId={data.season.id}
+            seasonName={data.season.name}
+            org={org}
+            assignment={orgAssignmentById.get(org.id)}
+            divisions={data.divisions}
+            notice={orgNotices[org.id] ?? null}
+            setNotice={(notice) => setOrgNotices((prev) => ({ ...prev, [org.id]: notice }))}
+          />
         ))}
       </section>
 
@@ -288,7 +306,16 @@ export function AdminSeasonRosterClient({ data }: { data: SeasonRosterAdminData 
           </p>
         )}
         {availableOrgs.map((org) => (
-          <OrgAssignmentRow key={org.id} seasonId={data.season.id} seasonName={data.season.name} org={org} assignment={orgAssignmentById.get(org.id)} divisions={data.divisions} />
+          <OrgAssignmentRow
+            key={org.id}
+            seasonId={data.season.id}
+            seasonName={data.season.name}
+            org={org}
+            assignment={orgAssignmentById.get(org.id)}
+            divisions={data.divisions}
+            notice={orgNotices[org.id] ?? null}
+            setNotice={(notice) => setOrgNotices((prev) => ({ ...prev, [org.id]: notice }))}
+          />
         ))}
       </section>
 

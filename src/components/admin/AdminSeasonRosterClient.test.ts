@@ -183,12 +183,33 @@ describe("AdminSeasonRosterClient render", () => {
     expect(html).toContain("enroll it");
     expect(html).toContain("don&#x27;t recreate it");
   });
+
+  it("labels an unenrolled player's join action as enrolling the player, not an org", () => {
+    const data: SeasonRosterAdminData = {
+      season: season(),
+      divisions: [division("terra")],
+      orgCatalog: [],
+      playerCatalog: [player()],
+      orgAssignments: [],
+      rosterAssignments: [],
+    };
+
+    const html = renderRoster(data);
+
+    expect(html).toContain("Enroll Player");
+    // save() posts entity: "player" for this row -- the button must not claim to enroll an org.
+    expect(html.slice(html.indexOf("Season Players"))).not.toContain("Enroll Returning Org");
+  });
 });
 
 // Not covered here (needs interaction the SSR-only vitest harness cannot express --
 // see the plan's "Tests I want but cannot add" section and the comment left on
 // diese-tech/sal-site PR #239):
-//   1. Clicking "Enroll Returning Org" moves the org into the Enrolled section after refresh.
+//   1. Clicking "Enroll Returning Org" moves the org into the Enrolled section after refresh,
+//      and the resulting success notice survives that move (org notice state is lifted to
+//      AdminSeasonRosterClient, keyed by org id, precisely so an enroll/remove-triggered
+//      section move doesn't unmount the row and discard the notice -- see the comment above
+//      OrgAssignmentRow).
 //   2. Reassigning captain from player A to player B clears A's captain checkbox after refresh,
 //      without a manual reload -- this is the scenario PR #239's captain-clearing write enables.
 //   3. Changing a row's org/division re-syncs its selects after a *different* row's save triggers
