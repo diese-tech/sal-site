@@ -62,3 +62,14 @@ export function mergeSeasonAndCatalogOrgs(seasonOrgs: Org[], catalogOrgs: Org[])
   const seasonOrgIds = new Set(seasonOrgs.map((org) => org.id));
   return [...seasonOrgs, ...catalogOrgs.filter((org) => !seasonOrgIds.has(org.id))];
 }
+
+// Same pattern as mergeSeasonAndCatalogOrgs, for the Edit Roster admin screen: a
+// player who is on the current season's roster must keep their season-scoped
+// orgId/divisionId/isCaptain (the legacy flat players columns they'd otherwise
+// fall back to are not kept in sync with which division-team they're on — see
+// saveSeasonRosterAssignment's legacy mirror). Catalog players fill in only
+// players with no roster row this season (free agents, preseason candidates).
+export function mergeSeasonAndCatalogPlayers(seasonPlayers: LeaguePlayer[], catalogPlayers: LeaguePlayer[]): LeaguePlayer[] {
+  const seasonPlayerIds = new Set(seasonPlayers.map((player) => player.id));
+  return [...seasonPlayers, ...catalogPlayers.filter((player) => !seasonPlayerIds.has(player.id))];
+}

@@ -210,7 +210,7 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
     });
 
     const playerUpdate = executed.find((q) => q.table === "players" && q.op === "update");
-    expect(playerUpdate?.payload).toEqual({ org_id: "org-a", is_captain: true, status: "org-affiliated" });
+    expect(playerUpdate?.payload).toEqual({ org_id: "org-a", division_id: "solar", is_captain: true, status: "org-affiliated" });
     expect(playerUpdate?.eqs).toEqual([["id", "p1"]]);
   });
 
@@ -269,7 +269,7 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
     });
 
     const playerUpdate = executed.find((q) => q.table === "players" && q.op === "update");
-    expect(playerUpdate?.payload).toEqual({ org_id: null, is_captain: true, status: "free-agent" });
+    expect(playerUpdate?.payload).toEqual({ org_id: null, division_id: "terra", is_captain: true, status: "free-agent" });
   });
 
   it("throws and never touches the legacy players row when the season_rosters upsert fails", async () => {
@@ -365,6 +365,39 @@ describe("legacy admin forms synchronize the current season", () => {
       .toMatchObject({ player_id: "player-captain", org_id: "org-returning", is_captain: true });
   });
 
+  it("rejects making a captain who is already rostered to a different team this season", async () => {
+    // A player can only hold one season_rosters row per season. If they're already
+    // active on a *different* org, or a *different* division of this same org
+    // (an org can field independent teams in multiple divisions), silently
+    // proceeding would detach them from that roster instead of making them
+    // captain here (see #243's multi-division org fix).
+    const fallback = defaultHandler({}, "preseason-s2");
+    client = makeClient((query) => (query.table === "season_rosters" && query.op === "select"
+      ? { data: { org_id: "org-other", division_id: "solar" }, error: null }
+      : fallback(query)));
+    const { saveOrgForCurrentSeason } = await import("./league-data");
+
+    await expect(saveOrgForCurrentSeason(org)).rejects.toThrow(
+      "This player is already rostered to a different team this season.",
+    );
+
+    expect(executed.some((q) => q.table === "season_orgs" && q.op === "upsert")).toBe(false);
+    expect(executed.some((q) => q.table === "season_rosters" && q.op === "upsert")).toBe(false);
+  });
+
+  it("allows re-saving the captain of the same division-team without conflict", async () => {
+    const fallback = defaultHandler({}, "preseason-s2");
+    client = makeClient((query) => (query.table === "season_rosters" && query.op === "select"
+      ? { data: { org_id: "org-returning", division_id: "terra" }, error: null }
+      : fallback(query)));
+    const { saveOrgForCurrentSeason } = await import("./league-data");
+
+    await saveOrgForCurrentSeason(org);
+
+    expect(executed.find((q) => q.table === "season_rosters" && q.op === "upsert")?.payload)
+      .toMatchObject({ player_id: "player-captain", org_id: "org-returning", is_captain: true });
+  });
+
   it("clears the current season captain when an org is saved with no captain", async () => {
     const fallback = defaultHandler({}, "preseason-s2");
     client = makeClient((query) => query.table === "season_rosters" && query.op === "select"
@@ -414,7 +447,7 @@ describe("legacy admin forms synchronize the current season", () => {
 
     const playerUpdates = executed.filter((q) => q.table === "players" && q.op === "update");
     expect(playerUpdates).toContainEqual(expect.objectContaining({
-      payload: { org_id: null, is_captain: false, status: "drafted" },
+      payload: { org_id: null, division_id: "terra", is_captain: false, status: "drafted" },
       eqs: [["id", "player-captain"]],
     }));
   });
@@ -540,7 +573,7 @@ describe("removeSeasonRosterAssignment legacy player mirror (#234)", () => {
     expect(rosterDelete?.eqs).toEqual([["season_id", "season-current"], ["player_id", "p1"]]);
 
     const playerUpdate = executed.find((q) => q.table === "players" && q.op === "update");
-    expect(playerUpdate?.payload).toEqual({ org_id: null, is_captain: false, status: "free-agent" });
+    expect(playerUpdate?.payload).toEqual({ org_id: null, division_id: null, is_captain: false, status: "free-agent" });
     expect(playerUpdate?.eqs).toEqual([["id", "p1"]]);
   });
 

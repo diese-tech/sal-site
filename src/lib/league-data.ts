@@ -776,6 +776,7 @@ export async function saveSeasonRosterAssignment(input: {
       .from("players")
       .update({
         org_id: input.orgId,
+        division_id: divisionId,
         is_captain: isCaptain,
         status: input.legacyStatus ?? (input.orgId ? "org-affiliated" : "free-agent"),
       })
@@ -821,7 +822,7 @@ export async function removeSeasonRosterAssignment(seasonId: string, playerId: s
   if (seasonId === currentSeasonId) {
     const { error: playerError } = await supabase
       .from("players")
-      .update({ org_id: null, is_captain: false, status: "free-agent" })
+      .update({ org_id: null, division_id: null, is_captain: false, status: "free-agent" })
       .eq("id", playerId);
     if (playerError) throw playerError;
   }
@@ -850,6 +851,26 @@ export async function saveOrgForCurrentSeason(org: Org): Promise<void> {
   if (!seasonId) return;
 
   if (org.captainId) {
+    // season_rosters holds at most one row per (season, player): a player can only be on
+    // one org's one division-team per season. If the chosen captain already holds a roster
+    // slot on a *different* org or a *different* division of this same org, saving here
+    // would silently detach them from that team instead of making them captain of this one
+    // — reject it and require an explicit roster move via the Manage Roster screen first.
+    const supabase = getSupabaseServerClient();
+    if (!supabase) throw new Error("Supabase env is missing.");
+    const { data: existingRoster, error: existingRosterError } = await supabase
+      .from("season_rosters")
+      .select("org_id, division_id")
+      .eq("season_id", seasonId)
+      .eq("player_id", org.captainId)
+      .maybeSingle();
+    if (existingRosterError) throw existingRosterError;
+    if (existingRoster?.org_id && (existingRoster.org_id !== org.id || existingRoster.division_id !== org.divisionId)) {
+      throw new Error(
+        "This player is already rostered to a different team this season. Remove them from that roster on the Manage Roster screen before making them captain here.",
+      );
+    }
+
     await saveSeasonOrgAssignment(seasonId, org.id, org.divisionId);
     await saveSeasonRosterAssignment({
       seasonId,

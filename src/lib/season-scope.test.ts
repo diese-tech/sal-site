@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LeaguePlayer, Org } from "@/types/league";
-import { mergeSeasonAndCatalogOrgs, scopeSeasonEntities } from "./season-scope";
+import { mergeSeasonAndCatalogOrgs, mergeSeasonAndCatalogPlayers, scopeSeasonEntities } from "./season-scope";
 
 const org: Org = {
   id: "org-old",
@@ -99,5 +99,25 @@ describe("mergeSeasonAndCatalogOrgs", () => {
     const merged = mergeSeasonAndCatalogOrgs([seasonTeam], [{ ...org, divisionId: "terra" }, unenrolledOrg]);
 
     expect(merged).toEqual([seasonTeam, unenrolledOrg]);
+  });
+});
+
+describe("mergeSeasonAndCatalogPlayers", () => {
+  it("prefers the season-scoped org/division/captain state over the stale flat catalog row", () => {
+    const seasonPlayer = { ...player, orgId: "org-old", divisionId: "solar" as const, isCaptain: true };
+    const catalogPlayer = { ...player, orgId: "org-old", divisionId: "lunar" as const, isCaptain: false };
+
+    const merged = mergeSeasonAndCatalogPlayers([seasonPlayer], [catalogPlayer]);
+
+    expect(merged).toEqual([seasonPlayer]);
+  });
+
+  it("adds catalog players who have no roster row this season", () => {
+    const seasonPlayer = { ...player, id: "player-rostered" };
+    const freeAgent: LeaguePlayer = { ...player, id: "player-free-agent", orgId: undefined, divisionId: undefined, isCaptain: false };
+
+    const merged = mergeSeasonAndCatalogPlayers([seasonPlayer], [{ ...player, id: "player-rostered" }, freeAgent]);
+
+    expect(merged).toEqual([seasonPlayer, freeAgent]);
   });
 });

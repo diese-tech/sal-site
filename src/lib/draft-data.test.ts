@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/league-data", () => ({ saveSeasonRosterAssignment: vi.fn() }));
+vi.mock("@/lib/league-data", () => ({ saveSeasonRosterAssignment: vi.fn(), getCurrentSeasonId: vi.fn() }));
 
-import { saveSeasonRosterAssignment } from "@/lib/league-data";
+import { getCurrentSeasonId, saveSeasonRosterAssignment } from "@/lib/league-data";
 import { finalizeDraftRosters, getTopShortlistPick } from "./draft-data";
 
 type QueryState = {
@@ -117,6 +117,7 @@ beforeEach(() => {
 describe("finalizeDraftRosters publishes season rosters (#210)", () => {
   it("writes one season roster assignment per pick via the canonical path", async () => {
     client = makeClient(handlerFor({}));
+    vi.mocked(getCurrentSeasonId).mockResolvedValue("season-1");
 
     await expect(finalizeDraftRosters("room-1")).resolves.toEqual({ assigned: 4 });
 
@@ -131,17 +132,33 @@ describe("finalizeDraftRosters publishes season rosters (#210)", () => {
       });
     }
 
-    // Legacy parity: players.org_id/status bulk update, one per picking org.
+    // Legacy parity: players.org_id/division_id/status bulk update, one per picking org.
     const playerUpdates = executed.filter((q) => q.table === "players" && q.op === "update");
     expect(playerUpdates).toHaveLength(2);
     expect(playerUpdates.map((q) => q.update)).toEqual([
-      { org_id: "org-a", status: "drafted" },
-      { org_id: "org-b", status: "drafted" },
+      { org_id: "org-a", division_id: "solar", status: "drafted" },
+      { org_id: "org-b", division_id: "solar", status: "drafted" },
     ]);
     expect(playerUpdates.map((q) => q.ins)).toEqual([
       [["id", ["p1", "p4"]]],
       [["id", ["p2", "p3"]]],
     ]);
+  });
+
+  it("publishes season_rosters for a non-current season without touching the live season's legacy players columns", async () => {
+    // A draft room can be created for a future/preseason season while a different
+    // season is still operational (#210 comment). The canonical season_rosters
+    // write must still happen for every pick, but the legacy players mirror —
+    // read by captain-bot/resolveRole for the CURRENT season only — must not be
+    // clobbered by a draft finalized for a season that isn't live yet.
+    client = makeClient(handlerFor({}));
+    vi.mocked(getCurrentSeasonId).mockResolvedValue("some-other-live-season");
+
+    await expect(finalizeDraftRosters("room-1")).resolves.toEqual({ assigned: 4 });
+
+    expect(saveSeasonRosterAssignment).toHaveBeenCalledTimes(4);
+    const playerUpdates = executed.filter((q) => q.table === "players" && q.op === "update");
+    expect(playerUpdates).toHaveLength(0);
   });
 
   it("throws naming the missing org and makes no roster writes when a picking org is not in season_orgs", async () => {
