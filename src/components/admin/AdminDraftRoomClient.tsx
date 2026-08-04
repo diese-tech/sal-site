@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { DraftState } from "@/types/draft";
 import type { LeaguePlayer, Org } from "@/types/league";
+import { formatDraftTeamLabel } from "@/lib/draft-team";
 import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -54,7 +55,13 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
     (p) => p.divisionId === room.divisionId && !pickedPlayerIds.has(p.id)
   );
 
-  const getOrg = (id: string) => orgs.find((o) => o.id === id);
+  const getOrg = (id: string) => orgs.find(
+    (o) => o.id === id && o.divisionId === room.divisionId,
+  );
+  const getTeamLabel = (id: string) => {
+    const org = getOrg(id);
+    return org ? formatDraftTeamLabel(org.name, room.divisionId) : "Unknown saved team";
+  };
   const getPlayer = (id: string) => players.find((p) => p.id === id);
 
   async function call(endpoint: string, method = "POST") {
@@ -133,7 +140,7 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
           </span>
           <span className="text-sm font-semibold text-slate-400">
             Pick {Math.min(room.currentPickIndex + 1, totalPicks)} of {totalPicks}
-            {currentOrgId && <> · On the clock: <span className="font-black text-white">{getOrg(currentOrgId)?.name}</span></>}
+            {currentOrgId && <> · On the clock: <span className="font-black text-white">{getTeamLabel(currentOrgId)}</span></>}
           </span>
         </div>
         <div className="flex gap-2">
@@ -160,7 +167,7 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
                     const pos = baseOrderDraft.indexOf(org.id);
                     return (
                       <div key={org.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-black/30 px-3 py-2">
-                        <span className="text-sm font-semibold text-white">{org.name}</span>
+                        <span className="text-sm font-semibold text-white">{formatDraftTeamLabel(org.name, room.divisionId)}</span>
                         <div className="flex gap-1">
                           {pos === -1 ? (
                             <button onClick={() => setBaseOrderDraft([...baseOrderDraft, org.id])} className="rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-2 py-1 text-[0.65rem] font-black uppercase text-cyan-200">Add</button>
@@ -184,7 +191,7 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
                 {room.baseOrder.map((orgId, i) => (
                   <li key={orgId} className="flex items-center gap-2 text-sm">
                     <span className="w-5 shrink-0 text-right text-xs font-black text-slate-500">{i + 1}.</span>
-                    <span className="font-semibold text-white">{getOrg(orgId)?.name ?? orgId}</span>
+                    <span className="font-semibold text-white">{getTeamLabel(orgId)}</span>
                   </li>
                 ))}
               </ol>
@@ -201,7 +208,7 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
                   const url = typeof window !== "undefined" ? `${window.location.origin}/draft/${room.id}?token=${token}` : token;
                   return (
                     <div key={orgId} className="rounded-lg border border-white/8 bg-black/30 p-2">
-                      <p className="text-xs font-black text-white">{getOrg(orgId)?.name ?? orgId}</p>
+                      <p className="text-xs font-black text-white">{getTeamLabel(orgId)}</p>
                       <p className="mt-1 break-all font-mono text-[0.6rem] text-cyan-300/70">{url}</p>
                     </div>
                   );
@@ -227,7 +234,7 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
                 {picks.map((pick) => (
                   <div key={pick.id} className="flex items-center gap-2 rounded-lg border border-white/5 bg-black/20 px-3 py-1.5">
                     <span className="w-6 shrink-0 text-right text-xs font-black text-slate-500">{pick.pickNumber}.</span>
-                    <span className="text-xs font-semibold text-slate-400">{getOrg(pick.orgId)?.name ?? pick.orgId}</span>
+                    <span className="text-xs font-semibold text-slate-400">{getTeamLabel(pick.orgId)}</span>
                     <span className="text-slate-600">→</span>
                     <span className="font-black text-white">{getPlayer(pick.playerId)?.ign ?? pick.playerId}</span>
                     <span className="ml-auto text-[0.6rem] text-slate-500">{getPlayer(pick.playerId)?.primaryRole}</span>
@@ -259,7 +266,7 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
                 {pickSequence.map((orgId, i) => (
                   <div key={i} className={cn("flex items-center gap-1.5 rounded px-2 py-1 text-xs", i === room.currentPickIndex && room.status === "active" ? "bg-orange-300/15 font-black text-orange-100" : i < room.currentPickIndex ? "text-slate-600" : "text-slate-400")}>
                     <span className="w-4 shrink-0 text-right font-mono text-[0.6rem]">{i + 1}</span>
-                    <span className="truncate">{getOrg(orgId)?.tag ?? orgId}</span>
+                    <span className="truncate">{getTeamLabel(orgId)}</span>
                   </div>
                 ))}
               </div>
