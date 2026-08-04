@@ -43,23 +43,39 @@ export function getDiscordId(user: User): string | null {
 }
 
 export function getDiscordUsername(user: User): string {
-  // user_metadata.user_name is usually populated, but some sessions only
-  // carry the username on the Discord identity's own identity_data (both are
-  // Discord-sourced and equally trustworthy) — check both before giving up
-  // (Codex review on #233: giving up too early left real users stuck with a
-  // permanently blank registration, since a discord_id can only register once).
   const discordIdentity = user.identities?.find((i) => i.provider === "discord");
-  const username =
+  const identityData = discordIdentity?.identity_data ?? {};
+
+  // Prefer an explicit username field, but never a display name — Codex
+  // review on #235: user_metadata.full_name / identity_data.global_name CAN
+  // be a distinct, non-unique display name a Discord user sets separately
+  // from their real handle (verified live: one #233-affected account's real
+  // handle is "ne1217" but its Discord display name is "XGN Ninjaa").
+  // Accepting a display name here could match/claim the wrong player via
+  // /api/auth/claim, or persist the wrong public handle on registration.
+  const explicitUsername =
     (user.user_metadata?.user_name as string | undefined) ??
-    (discordIdentity?.identity_data?.user_name as string | undefined);
-  // NEVER fall back to user.email (or any other PII) here: this value is
-  // stored on registrations/players and rendered publicly (player directory,
-  // team rosters), so anything but the real Discord username leaking through
-  // would expose personal data to every visitor. If Discord/Supabase didn't
-  // return a username anywhere in this session, leave it blank — callers
-  // must not paper over a missing username with something sensitive, and
-  // must reject/surface the gap instead of silently persisting it.
-  return username ?? "";
+    (identityData.user_name as string | undefined);
+  if (explicitUsername) return explicitUsername;
+
+  // Discord's raw OIDC `name` claim is always "username#discriminator"
+  // ("0" for accounts on the newer global-handle system) regardless of
+  // whatever separate display name is also set, so stripping the
+  // discriminator reliably recovers the real, unique handle without any
+  // risk of it being a display name. Verified directly against
+  // auth.users.raw_user_meta_data for every account affected by #233/#235 —
+  // their user_name was empty but name held e.g. "ne1217#0".
+  const rawName = (user.user_metadata?.name as string | undefined) ?? (identityData.name as string | undefined);
+  const parsedHandle = rawName?.split("#")[0]?.trim();
+  if (parsedHandle) return parsedHandle;
+
+  // NEVER fall back to user.email, full_name, or global_name here: this
+  // value is stored on registrations/players and rendered publicly (player
+  // directory, team rosters), so a display name or email leaking through
+  // could misidentify a player or expose PII. Leave it blank instead —
+  // callers must reject/surface the gap rather than silently persist
+  // something wrong.
+  return "";
 }
 
 export function getDiscordDisplayName(user: User): string {
