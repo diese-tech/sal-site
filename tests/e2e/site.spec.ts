@@ -314,6 +314,9 @@ test("admin roster save posts player mutation payload", async ({ page }) => {
   await page.getByRole("textbox", { name: "IGN", exact: true }).fill("TestIGN");
   await page.getByLabel("Primary role").selectOption("Support");
   await page.getByLabel("Team").selectOption("midnight-pact");
+  // An org can field a team in more than one division, so Team selection no longer
+  // implies a division — the explicit Division field must be honored as-is.
+  await page.getByLabel("Division").selectOption("lunar");
   await page.getByLabel("Starter").uncheck();
   await page.getByRole("button", { name: "Save Player" }).click();
   await expect.poll(() => payload?.ign).toBe("TestIGN");

@@ -48,6 +48,13 @@ export function AdminPlayersClient({
   const [orgFilter, setOrgFilter] = useState<string | "all">("all");
 
   const getOrg = (id?: string) => data.orgs.find((org) => org.id === id);
+  // An org can field a team in multiple divisions, so data.orgs can carry more than one
+  // row per org id. Team selection here is independent of the separate Division field,
+  // so dedupe to one entry per org for the picker and filter chips.
+  const uniqueOrgs = useMemo(() => {
+    const byId = new Map(data.orgs.map((org) => [org.id, org]));
+    return [...byId.values()];
+  }, [data.orgs]);
 
   const activePlayers = data.players.filter((p) => !p.archivedAt);
   const archivedPlayers = data.players.filter((p) => !!p.archivedAt);
@@ -78,12 +85,14 @@ export function AdminPlayersClient({
     if (!editing) return;
     setSaving(true);
     setNotice(null);
-    const org = getOrg(editing.orgId);
     const status: PlayerStatus = editing.orgId ? "org-affiliated" : editing.status;
+    // An org can field a team in multiple divisions, so its divisionId is no longer a
+    // stand-in for "the" division of a team assignment — always trust the explicit
+    // Division field the admin selected instead of deriving it from the chosen org.
     const payload: LeaguePlayer = {
       ...editing,
       orgId: editing.orgId || undefined,
-      divisionId: org?.divisionId ?? editing.divisionId,
+      divisionId: editing.orgId ? (editing.divisionId ?? "solar") : editing.divisionId,
       status,
     };
     const wasNew = isNew;
@@ -276,7 +285,7 @@ export function AdminPlayersClient({
         <span className="w-px self-stretch bg-white/10" />
         <FilterChip active={orgFilter === "all"} onClick={() => setOrgFilter("all")}>All Teams</FilterChip>
         <FilterChip active={orgFilter === "__free_agent__"} onClick={() => setOrgFilter("__free_agent__")}>Free Agents</FilterChip>
-        {data.orgs.filter((o) => !o.archivedAt).map((org) => (
+        {uniqueOrgs.filter((o) => !o.archivedAt).map((org) => (
           <FilterChip key={org.id} active={orgFilter === org.id} onClick={() => setOrgFilter(org.id)}>{org.tag}</FilterChip>
         ))}
       </div>
@@ -295,7 +304,7 @@ export function AdminPlayersClient({
             <Field label="Team">
               <select value={editing.orgId ?? ""} onChange={(e) => setEditing({ ...editing, orgId: e.target.value || undefined })} className={inputClass}>
                 <option value="">Free agent</option>
-                {data.orgs.filter((o) => !o.archivedAt).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
+                {uniqueOrgs.filter((o) => !o.archivedAt).map((org) => <option key={org.id} value={org.id}>{org.name}</option>)}
               </select>
             </Field>
             <Field label="Division">

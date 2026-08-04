@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
-import { saveSeasonRosterAssignment } from "@/lib/league-data";
+import { getCurrentSeasonId, saveSeasonRosterAssignment } from "@/lib/league-data";
 import { buildPickSequence, type DraftPick, type DraftRoom, type DraftState } from "@/types/draft";
 import type { DivisionId } from "@/types/league";
 import type { Database } from "@/types/database.types";
@@ -518,14 +518,21 @@ export async function finalizeDraftRosters(draftRoomId: string): Promise<{ assig
     });
   }
 
-  // Legacy parity: keep the global players columns in sync for consumers
-  // that have not moved to season_rosters yet.
-  for (const [orgId, playerIds] of byOrg) {
-    const { error } = await supabase
-      .from("players")
-      .update({ org_id: orgId, status: "drafted" })
-      .in("id", playerIds);
-    if (error) throw new Error(error.message);
+  // Legacy parity: keep the global players columns in sync for consumers that have not
+  // moved to season_rosters yet — but only when this draft's season is the OPERATIONAL
+  // (current) one, matching the guard saveSeasonRosterAssignment applies to its own
+  // mirror write. A draft room can be created for a future/preseason season (#210); without
+  // this guard, finalizing it here would overwrite the live current season's captain-bot-
+  // visible players.org_id/division_id/status with the not-yet-live season's assignments.
+  const currentSeasonId = await getCurrentSeasonId();
+  if (room.seasonId === currentSeasonId) {
+    for (const [orgId, playerIds] of byOrg) {
+      const { error } = await supabase
+        .from("players")
+        .update({ org_id: orgId, division_id: room.divisionId, status: "drafted" })
+        .in("id", playerIds);
+      if (error) throw new Error(error.message);
+    }
   }
 
   return { assigned: picks.length };

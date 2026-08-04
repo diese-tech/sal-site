@@ -289,14 +289,47 @@ describe("POST /api/admin/import/players — season enrollment (#230)", () => {
 
     expect(res.status).toBe(200);
     expect(data.imported).toBe(1);
-    // The org's own division ("terra") wins over the import's selected
-    // division ("solar") — the import division is for free agents, not orgs.
-    expect(saveSeasonOrgAssignment).toHaveBeenCalledWith("preseason-2", "org-a", "terra");
+    // The batch's selected division ("solar") wins — an org's own division_id
+    // column is only its legacy/default display division, not this import's
+    // target, so it must not override which division season_orgs is enrolled
+    // into (an org already fielding a team in one division must still be
+    // enrollable into a second division via a later import).
+    expect(saveSeasonOrgAssignment).toHaveBeenCalledWith("preseason-2", "org-a", "solar");
     expect(saveSeasonRosterAssignment).toHaveBeenCalledWith({
       seasonId: "preseason-2",
       playerId: "player-team",
       orgId: "org-a",
       divisionId: "solar",
+      isCaptain: false,
+    });
+  });
+
+  it("enrolls the same org into a second division when a per-row divisionId requests it", async () => {
+    // An org can field an independent team in more than one division. Its legacy
+    // division_id column ("terra") must not stand in for a batch importing a
+    // *different* division's roster ("lunar") for the same org.
+    orgRows = [{ id: "org-a", name: "Obsidian Knights", tag: "OBS", division_id: "terra", archived_at: null }];
+    const { POST } = await import("@/app/api/admin/import/players/route");
+    const { saveSeasonOrgAssignment, saveSeasonRosterAssignment } = await import("@/lib/league-data");
+    vi.mocked(saveSeasonOrgAssignment).mockClear();
+    vi.mocked(saveSeasonRosterAssignment).mockClear();
+
+    const req = makeRequest({
+      seasonId: "preseason-2",
+      divisionId: "solar",
+      players: [validPlayer({ ign: "LunarPlayer", id: "player-lunar", orgId: "org-a", divisionId: "lunar" })],
+    });
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.imported).toBe(1);
+    expect(saveSeasonOrgAssignment).toHaveBeenCalledWith("preseason-2", "org-a", "lunar");
+    expect(saveSeasonRosterAssignment).toHaveBeenCalledWith({
+      seasonId: "preseason-2",
+      playerId: "player-lunar",
+      orgId: "org-a",
+      divisionId: "lunar",
       isCaptain: false,
     });
   });

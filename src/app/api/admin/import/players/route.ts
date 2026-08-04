@@ -129,17 +129,15 @@ export async function POST(request: NextRequest) {
   // failing the row on a foreign-key violation. Queries the orgs table
   // directly — getAdminLeagueData()'s mock fallback must not leak fake ids.
   const orgLookup = new Map<string, string>();
-  const orgDivisionById = new Map<string, string>();
   if (supabase) {
     const { data: orgRows } = await supabase
       .from("orgs")
-      .select("id, name, tag, division_id")
+      .select("id, name, tag")
       .is("archived_at", null);
-    for (const org of (orgRows ?? []) as Array<{ id: string; name: string; tag: string; division_id: string }>) {
+    for (const org of (orgRows ?? []) as Array<{ id: string; name: string; tag: string }>) {
       orgLookup.set(org.id.toLowerCase(), org.id);
       orgLookup.set(org.name.toLowerCase(), org.id);
       orgLookup.set(org.tag.toLowerCase(), org.id);
-      orgDivisionById.set(org.id, org.division_id);
     }
   }
 
@@ -153,14 +151,27 @@ export async function POST(request: NextRequest) {
   });
 
   // A resolved org may exist globally but not yet be enrolled in the selected
-  // season's season_orgs — saveSeasonRosterAssignment's division lookup
-  // requires that row to exist, so ensure it does before assigning players to
-  // it (idempotent upsert; a failure here just surfaces as a per-row
-  // enrollment error below instead of crashing the whole import).
-  const orgIdsToEnroll = new Set(players.flatMap((player) => (player.orgId ? [player.orgId] : [])));
-  for (const orgId of orgIdsToEnroll) {
+  // season+division's season_orgs — saveSeasonRosterAssignment's enrollment
+  // check requires that row to exist, so ensure it does before assigning
+  // players to it (idempotent upsert; a failure here just surfaces as a
+  // per-row enrollment error below instead of crashing the whole import).
+  //
+  // An org's own division_id column is only its legacy/default display
+  // division, not this batch's target — an org that already fields a team in
+  // one division must still be enrollable into a *second* division here, so
+  // enroll the actual (org, division) pairs the batch's players resolve to
+  // (a per-row divisionId override takes precedence over the batch default).
+  const orgDivisionPairsToEnroll = new Map(
+    players
+      .filter((player) => player.orgId)
+      .map((player) => {
+        const divisionId = player.divisionId ?? parsed.data.divisionId;
+        return [`${player.orgId}:${divisionId}`, { orgId: player.orgId as string, divisionId }] as const;
+      }),
+  );
+  for (const { orgId, divisionId } of orgDivisionPairsToEnroll.values()) {
     try {
-      await saveSeasonOrgAssignment(parsed.data.seasonId, orgId, (orgDivisionById.get(orgId) ?? parsed.data.divisionId) as "solar" | "lunar" | "terra");
+      await saveSeasonOrgAssignment(parsed.data.seasonId, orgId, divisionId);
     } catch {
       // Swallowed: players pointing at this org will fail the season
       // enrollment step below and surface as an explicit row error instead.

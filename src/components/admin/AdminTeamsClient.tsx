@@ -133,7 +133,7 @@ export function AdminTeamsClient({
 
     return (
       <div
-        key={org.id}
+        key={`${org.id}:${org.divisionId}`}
         className={cn(
           "flex flex-wrap items-center gap-3 border-b border-white/5 px-4 py-3 last:border-0",
           isScheduled && "bg-red-950/20",
@@ -289,7 +289,11 @@ export function AdminTeamsClient({
               >
                 <option value="">— none —</option>
                 {data.players
-                  .filter((p) => !p.archivedAt && (p.orgId === editing.id || !p.orgId))
+                  // An org can field a team in each division, and a player holds only one
+                  // roster slot per season — excluding players rostered to a *different*
+                  // division-team of this org keeps this picker from silently detaching
+                  // them from that team when saved (server-side rejects it either way).
+                  .filter((p) => !p.archivedAt && (!p.orgId || (p.orgId === editing.id && p.divisionId === editing.divisionId)))
                   .map((p) => (
                     <option key={p.id} value={p.id}>{p.ign}</option>
                   ))}
