@@ -1539,6 +1539,7 @@ export type Database = {
           archived_at: string | null
           avatar_gradient: string
           avatar_initials: string
+          avatar_url: string | null
           deletion_scheduled_at: string | null
           discord_id: string | null
           discord_username: string
@@ -1559,6 +1560,7 @@ export type Database = {
           archived_at?: string | null
           avatar_gradient: string
           avatar_initials: string
+          avatar_url?: string | null
           deletion_scheduled_at?: string | null
           discord_id?: string | null
           discord_username: string
@@ -1579,6 +1581,7 @@ export type Database = {
           archived_at?: string | null
           avatar_gradient?: string
           avatar_initials?: string
+          avatar_url?: string | null
           deletion_scheduled_at?: string | null
           discord_id?: string | null
           discord_username?: string
@@ -1614,6 +1617,7 @@ export type Database = {
       }
       registrations: {
         Row: {
+          avatar_url: string | null
           created_at: string
           discord_display_name: string | null
           discord_id: string
@@ -1627,6 +1631,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
           discord_display_name?: string | null
           discord_id: string
@@ -1640,6 +1645,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
           discord_display_name?: string | null
           discord_id?: string
