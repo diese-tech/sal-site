@@ -260,7 +260,7 @@ export function GodsPageClient({
                 <div key={org.brandId ?? org.orgId} className="rounded-xl border border-white/8 bg-white/[0.03] p-4">
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <Link href={`/teams/${org.orgId}`} className="truncate text-sm font-black text-white transition hover:text-cyan-200">
+                      <Link href={`/teams/${org.orgId}?division=${org.divisionIds[0] ?? "solar"}`} className="truncate text-sm font-black text-white transition hover:text-cyan-200">
                         {org.orgName}
                       </Link>
                       <p className="mt-0.5 text-[0.6rem] font-black uppercase text-slate-600">

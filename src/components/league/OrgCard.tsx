@@ -36,7 +36,7 @@ export function OrgCard({
   const accent = divisionAccent[org.divisionId];
 
   return (
-    <Link href={`/teams/${org.id}`} className="block">
+    <Link href={`/teams/${org.id}?division=${org.divisionId}`} className="block">
       <GlowPanel className={cn("transition-all duration-300 h-full", accent.border)}>
         {/* Division color bar */}
         <div className={cn("h-1 w-full rounded-t-2xl", accent.bar)} />

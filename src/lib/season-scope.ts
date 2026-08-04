@@ -20,10 +20,11 @@ export function scopeSeasonEntities(
 ): { orgs: Org[]; players: LeaguePlayer[] } {
   const orgById = new Map(orgCatalog.map((org) => [org.id, org]));
   const playerById = new Map(playerCatalog.map((player) => [player.id, player]));
-  const captainByOrg = new Map<string, string>();
+  const captainByTeam = new Map<string, string>();
   for (const assignment of rosterAssignments) {
-    if (assignment.is_captain && assignment.org_id && !captainByOrg.has(assignment.org_id)) {
-      captainByOrg.set(assignment.org_id, assignment.player_id);
+    if (assignment.is_captain && assignment.org_id && assignment.division_id) {
+      const key = `${assignment.org_id}:${assignment.division_id}`;
+      if (!captainByTeam.has(key)) captainByTeam.set(key, assignment.player_id);
     }
   }
 
@@ -33,7 +34,7 @@ export function scopeSeasonEntities(
       ? [{
           ...org,
           divisionId: assignment.division_id,
-          captainId: captainByOrg.get(assignment.org_id),
+          captainId: captainByTeam.get(`${assignment.org_id}:${assignment.division_id}`),
         }]
       : [];
   });

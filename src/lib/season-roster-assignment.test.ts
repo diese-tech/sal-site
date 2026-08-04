@@ -16,6 +16,7 @@ type QueryState = {
   table: string;
   op: "select" | "update" | "upsert" | "insert" | "delete";
   payload?: unknown;
+  options?: unknown;
   eqs: Array<[string, unknown]>;
 };
 
@@ -33,9 +34,10 @@ class FakeQuery {
     return this;
   }
 
-  upsert(payload: unknown) {
+  upsert(payload: unknown, options?: unknown) {
     this.state.op = "upsert";
     this.state.payload = payload;
+    this.state.options = options;
     return this;
   }
 
@@ -177,7 +179,7 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
         seasonId: "season-1",
         playerId: "available-player",
         orgId: "archived-org",
-        divisionId: null,
+        divisionId: "solar",
         isCaptain: false,
       }),
     ).rejects.toThrow("Cannot enroll unavailable org.");
@@ -193,7 +195,7 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
       seasonId: "season-1",
       playerId: "p1",
       orgId: "org-a",
-      divisionId: null,
+      divisionId: "solar",
       isCaptain: true,
     });
 
@@ -212,15 +214,18 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
     expect(playerUpdate?.eqs).toEqual([["id", "p1"]]);
   });
 
-  it("clears any prior captain for the same season org before assigning the replacement", async () => {
-    client = makeClient(defaultHandler({}, "season-1"));
+  it("clears only the prior captain for the same divisional season team", async () => {
+    const fallback = defaultHandler({}, "season-1");
+    client = makeClient((query) => query.table === "season_rosters" && query.op === "update"
+      ? { data: [{ player_id: "p-old-solar" }], error: null }
+      : fallback(query));
     const { saveSeasonRosterAssignment } = await import("./league-data");
 
     await saveSeasonRosterAssignment({
       seasonId: "season-1",
       playerId: "p-new",
       orgId: "org-a",
-      divisionId: null,
+      divisionId: "solar",
       isCaptain: true,
     });
 
@@ -231,14 +236,19 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
       eqs: [
         ["season_id", "season-1"],
         ["org_id", "org-a"],
+        ["division_id", "solar"],
         ["is_captain", true],
         ["player_id not", "p-new"],
       ],
     });
     expect(rosterWrites[1]).toMatchObject({ op: "upsert", payload: { player_id: "p-new", is_captain: true } });
+    expect(executed.find((q) => q.table === "players" && q.op === "update" && q.eqs.some(([column]) => column === "id")))
+      .toMatchObject({ payload: { org_id: "org-a", is_captain: true, status: "org-affiliated" } });
+    expect(executed.find((q) => q.table === "players" && q.op === "update" && q.eqs.some(([column, value]) => column === "id" && Array.isArray(value))))
+      .toMatchObject({ payload: { is_captain: false }, eqs: [["id", ["p-old-solar"]]] });
   });
 
-  it("clears captain/org legacy state for a free-agent (no-org) preseason enrollment", async () => {
+  it("persists an unassigned preseason captain before teams are formed", async () => {
     client = makeClient(defaultHandler({}, "preseason-2"));
     const { saveSeasonRosterAssignment } = await import("./league-data");
 
@@ -247,7 +257,6 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
       playerId: "p2",
       orgId: null,
       divisionId: "terra",
-      // isCaptain is meaningless without an org — must be forced false everywhere.
       isCaptain: true,
     });
 
@@ -255,12 +264,12 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
     expect(rosterUpsert?.payload).toMatchObject({
       org_id: null,
       division_id: "terra",
-      is_captain: false,
+      is_captain: true,
       roster_status: "free_agent",
     });
 
     const playerUpdate = executed.find((q) => q.table === "players" && q.op === "update");
-    expect(playerUpdate?.payload).toEqual({ org_id: null, is_captain: false, status: "free-agent" });
+    expect(playerUpdate?.payload).toEqual({ org_id: null, is_captain: true, status: "free-agent" });
   });
 
   it("throws and never touches the legacy players row when the season_rosters upsert fails", async () => {
@@ -284,7 +293,7 @@ describe("saveSeasonRosterAssignment legacy player mirror (#230)", () => {
       seasonId: "season-historical",
       playerId: "p1",
       orgId: "org-a",
-      divisionId: null,
+      divisionId: "solar",
       isCaptain: true,
     });
 
@@ -357,7 +366,10 @@ describe("legacy admin forms synchronize the current season", () => {
   });
 
   it("clears the current season captain when an org is saved with no captain", async () => {
-    client = makeClient(defaultHandler({}, "preseason-s2"));
+    const fallback = defaultHandler({}, "preseason-s2");
+    client = makeClient((query) => query.table === "season_rosters" && query.op === "select"
+      ? { data: [{ player_id: "player-captain" }], error: null }
+      : fallback(query));
     const { saveOrgForCurrentSeason } = await import("./league-data");
 
     await saveOrgForCurrentSeason({ ...org, captainId: undefined });
@@ -372,6 +384,7 @@ describe("legacy admin forms synchronize the current season", () => {
       eqs: [
         ["season_id", "preseason-s2"],
         ["org_id", "org-returning"],
+        ["division_id", "terra"],
         ["is_captain", true],
       ],
     });
@@ -383,8 +396,7 @@ describe("legacy admin forms synchronize the current season", () => {
     )).toMatchObject({
       payload: { is_captain: false },
       eqs: [
-        ["org_id", "org-returning"],
-        ["is_captain", true],
+        ["id", ["player-captain"]],
       ],
     });
   });
@@ -448,6 +460,24 @@ describe("saveSeasonOrgAssignment availability guard (#237)", () => {
 
     expect(executed.find((q) => q.table === "season_orgs" && q.op === "upsert")?.payload)
       .toMatchObject({ season_id: "season-1", org_id: "org-available", status: "active" });
+    expect(executed.find((q) => q.table === "season_orgs" && q.op === "upsert")?.options)
+      .toEqual({ onConflict: "season_id,org_id,division_id" });
+  });
+
+  it("removes only the requested divisional team for a multi-division org", async () => {
+    client = makeClient(defaultHandler());
+    const { removeSeasonOrgAssignment } = await import("./league-data");
+
+    await removeSeasonOrgAssignment("season-1", "org-shared", "lunar");
+
+    expect(executed.find((q) => q.table === "season_orgs" && q.op === "delete"))
+      .toMatchObject({
+        eqs: [
+          ["season_id", "season-1"],
+          ["org_id", "org-shared"],
+          ["division_id", "lunar"],
+        ],
+      });
   });
 });
 

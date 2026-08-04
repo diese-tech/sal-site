@@ -328,11 +328,12 @@ export async function getPlayerSeasonSummaries(
 export async function getTeamRosterStats(
   orgId: string,
   seasonId?: string,
+  divisionId?: DivisionId,
 ): Promise<TeamPlayerStat[]> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return [];
 
-  const matchJoin = seasonId ? ', matches!inner(season_id)' : '';
+  const matchJoin = seasonId || divisionId ? ', matches!inner(season_id, division_id)' : '';
   let query = supabase
     .from('player_stats')
     .select(`player_id, kills, deaths, assists, damage_dealt, damage_mitigated, won, players!inner(id, ign, display_alias, primary_role, org_id)${matchJoin}`)
@@ -341,6 +342,9 @@ export async function getTeamRosterStats(
 
   if (seasonId) {
     query = query.eq('matches.season_id', seasonId);
+  }
+  if (divisionId) {
+    query = query.eq('matches.division_id', divisionId);
   }
 
   const { data, error } = await query;

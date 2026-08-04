@@ -92,12 +92,12 @@ export function StandingsTable({
       {/* Mobile standings cards */}
       <div className="grid gap-2 p-3 sm:hidden">
         {divStandings.map((s, i) => {
-          const org = orgs.find((o) => o.id === s.orgId);
+          const org = orgs.find((o) => o.id === s.orgId && o.divisionId === s.divisionId);
           if (!org) return null;
           return (
             <Link
-              key={s.orgId}
-              href={`/teams/${org.id}`}
+              key={`${s.orgId}:${s.divisionId}`}
+              href={`/teams/${org.id}?division=${s.divisionId}`}
               className={cn(
                 "rounded-xl border border-white/10 p-3 transition-colors hover:bg-white/[0.04]",
                 i === 0 && topRow,
@@ -141,12 +141,12 @@ export function StandingsTable({
 
       {/* Rows */}
       {divStandings.map((s, i) => {
-        const org = orgs.find((o) => o.id === s.orgId);
+        const org = orgs.find((o) => o.id === s.orgId && o.divisionId === s.divisionId);
         if (!org) return null;
         return (
           <Link
-            key={s.orgId}
-            href={`/teams/${org.id}`}
+            key={`${s.orgId}:${s.divisionId}`}
+            href={`/teams/${org.id}?division=${s.divisionId}`}
             className={cn(
               "hidden grid-cols-[2rem_1fr_3.25rem_3.25rem_3.25rem_4rem_5rem] items-center gap-x-3 px-4 py-3 transition-colors hover:bg-white/[0.04] sm:grid",
               i === 0 && topRow,

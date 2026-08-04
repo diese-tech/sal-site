@@ -27,7 +27,7 @@ export default async function AdminOverviewPage() {
     topOrg: (() => {
       const divStandings = sortStandings(standings.filter((s) => s.divisionId === id));
       if (!divStandings[0]) return "—";
-      return orgs.find((o) => o.id === divStandings[0].orgId)?.name ?? "—";
+      return orgs.find((o) => o.id === divStandings[0].orgId && o.divisionId === id)?.name ?? "—";
     })(),
   }));
 

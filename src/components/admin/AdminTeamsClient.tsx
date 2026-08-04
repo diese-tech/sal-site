@@ -128,7 +128,7 @@ export function AdminTeamsClient({
 
   function renderOrgRow(org: Org) {
     const captain = data.players.find((p) => p.id === org.captainId);
-    const standing = data.standings.find((s) => s.orgId === org.id);
+    const standing = data.standings.find((s) => s.orgId === org.id && s.divisionId === org.divisionId);
     const isScheduled = !!org.deletionScheduledAt;
 
     return (
@@ -274,7 +274,7 @@ export function AdminTeamsClient({
             <Field label="Tag (max 8, auto-uppercase)">
               <input value={editing.tag} onChange={(e) => setEditing({ ...editing, tag: e.target.value.toUpperCase().slice(0, 8) })} maxLength={8} className={inputClass} />
             </Field>
-            <Field label="Division">
+            <Field label="Default division (legacy display only)">
               <select value={editing.divisionId} onChange={(e) => setEditing({ ...editing, divisionId: e.target.value as DivisionId })} className={inputClass}>
                 {(["terra", "solar", "lunar"] as DivisionId[]).map((d) => (
                   <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>

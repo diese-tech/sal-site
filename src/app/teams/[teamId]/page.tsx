@@ -40,7 +40,7 @@ const divisionAccent: Record<DivisionId, { badge: string; bar: string; header: s
 
 export async function generateStaticParams() {
   const data = await getLeagueData();
-  return data.orgs.map((org) => ({ teamId: org.id }));
+  return [...new Set(data.orgs.map((org) => org.id))].map((teamId) => ({ teamId }));
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ teamId: string }> }) {
@@ -50,20 +50,28 @@ export async function generateMetadata({ params }: { params: Promise<{ teamId: s
   return { title: org ? `${org.name} - SAL` : "Team - SAL" };
 }
 
-export default async function TeamPage({ params }: { params: Promise<{ teamId: string }> }) {
+export default async function TeamPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ teamId: string }>;
+  searchParams: Promise<{ division?: string }>;
+}) {
   const { teamId } = await params;
+  const { division } = await searchParams;
   const { orgs, players, matches, standings, season } = await getLeagueData();
 
-  const org = orgs.find((o) => o.id === teamId);
+  const org = orgs.find((o) => o.id === teamId && o.divisionId === division)
+    ?? orgs.find((o) => o.id === teamId);
   if (!org) notFound();
 
-  const roster = players.filter((p) => p.orgId === org.id);
-  const standing = standings.find((s) => s.orgId === org.id);
+  const roster = players.filter((p) => p.orgId === org.id && p.divisionId === org.divisionId);
+  const standing = standings.find((s) => s.orgId === org.id && s.divisionId === org.divisionId);
   const accent = divisionAccent[org.divisionId];
-  const getOrg = (id: string) => orgs.find((o) => o.id === id)!;
+  const getOrg = (id: string) => orgs.find((o) => o.id === id && o.divisionId === org.divisionId)!;
 
   const orgMatches = matches
-    .filter((m) => m.homeOrgId === org.id || m.awayOrgId === org.id)
+    .filter((m) => m.divisionId === org.divisionId && (m.homeOrgId === org.id || m.awayOrgId === org.id))
     .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || a.scheduledTime.localeCompare(b.scheduledTime));
 
   const upcoming = orgMatches.filter((m) => m.status === "scheduled" || m.status === "live").slice(0, 3);
@@ -78,7 +86,7 @@ export default async function TeamPage({ params }: { params: Promise<{ teamId: s
       : "—";
 
   const [rosterStats, brandGodStats] = await Promise.all([
-    getTeamRosterStats(org.id, season.id),
+    getTeamRosterStats(org.id, season.id, org.divisionId),
     org.brandId ? getOrgBrandGodStats(org.brandId, season.id) : Promise.resolve([]),
   ]);
 

@@ -24,10 +24,12 @@ export function sortStandings(standings: OrgStanding[]): OrgStanding[] {
 
 export function recalcStandings(data: Pick<LeagueData, "orgs" | "matches">, seasonId?: string): OrgStanding[] {
   const map = new Map<string, OrgStanding>();
-  const lossesByOrg = new Map<string, string[]>();
+  const lossesByTeam = new Map<string, string[]>();
+  const teamKey = (orgId: string, divisionId: DivisionId) => `${orgId}:${divisionId}`;
 
   for (const org of data.orgs) {
-    map.set(org.id, {
+    const key = teamKey(org.id, org.divisionId);
+    map.set(key, {
       orgId: org.id,
       divisionId: org.divisionId,
       wins: 0,
@@ -42,7 +44,7 @@ export function recalcStandings(data: Pick<LeagueData, "orgs" | "matches">, seas
       streak: [],
       gamesBack: 0,
     });
-    lossesByOrg.set(org.id, []);
+    lossesByTeam.set(key, []);
   }
 
   const matches = seasonId ? data.matches.filter((match) => match.seasonId === seasonId) : data.matches;
@@ -54,8 +56,10 @@ export function recalcStandings(data: Pick<LeagueData, "orgs" | "matches">, seas
       match.awayScore === undefined
     ) continue;
 
-    const home = map.get(match.homeOrgId);
-    const away = map.get(match.awayOrgId);
+    const homeKey = teamKey(match.homeOrgId, match.divisionId);
+    const awayKey = teamKey(match.awayOrgId, match.divisionId);
+    const home = map.get(homeKey);
+    const away = map.get(awayKey);
     if (!home || !away) continue;
 
     home.matchesPlayed++;
@@ -76,14 +80,14 @@ export function recalcStandings(data: Pick<LeagueData, "orgs" | "matches">, seas
       home.wins++;
       away.losses++;
       home.headToHeadWins[away.orgId] = (home.headToHeadWins[away.orgId] ?? 0) + 1;
-      lossesByOrg.get(away.orgId)?.push(home.orgId);
+      lossesByTeam.get(awayKey)?.push(homeKey);
       home.streak = [...home.streak.slice(-4), "W"];
       away.streak = [...away.streak.slice(-4), "L"];
     } else if (match.awayScore > match.homeScore) {
       away.wins++;
       home.losses++;
       away.headToHeadWins[home.orgId] = (away.headToHeadWins[home.orgId] ?? 0) + 1;
-      lossesByOrg.get(home.orgId)?.push(away.orgId);
+      lossesByTeam.get(homeKey)?.push(awayKey);
       away.streak = [...away.streak.slice(-4), "W"];
       home.streak = [...home.streak.slice(-4), "L"];
     } else {
@@ -98,7 +102,7 @@ export function recalcStandings(data: Pick<LeagueData, "orgs" | "matches">, seas
   // league points of the opponents a team lost to. An average avoids rewarding
   // a team merely for accumulating more losses.
   for (const standing of map.values()) {
-    const opponents = lossesByOrg.get(standing.orgId) ?? [];
+    const opponents = lossesByTeam.get(teamKey(standing.orgId, standing.divisionId)) ?? [];
     if (opponents.length === 0) continue;
     const opponentPoints = opponents.reduce(
       (total, opponentId) => total + (map.get(opponentId)?.leaguePoints ?? 0),

@@ -119,7 +119,7 @@ describe("recalcStandings load budgets", () => {
   });
 
   it("forfeit matches contribute W/L but not points-for/against", () => {
-    const twoOrgs = makeOrgs(2);
+    const twoOrgs = makeOrgs(2).map((org) => ({ ...org, divisionId: "solar" as const }));
     const forfeitMatch: Match = {
       id: "f1",
       divisionId: "solar",

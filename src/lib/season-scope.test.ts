@@ -57,4 +57,26 @@ describe("scopeSeasonEntities", () => {
       isCaptain: true,
     });
   });
+
+  it("materializes separate divisional teams and captains for one organization", () => {
+    const lunarCaptain = { ...player, id: "captain-lunar", divisionId: "lunar" as const };
+    const solarCaptain = { ...player, id: "captain-solar", divisionId: "solar" as const };
+    const scoped = scopeSeasonEntities(
+      [org],
+      [lunarCaptain, solarCaptain],
+      [
+        { org_id: "org-old", division_id: "lunar" },
+        { org_id: "org-old", division_id: "solar" },
+      ],
+      [
+        { player_id: "captain-lunar", org_id: "org-old", division_id: "lunar", is_captain: true },
+        { player_id: "captain-solar", org_id: "org-old", division_id: "solar", is_captain: true },
+      ],
+    );
+
+    expect(scoped.orgs).toEqual([
+      expect.objectContaining({ id: "org-old", divisionId: "lunar", captainId: "captain-lunar" }),
+      expect.objectContaining({ id: "org-old", divisionId: "solar", captainId: "captain-solar" }),
+    ]);
+  });
 });

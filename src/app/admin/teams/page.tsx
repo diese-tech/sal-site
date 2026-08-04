@@ -1,12 +1,12 @@
 import { requireAdmin } from "@/lib/admin-auth";
-import { getAdminLeagueData } from "@/lib/league-data";
+import { getAdminIdentityCatalog, getAdminLeagueData } from "@/lib/league-data";
 import { AdminTeamsClient } from "@/components/admin/AdminTeamsClient";
 
 export const metadata = { title: "Manage Teams - SAL Admin" };
 
 export default async function AdminTeamsPage() {
   const session = await requireAdmin();
-  const data = await getAdminLeagueData();
+  const [data, catalog] = await Promise.all([getAdminLeagueData(), getAdminIdentityCatalog()]);
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -17,7 +17,7 @@ export default async function AdminTeamsPage() {
           Create and edit team profiles. Roster assignment is handled from the Roster screen.
         </p>
       </div>
-      <AdminTeamsClient data={data} isSuperAdmin={session.role === "super_admin"} />
+      <AdminTeamsClient data={{ ...data, ...catalog }} isSuperAdmin={session.role === "super_admin"} />
     </main>
   );
 }
