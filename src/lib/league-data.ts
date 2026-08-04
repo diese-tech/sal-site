@@ -82,6 +82,12 @@ type DbOrg = Omit<Org, "divisionId" | "logoInitials" | "logoGradient" | "primary
 
 type DbPlayer = Database["public"]["Tables"]["players"]["Row"];
 type DbPlayerInsert = Database["public"]["Tables"]["players"]["Insert"];
+// avatar_url is not yet in the vendored database.types.ts (that file is a
+// strict content-hash match against diese-tech/sal-database and can't be
+// hand-edited — see check:db-contract). Read it defensively off the raw row
+// instead of widening DbPlayer, so this keeps working once the pinned
+// contract catches up.
+type DbPlayerRowWithAvatar = DbPlayer & { avatar_url?: string | null };
 
 type DbMatch = Omit<Match, "divisionId" | "homeOrgId" | "awayOrgId" | "scheduledDate" | "scheduledTime" | "homeScore" | "awayScore" | "streamUrl" | "vodUrl" | "archivedAt" | "deletionScheduledAt" | "seasonId"> & {
   division_id: Match["divisionId"];
@@ -189,6 +195,7 @@ function fromDbPlayer(row: DbPlayer): LeaguePlayer {
     displayAlias: row.display_alias ?? undefined,
     avatarInitials: row.avatar_initials,
     avatarGradient: row.avatar_gradient,
+    avatarUrl: (row as DbPlayerRowWithAvatar).avatar_url ?? undefined,
     primaryRole: playerRoleSchema.parse(row.primary_role),
     secondaryRoles: z.array(playerRoleSchema).parse(row.secondary_roles),
     isStarter: row.is_starter,
@@ -663,6 +670,7 @@ export async function saveSeasonRosterAssignment(input: {
   orgId: string | null;
   divisionId: DivisionId | null;
   isCaptain: boolean;
+  legacyStatus?: LeaguePlayer["status"];
 }): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
@@ -696,6 +704,22 @@ export async function saveSeasonRosterAssignment(input: {
     divisionId = (data as { division_id: DivisionId }).division_id;
   }
   const isCaptain = input.orgId ? input.isCaptain : false;
+  const updatedAt = new Date().toISOString();
+
+  // A season/org has one captain. Clear the previous row first so replacing a
+  // captain through either admin surface cannot leave two captain badges. The
+  // database contract also enforces this invariant to close concurrent races.
+  if (input.orgId && isCaptain) {
+    const { error: clearCaptainError } = await supabase
+      .from("season_rosters")
+      .update({ is_captain: false, updated_at: updatedAt })
+      .eq("season_id", input.seasonId)
+      .eq("org_id", input.orgId)
+      .eq("is_captain", true)
+      .neq("player_id", input.playerId);
+    if (clearCaptainError) throw clearCaptainError;
+  }
+
   const { error } = await supabase.from("season_rosters").upsert({
     season_id: input.seasonId,
     player_id: input.playerId,
@@ -703,7 +727,7 @@ export async function saveSeasonRosterAssignment(input: {
     division_id: divisionId,
     is_captain: isCaptain,
     roster_status: input.orgId ? "active" : "free_agent",
-    updated_at: new Date().toISOString(),
+    updated_at: updatedAt,
   }, { onConflict: "season_id,player_id" });
   if (error) throw error;
 
@@ -722,10 +746,33 @@ export async function saveSeasonRosterAssignment(input: {
       .update({
         org_id: input.orgId,
         is_captain: isCaptain,
-        status: input.orgId ? "org-affiliated" : "free-agent",
+        status: input.legacyStatus ?? (input.orgId ? "org-affiliated" : "free-agent"),
       })
       .eq("id", input.playerId);
     if (playerError) throw playerError;
+
+    if (input.orgId && isCaptain) {
+      const { error: priorCaptainError } = await supabase
+        .from("players")
+        .update({ is_captain: false })
+        .eq("org_id", input.orgId)
+        .eq("is_captain", true)
+        .neq("id", input.playerId);
+      if (priorCaptainError) throw priorCaptainError;
+
+      const { error: orgCaptainError } = await supabase
+        .from("orgs")
+        .update({ captain_id: input.playerId })
+        .eq("id", input.orgId);
+      if (orgCaptainError) throw orgCaptainError;
+    } else if (input.orgId) {
+      const { error: orgCaptainError } = await supabase
+        .from("orgs")
+        .update({ captain_id: null })
+        .eq("id", input.orgId)
+        .eq("captain_id", input.playerId);
+      if (orgCaptainError) throw orgCaptainError;
+    }
   }
 
   await writeAuditLog("save_season_roster", "season", input.seasonId, {
@@ -733,6 +780,7 @@ export async function saveSeasonRosterAssignment(input: {
     orgId: input.orgId,
     divisionId,
     isCaptain,
+    legacyStatus: input.legacyStatus,
   });
 }
 
@@ -769,6 +817,46 @@ export async function saveOrg(org: Org): Promise<void> {
   const { error } = await supabase.from("orgs").upsert(toDbOrg(org));
   if (error) throw error;
   await writeAuditLog("save_org", "org", org.id, { name: org.name, tag: org.tag, divisionId: org.divisionId });
+}
+
+/**
+ * Keep the legacy Teams editor useful during preseason: saving an existing
+ * org enrolls that identity into the current season instead of forcing admins
+ * to duplicate it, and a selected captain becomes the season-scoped captain.
+ */
+export async function saveOrgForCurrentSeason(org: Org): Promise<void> {
+  await saveOrg(org);
+  const seasonId = await getCurrentSeasonId();
+  if (!seasonId) return;
+
+  if (org.captainId) {
+    await saveSeasonOrgAssignment(seasonId, org.id, org.divisionId);
+    await saveSeasonRosterAssignment({
+      seasonId,
+      playerId: org.captainId,
+      orgId: org.id,
+      divisionId: org.divisionId,
+      isCaptain: true,
+    });
+  } else {
+    const supabase = getSupabaseServerClient();
+    if (!supabase) throw new Error("Supabase env is missing.");
+    const updatedAt = new Date().toISOString();
+    const { error: rosterError } = await supabase
+      .from("season_rosters")
+      .update({ is_captain: false, updated_at: updatedAt })
+      .eq("season_id", seasonId)
+      .eq("org_id", org.id)
+      .eq("is_captain", true);
+    if (rosterError) throw rosterError;
+
+    const { error: playerError } = await supabase
+      .from("players")
+      .update({ is_captain: false })
+      .eq("org_id", org.id)
+      .eq("is_captain", true);
+    if (playerError) throw playerError;
+  }
 }
 
 // ─── Archive / soft-delete ──────────────────────────────────────────────────────────────────
@@ -1014,6 +1102,31 @@ export async function savePlayer(player: LeaguePlayer) {
 }
 
 /**
+ * The long-standing Edit Roster page edits global player identities. Mirror
+ * its assignment fields into the current season so a successful captain/team
+ * save is immediately visible on season-scoped public and admin reads.
+ */
+export async function savePlayerForCurrentSeason(player: LeaguePlayer): Promise<void> {
+  await savePlayer(player);
+  const seasonId = await getCurrentSeasonId();
+  if (!seasonId) return;
+
+  if (player.orgId) {
+    if (!player.divisionId) throw new Error("A team assignment requires a division.");
+    await saveSeasonOrgAssignment(seasonId, player.orgId, player.divisionId);
+  }
+
+  await saveSeasonRosterAssignment({
+    seasonId,
+    playerId: player.id,
+    orgId: player.orgId ?? null,
+    divisionId: player.divisionId ?? null,
+    isCaptain: player.isCaptain,
+    legacyStatus: player.status,
+  });
+}
+
+/**
  * Bulk upsert for the admin import (#74). A single PostgREST request executes
  * as one INSERT … ON CONFLICT statement, so the whole batch is atomic: any
  * row failure (e.g. an IGN unique violation) rolls back every row.
@@ -1147,6 +1260,7 @@ function fromDbRegistration(row: Record<string, unknown>): Registration {
     discordId: row.discord_id as string,
     discordUsername: row.discord_username as string,
     discordDisplayName: row.discord_display_name as string | undefined,
+    avatarUrl: (row.avatar_url as string | null | undefined) ?? undefined,
     seasonId: (row.season_id as string | null) ?? undefined,
     playerId: row.player_id as string | undefined,
     formData: (row.form_data as Record<string, string>) ?? {},
@@ -1180,18 +1294,53 @@ export async function getRegistrationByDiscordId(discordId: string): Promise<Reg
   return data ? fromDbRegistration(data) : null;
 }
 
+/**
+ * The shared resolve_registration_review RPC (owned by sal-database) creates
+ * or updates the approved registration's player row, but it predates
+ * avatar_url and copies a fixed column set that doesn't include it. Call this
+ * right after a successful approval to carry the avatar the admin's session
+ * captured at registration time onto the resulting player, without needing
+ * to touch that RPC.
+ */
+export async function copyRegistrationAvatarToPlayer(registrationId: string, playerId: string): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return;
+  const { data, error } = await supabase
+    .from("registrations")
+    .select("avatar_url")
+    .eq("id", registrationId)
+    .maybeSingle();
+  if (error) throw error;
+  const avatarUrl = (data as { avatar_url?: string | null } | null)?.avatar_url;
+  if (!avatarUrl) return;
+  const update: DbPlayerUpdateWithAvatar = { avatar_url: avatarUrl };
+  const { error: playerError } = await supabase
+    .from("players")
+    .update(update as unknown as Database["public"]["Tables"]["players"]["Update"])
+    .eq("id", playerId);
+  if (playerError) throw playerError;
+}
+
+// avatar_url is not yet in the vendored database.types.ts (see
+// DbPlayerRowWithAvatar above) — same treatment for registrations.
+type RegistrationInsertWithAvatar = Database["public"]["Tables"]["registrations"]["Insert"] & { avatar_url?: string | null };
+
 export async function createRegistration(reg: Omit<Registration, "status" | "createdAt">): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
-  const { error } = await supabase.from("registrations").insert({
+  const payload: RegistrationInsertWithAvatar = {
     id: reg.id,
     discord_id: reg.discordId,
     discord_username: reg.discordUsername,
     discord_display_name: reg.discordDisplayName ?? null,
+    avatar_url: reg.avatarUrl ?? null,
     season_id: reg.seasonId ?? null,
     player_id: reg.playerId ?? null,
     form_data: reg.formData,
-  });
+  };
+  const { error } = await supabase
+    .from("registrations")
+    .insert(payload as unknown as Database["public"]["Tables"]["registrations"]["Insert"]);
   if (error) throw error;
 }
 
@@ -1210,12 +1359,18 @@ export async function updateRegistrationStatus(
   await writeAuditLog("update_registration", "registration", id, { status, reviewerNote });
 }
 
-export async function claimPlayerProfile(discordId: string, playerId: string): Promise<void> {
+type DbPlayerUpdateWithAvatar = Database["public"]["Tables"]["players"]["Update"] & { avatar_url?: string };
+
+export async function claimPlayerProfile(discordId: string, playerId: string, avatarUrl?: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
+  const update: DbPlayerUpdateWithAvatar = { discord_id: discordId, profile_claimed: true };
+  // Only set on claim, never cleared — a claimed player without a fresh
+  // Discord session shouldn't lose whatever avatar they already captured.
+  if (avatarUrl) update.avatar_url = avatarUrl;
   const { error } = await supabase
     .from("players")
-    .update({ discord_id: discordId, profile_claimed: true })
+    .update(update as unknown as Database["public"]["Tables"]["players"]["Update"])
     .eq("id", playerId);
   if (error) throw error;
   await writeAuditLog("claim_player_profile", "player", playerId, { discordId });
@@ -1230,6 +1385,7 @@ export async function claimPlayerProfile(discordId: string, playerId: string): P
 export async function claimPlayerByDiscordUsername(
   discordId: string,
   discordUsername: string,
+  avatarUrl?: string,
 ): Promise<
   { ok: true; playerId: string } | { ok: false; reason: "not_found" | "already_claimed" | "discord_taken" | "ambiguous" }
 > {
@@ -1267,7 +1423,7 @@ export async function claimPlayerByDiscordUsername(
     .limit(1);
   if (existing?.length) return { ok: false, reason: "discord_taken" };
 
-  await claimPlayerProfile(discordId, player.id as string);
+  await claimPlayerProfile(discordId, player.id as string, avatarUrl);
   return { ok: true, playerId: player.id as string };
 }
 

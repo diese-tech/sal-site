@@ -30,6 +30,7 @@ vi.mock("@/lib/supabase-auth-server", () => ({
   getDiscordId: vi.fn(),
   getDiscordUsername: vi.fn(),
   getDiscordDisplayName: vi.fn(),
+  getDiscordAvatarUrl: vi.fn(),
 }));
 
 vi.mock("@/lib/league-data", () => ({
@@ -330,7 +331,7 @@ describe("POST /api/auth/claim — Flow B", () => {
     const { POST } = await import("@/app/api/auth/claim/route");
     await POST(claimRequest());
 
-    expect(mockClaimPlayer).toHaveBeenCalledWith(DISCORD_ID, DISCORD_USERNAME);
+    expect(mockClaimPlayer).toHaveBeenCalledWith(DISCORD_ID, DISCORD_USERNAME, undefined);
   });
 
   it("rate-limits: returns 429 when too many attempts", async () => {
@@ -388,7 +389,7 @@ describe("Discord username matching behaviour (documented contract)", () => {
     const { POST } = await import("@/app/api/auth/claim/route");
     await POST(claimRequest());
 
-    expect(mockClaimPlayer).toHaveBeenCalledWith(DISCORD_ID, "alice_99");
+    expect(mockClaimPlayer).toHaveBeenCalledWith(DISCORD_ID, "alice_99", undefined);
     // Implication: if the user has changed their Discord username since the
     // player row was imported, claimPlayerByDiscordUsername will return
     // not_found — the user falls through to the standard registration path.
