@@ -670,6 +670,7 @@ export async function saveSeasonRosterAssignment(input: {
   orgId: string | null;
   divisionId: DivisionId | null;
   isCaptain: boolean;
+  legacyStatus?: LeaguePlayer["status"];
 }): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
@@ -703,6 +704,22 @@ export async function saveSeasonRosterAssignment(input: {
     divisionId = (data as { division_id: DivisionId }).division_id;
   }
   const isCaptain = input.orgId ? input.isCaptain : false;
+  const updatedAt = new Date().toISOString();
+
+  // A season/org has one captain. Clear the previous row first so replacing a
+  // captain through either admin surface cannot leave two captain badges. The
+  // database contract also enforces this invariant to close concurrent races.
+  if (input.orgId && isCaptain) {
+    const { error: clearCaptainError } = await supabase
+      .from("season_rosters")
+      .update({ is_captain: false, updated_at: updatedAt })
+      .eq("season_id", input.seasonId)
+      .eq("org_id", input.orgId)
+      .eq("is_captain", true)
+      .neq("player_id", input.playerId);
+    if (clearCaptainError) throw clearCaptainError;
+  }
+
   const { error } = await supabase.from("season_rosters").upsert({
     season_id: input.seasonId,
     player_id: input.playerId,
@@ -710,7 +727,7 @@ export async function saveSeasonRosterAssignment(input: {
     division_id: divisionId,
     is_captain: isCaptain,
     roster_status: input.orgId ? "active" : "free_agent",
-    updated_at: new Date().toISOString(),
+    updated_at: updatedAt,
   }, { onConflict: "season_id,player_id" });
   if (error) throw error;
 
@@ -729,10 +746,33 @@ export async function saveSeasonRosterAssignment(input: {
       .update({
         org_id: input.orgId,
         is_captain: isCaptain,
-        status: input.orgId ? "org-affiliated" : "free-agent",
+        status: input.legacyStatus ?? (input.orgId ? "org-affiliated" : "free-agent"),
       })
       .eq("id", input.playerId);
     if (playerError) throw playerError;
+
+    if (input.orgId && isCaptain) {
+      const { error: priorCaptainError } = await supabase
+        .from("players")
+        .update({ is_captain: false })
+        .eq("org_id", input.orgId)
+        .eq("is_captain", true)
+        .neq("id", input.playerId);
+      if (priorCaptainError) throw priorCaptainError;
+
+      const { error: orgCaptainError } = await supabase
+        .from("orgs")
+        .update({ captain_id: input.playerId })
+        .eq("id", input.orgId);
+      if (orgCaptainError) throw orgCaptainError;
+    } else if (input.orgId) {
+      const { error: orgCaptainError } = await supabase
+        .from("orgs")
+        .update({ captain_id: null })
+        .eq("id", input.orgId)
+        .eq("captain_id", input.playerId);
+      if (orgCaptainError) throw orgCaptainError;
+    }
   }
 
   await writeAuditLog("save_season_roster", "season", input.seasonId, {
@@ -740,6 +780,7 @@ export async function saveSeasonRosterAssignment(input: {
     orgId: input.orgId,
     divisionId,
     isCaptain,
+    legacyStatus: input.legacyStatus,
   });
 }
 
@@ -776,6 +817,46 @@ export async function saveOrg(org: Org): Promise<void> {
   const { error } = await supabase.from("orgs").upsert(toDbOrg(org));
   if (error) throw error;
   await writeAuditLog("save_org", "org", org.id, { name: org.name, tag: org.tag, divisionId: org.divisionId });
+}
+
+/**
+ * Keep the legacy Teams editor useful during preseason: saving an existing
+ * org enrolls that identity into the current season instead of forcing admins
+ * to duplicate it, and a selected captain becomes the season-scoped captain.
+ */
+export async function saveOrgForCurrentSeason(org: Org): Promise<void> {
+  await saveOrg(org);
+  const seasonId = await getCurrentSeasonId();
+  if (!seasonId) return;
+
+  if (org.captainId) {
+    await saveSeasonOrgAssignment(seasonId, org.id, org.divisionId);
+    await saveSeasonRosterAssignment({
+      seasonId,
+      playerId: org.captainId,
+      orgId: org.id,
+      divisionId: org.divisionId,
+      isCaptain: true,
+    });
+  } else {
+    const supabase = getSupabaseServerClient();
+    if (!supabase) throw new Error("Supabase env is missing.");
+    const updatedAt = new Date().toISOString();
+    const { error: rosterError } = await supabase
+      .from("season_rosters")
+      .update({ is_captain: false, updated_at: updatedAt })
+      .eq("season_id", seasonId)
+      .eq("org_id", org.id)
+      .eq("is_captain", true);
+    if (rosterError) throw rosterError;
+
+    const { error: playerError } = await supabase
+      .from("players")
+      .update({ is_captain: false })
+      .eq("org_id", org.id)
+      .eq("is_captain", true);
+    if (playerError) throw playerError;
+  }
 }
 
 // ─── Archive / soft-delete ──────────────────────────────────────────────────────────────────
@@ -1018,6 +1099,31 @@ export async function savePlayer(player: LeaguePlayer) {
   const { error } = await supabase.from("players").upsert(toDbPlayer(player));
   if (error) throw error;
   await writeAuditLog("save_player", "player", player.id, { ign: player.ign, orgId: player.orgId, status: player.status });
+}
+
+/**
+ * The long-standing Edit Roster page edits global player identities. Mirror
+ * its assignment fields into the current season so a successful captain/team
+ * save is immediately visible on season-scoped public and admin reads.
+ */
+export async function savePlayerForCurrentSeason(player: LeaguePlayer): Promise<void> {
+  await savePlayer(player);
+  const seasonId = await getCurrentSeasonId();
+  if (!seasonId) return;
+
+  if (player.orgId) {
+    if (!player.divisionId) throw new Error("A team assignment requires a division.");
+    await saveSeasonOrgAssignment(seasonId, player.orgId, player.divisionId);
+  }
+
+  await saveSeasonRosterAssignment({
+    seasonId,
+    playerId: player.id,
+    orgId: player.orgId ?? null,
+    divisionId: player.divisionId ?? null,
+    isCaptain: player.isCaptain,
+    legacyStatus: player.status,
+  });
 }
 
 /**
