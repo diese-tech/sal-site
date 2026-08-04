@@ -81,6 +81,69 @@ describe("PATCH /api/admin/registrations/[id]", () => {
     expect(resolveRegistration).not.toHaveBeenCalled();
   });
 
+  it("copies the registration's captured avatar onto the resulting player after approval", async () => {
+    const resolveRegistration = vi.fn().mockResolvedValue({
+      code: "applied",
+      registrationId: "registration-1",
+      finalStatus: "approved",
+      applied: true,
+      playerId: "player-1",
+    });
+    const copyRegistrationAvatar = vi.fn().mockResolvedValue(undefined);
+    const handler = createRegistrationReviewHandler({
+      getSession: () => ({ discordId: "admin-1" }),
+      resolveRegistration,
+      copyRegistrationAvatar,
+    });
+
+    const response = await handler(request({ status: "approved" }), routeContext);
+
+    expect(response.status).toBe(200);
+    expect(copyRegistrationAvatar).toHaveBeenCalledWith("registration-1", "player-1");
+  });
+
+  it("still returns success when the avatar copy fails — it must not undo an already-applied approval", async () => {
+    const resolveRegistration = vi.fn().mockResolvedValue({
+      code: "applied",
+      registrationId: "registration-1",
+      finalStatus: "approved",
+      applied: true,
+      playerId: "player-1",
+    });
+    const copyRegistrationAvatar = vi.fn().mockRejectedValue(new Error("avatar copy boom"));
+    const handler = createRegistrationReviewHandler({
+      getSession: () => ({ discordId: "admin-1" }),
+      resolveRegistration,
+      copyRegistrationAvatar,
+    });
+
+    const response = await handler(request({ status: "approved" }), routeContext);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ ok: true, playerId: "player-1" });
+  });
+
+  it("does not call the avatar copy when rejecting a registration", async () => {
+    const resolveRegistration = vi.fn().mockResolvedValue({
+      code: "applied",
+      registrationId: "registration-1",
+      finalStatus: "rejected",
+      applied: true,
+      playerId: null,
+    });
+    const copyRegistrationAvatar = vi.fn();
+    const handler = createRegistrationReviewHandler({
+      getSession: () => ({ discordId: "admin-1" }),
+      resolveRegistration,
+      copyRegistrationAvatar,
+    });
+
+    const response = await handler(request({ status: "rejected", reviewerNote: "Not eligible" }), routeContext);
+
+    expect(response.status).toBe(200);
+    expect(copyRegistrationAvatar).not.toHaveBeenCalled();
+  });
+
   it("fails closed when the RPC returns an unexpected contract", async () => {
     const handler = createRegistrationReviewHandler({
       getSession: () => ({ discordId: "admin-1" }),

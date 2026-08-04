@@ -20,6 +20,9 @@ export interface Registration {
   discordId: string;
   discordUsername: string;
   discordDisplayName?: string;
+  /** Discord CDN avatar URL captured at signup — carried onto the resulting
+   * player's avatarUrl at admin-approval time (see #235 follow-up). */
+  avatarUrl?: string;
   seasonId?: string;
   playerId?: string;
   formData: Record<string, string>;

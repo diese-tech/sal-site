@@ -81,3 +81,38 @@ export function getDiscordUsername(user: User): string {
 export function getDiscordDisplayName(user: User): string {
   return (user.user_metadata?.full_name as string | undefined) ?? getDiscordUsername(user);
 }
+
+const DISCORD_CDN_HOSTS = new Set(["cdn.discordapp.com", "media.discordapp.net"]);
+
+function isDiscordCdnAvatarUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && DISCORD_CDN_HOSTS.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Discord CDN profile picture URL, if the OAuth session returned one.
+ * Confirmed present as a fully-formed `https://cdn.discordapp.com/avatars/...`
+ * URL in user_metadata.avatar_url for this project's Discord OIDC provider —
+ * no need to construct/size it ourselves.
+ *
+ * user_metadata is directly writable by the signed-in user via
+ * `supabase.auth.updateUser({ data })`, unlike identity_data (which mirrors
+ * what Discord itself returned at OAuth time and isn't user-editable) — so
+ * prefer identity_data, and require *either* source to actually be a Discord
+ * CDN URL before trusting it. This value is rendered as an unoptimized public
+ * <Image> on the player directory, so an unvalidated value here would let any
+ * player point every visitor's browser at an arbitrary attacker-controlled
+ * URL (Codex review on #236).
+ */
+export function getDiscordAvatarUrl(user: User): string | undefined {
+  const discordIdentity = user.identities?.find((i) => i.provider === "discord");
+  const candidate =
+    (discordIdentity?.identity_data?.avatar_url as string | undefined) ??
+    (user.user_metadata?.avatar_url as string | undefined);
+  return isDiscordCdnAvatarUrl(candidate) ? candidate : undefined;
+}

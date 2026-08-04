@@ -116,6 +116,7 @@ export default async function PlayerPage({
           <AvatarMark
             initials={player.avatarInitials}
             gradient={player.avatarGradient}
+            avatarUrl={player.avatarUrl}
             className="h-20 w-20 shrink-0 rounded-2xl border-4 border-slate-950 text-2xl shadow-xl"
           />
           <div className="min-w-0 flex-1 pb-1">

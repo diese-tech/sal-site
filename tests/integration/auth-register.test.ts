@@ -28,6 +28,7 @@ vi.mock("@/lib/supabase-auth-server", async () => {
     getDiscordId: actual.getDiscordId,
     getDiscordUsername: actual.getDiscordUsername,
     getDiscordDisplayName: actual.getDiscordDisplayName,
+    getDiscordAvatarUrl: actual.getDiscordAvatarUrl,
   };
 });
 

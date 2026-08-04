@@ -13,6 +13,11 @@
 --   - player_stats    -- 008_player_stats_read.sql adds a SELECT policy
 --   - pending_actions -- 022_pending_result_uniqueness.sql adds a partial unique index
 --
+-- players.avatar_url and registrations.avatar_url are the same situation applied to
+-- columns rather than whole tables: diese-tech/sal-database added avatar_url to both
+-- live tables (Discord avatar capture, #236) after schema.sql/004_auth.sql last
+-- touched their shape.
+--
 -- Column shapes below are taken from the generated src/types/database.types.ts (the
 -- checked contract for the live schema, see scripts/db-contract.mjs) restricted to the
 -- columns those migrations actually touch or reference. This file plus schema.sql are
@@ -26,6 +31,31 @@ create table if not exists org_brands (
   id  text primary key,
   name text not null,
   tag  text not null
+);
+
+-- players.avatar_url / registrations.avatar_url: Discord avatar capture (#236)
+-- added these columns to the live, externally-owned schema after schema.sql
+-- (players) and supabase/migrations/004_auth.sql (registrations) were last
+-- touched. 004_auth.sql is frozen historical evidence (see
+-- supabase/migrations/README.md) and must not be edited, so registrations is
+-- shadow-created here with its full current shape, ahead of 004_auth.sql's
+-- own CREATE TABLE IF NOT EXISTS -- which becomes an inert no-op once this
+-- runs first, same pattern as player_stats/pending_actions below.
+alter table players add column if not exists avatar_url text;
+
+create table if not exists registrations (
+  id text primary key,
+  discord_id text not null unique,
+  discord_username text not null,
+  discord_display_name text,
+  season_id text references seasons(id) on delete set null,
+  player_id text references players(id) on delete set null,
+  avatar_url text,
+  form_data jsonb not null default '{}'::jsonb,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  created_at timestamptz not null default now(),
+  reviewed_at timestamptz,
+  reviewer_note text
 );
 
 -- Matches 008_player_stats_read.sql's description: "created by the salbot migration

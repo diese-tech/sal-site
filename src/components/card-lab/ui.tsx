@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { PlayerRole, PlayerStatus } from "@/types/card-lab";
 import type { LabEditorConfig } from "@/types/lab-editor";
 import { cn } from "@/lib/utils";
@@ -123,14 +124,30 @@ export function StatusChip({ status, label }: { status: PlayerStatus; label?: st
 export function AvatarMark({
   initials,
   gradient,
+  avatarUrl,
   className,
   style,
 }: {
   initials: string;
   gradient: string;
+  avatarUrl?: string;
   className?: string;
   style?: CSSProperties;
 }) {
+  if (avatarUrl) {
+    return (
+      <div
+        className={cn(
+          "relative shrink-0 overflow-hidden rounded-2xl border border-white/25 shadow-lg shadow-black/30",
+          className,
+        )}
+        style={style}
+      >
+        <Image src={avatarUrl} alt="" fill sizes="96px" className="object-cover" unoptimized />
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
