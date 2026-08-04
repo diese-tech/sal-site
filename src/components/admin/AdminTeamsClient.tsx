@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { DivisionId, LeagueData, Org } from "@/types/league";
 import { OrgLogo } from "@/components/card-lab/ui";
 import { cn } from "@/lib/utils";
 
 const inputClass = "w-full rounded-lg border border-white/10 bg-black/45 px-3 py-2 text-sm font-semibold text-white outline-none focus:border-cyan-300/50";
+
+type Notice = { tone: "success" | "error"; text: string } | null;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -43,7 +46,7 @@ export function AdminTeamsClient({
   const router = useRouter();
   const [editing, setEditing] = useState<Org | null>(null);
   const [isNew, setIsNew] = useState(false);
-  const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState<Notice>(null);
   const [saving, setSaving] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [confirmScheduleId, setConfirmScheduleId] = useState<string | null>(null);
@@ -55,23 +58,25 @@ export function AdminTeamsClient({
   function openEdit(org: Org) {
     setEditing({ ...org });
     setIsNew(false);
-    setMessage("");
+    setNotice(null);
   }
 
   function openNew() {
     setEditing(emptyOrg());
     setIsNew(true);
-    setMessage("");
+    setNotice(null);
   }
 
   async function save() {
     if (!editing) return;
     if (!editing.name.trim() || !editing.tag.trim()) {
-      setMessage("Name and Tag are required.");
+      setNotice({ tone: "error", text: "Name and Tag are required." });
       return;
     }
     setSaving(true);
-    setMessage("");
+    setNotice(null);
+    const wasNew = isNew;
+    const orgName = editing.name;
     const res = await fetch("/api/admin/orgs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -80,16 +85,17 @@ export function AdminTeamsClient({
     setSaving(false);
     if (!res.ok) {
       const json = await res.json().catch(() => null) as { error?: string } | null;
-      setMessage(json?.error ? `Save failed: ${json.error}` : "Save failed.");
+      setNotice({ tone: "error", text: json?.error ? `Save failed: ${json.error}` : "Save failed." });
       return;
     }
     setEditing(null);
+    setNotice({ tone: "success", text: wasNew ? `Created ${orgName}.` : `Saved ${orgName}.` });
     router.refresh();
   }
 
   async function doArchive(org: Org, unarchive = false) {
     setActionLoadingId(org.id);
-    setMessage("");
+    setNotice(null);
     const res = await fetch(`/api/admin/orgs/${org.id}/archive`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -98,23 +104,25 @@ export function AdminTeamsClient({
     setActionLoadingId(null);
     if (!res.ok) {
       const json = await res.json().catch(() => null) as { error?: string } | null;
-      setMessage(json?.error ?? "Archive action failed.");
+      setNotice({ tone: "error", text: json?.error ?? "Archive action failed." });
       return;
     }
+    setNotice({ tone: "success", text: unarchive ? `Unarchived ${org.name}.` : `Archived ${org.name}.` });
     router.refresh();
   }
 
   async function doScheduleDelete(org: Org) {
     setActionLoadingId(org.id);
     setConfirmScheduleId(null);
-    setMessage("");
+    setNotice(null);
     const res = await fetch(`/api/admin/orgs/${org.id}/schedule-delete`, { method: "POST" });
     setActionLoadingId(null);
     if (!res.ok) {
       const json = await res.json().catch(() => null) as { error?: string } | null;
-      setMessage(json?.error ?? "Schedule delete failed.");
+      setNotice({ tone: "error", text: json?.error ?? "Schedule delete failed." });
       return;
     }
+    setNotice({ tone: "success", text: `Scheduled ${org.name} for deletion.` });
     router.refresh();
   }
 
@@ -215,15 +223,35 @@ export function AdminTeamsClient({
     );
   }
 
+  const rosterHref = `/admin/seasons/${encodeURIComponent(data.season.id)}/roster`;
+
   return (
     <div className="space-y-5">
+      <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 p-4">
+        <p className="text-sm font-semibold text-slate-200">
+          This screen edits league-wide team identities. Season membership is decided per season — a team returning from a
+          previous season already exists here in the catalog, so it should be <strong className="text-white">enrolled into the season, not recreated</strong>.
+        </p>
+        {isSuperAdmin ? (
+          <Link href={rosterHref} className="mt-2 inline-block text-sm font-black uppercase text-cyan-300 hover:text-cyan-100">
+            Manage {data.season.name} Roster →
+          </Link>
+        ) : (
+          <p className="mt-2 text-xs font-semibold text-slate-400">A super admin performs season enrollment from the Manage Roster screen.</p>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-400">
             {activeOrgs.length} active team{activeOrgs.length !== 1 ? "s" : ""}
             {archivedOrgs.length > 0 && ` · ${archivedOrgs.length} archived`}
           </p>
-          {message && <p className="mt-1 text-sm font-semibold text-orange-200">{message}</p>}
+          {notice && (
+            <p role={notice.tone === "success" ? "status" : "alert"} className={cn("mt-1 text-sm font-semibold", notice.tone === "success" ? "text-emerald-300" : "text-orange-200")}>
+              {notice.text}
+            </p>
+          )}
         </div>
         {isSuperAdmin && (
           <button

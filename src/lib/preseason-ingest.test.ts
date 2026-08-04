@@ -66,6 +66,11 @@ class FakeQuery {
     return this;
   }
 
+  neq(column: string, value: unknown) {
+    this.state.eqs.push([`${column} not`, value]);
+    return this;
+  }
+
   single() {
     return this.execute();
   }
