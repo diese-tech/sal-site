@@ -9,7 +9,7 @@ import Link from "next/link";
 export const metadata = { title: "Admin - SAL" };
 
 export default async function AdminOverviewPage() {
-  await requireAdmin();
+  const session = await requireAdmin();
   const [{ orgs, players, matches, standings, season }, auditLog] = await Promise.all([
     getLeagueData(),
     getAuditLog(30),
@@ -31,6 +31,19 @@ export default async function AdminOverviewPage() {
     })(),
   }));
 
+  const navCards = [
+    { href: "/admin/matches", title: "Edit Schedule", body: "Create matches, change dates, set live status, and enter scores." },
+    { href: "/admin/players", title: "Edit Roster", body: "Edit global player profiles — Discord, IGN, role, and status." },
+    { href: "/admin/standings", title: "Edit Standings", body: "Use completed match scores to recalculate division tables." },
+    ...(session.role === "super_admin"
+      ? [{
+          href: `/admin/seasons/${encodeURIComponent(season.id)}/roster`,
+          title: "Manage Season Roster",
+          body: `Enroll orgs and players into ${season.name}. Returning orgs are enrolled here, not recreated on Teams.`,
+        }]
+      : []),
+  ];
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
       <div className="mb-8 overflow-hidden rounded-2xl border border-cyan-300/15 bg-slate-950/84 shadow-2xl shadow-cyan-950/20 backdrop-blur">
@@ -51,12 +64,8 @@ export default async function AdminOverviewPage() {
         <AdminStatCard label="Scheduled Matches" value={scheduledMatches} sub={liveMatches > 0 ? `${liveMatches} live now` : undefined} accent="orange" />
       </div>
 
-      <div className="mb-8 grid gap-4 md:grid-cols-3">
-        {[
-          { href: "/admin/matches", title: "Edit Schedule", body: "Create matches, change dates, set live status, and enter scores." },
-          { href: "/admin/players", title: "Edit Roster", body: "Assign players to orgs and update starter, captain, role, and status." },
-          { href: "/admin/standings", title: "Edit Standings", body: "Use completed match scores to recalculate division tables." },
-        ].map((item) => (
+      <div className={cn("mb-8 grid gap-4 md:grid-cols-2", navCards.length > 3 ? "lg:grid-cols-4" : "lg:grid-cols-3")}>
+        {navCards.map((item) => (
           <Link key={item.href} href={item.href} className="rounded-2xl border border-emerald-300/15 bg-slate-950/72 p-5 shadow-xl shadow-emerald-950/10 transition hover:border-emerald-300/35 hover:bg-white/[0.04]">
             <p className="text-lg font-black text-white">{item.title}</p>
             <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-400">{item.body}</p>

@@ -2,11 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { DivisionId, LeagueData, LeaguePlayer } from "@/types/league";
 import type { PlayerRole, PlayerStatus } from "@/types/card-lab";
 import { cn } from "@/lib/utils";
 
 const roles: PlayerRole[] = ["Solo", "Jungle", "Mid", "Carry", "Support", "Flex"];
+
+type Notice = { tone: "success" | "error"; text: string } | null;
 
 function emptyPlayer(): LeaguePlayer {
   return {
@@ -33,7 +36,7 @@ export function AdminPlayersClient({
   const router = useRouter();
   const [editing, setEditing] = useState<LeaguePlayer | null>(null);
   const [isNew, setIsNew] = useState(false);
-  const [message, setMessage] = useState("");
+  const [notice, setNotice] = useState<Notice>(null);
   const [saving, setSaving] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [confirmScheduleId, setConfirmScheduleId] = useState<string | null>(null);
@@ -62,19 +65,19 @@ export function AdminPlayersClient({
   function openEdit(player: LeaguePlayer) {
     setEditing({ ...player });
     setIsNew(false);
-    setMessage("");
+    setNotice(null);
   }
 
   function openNew() {
     setEditing(emptyPlayer());
     setIsNew(true);
-    setMessage("");
+    setNotice(null);
   }
 
   async function save() {
     if (!editing) return;
     setSaving(true);
-    setMessage("");
+    setNotice(null);
     const org = getOrg(editing.orgId);
     const status: PlayerStatus = editing.orgId ? "org-affiliated" : editing.status;
     const payload: LeaguePlayer = {
@@ -83,6 +86,8 @@ export function AdminPlayersClient({
       divisionId: org?.divisionId ?? editing.divisionId,
       status,
     };
+    const wasNew = isNew;
+    const playerName = payload.ign || "player";
     const res = await fetch("/api/admin/players", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -91,16 +96,17 @@ export function AdminPlayersClient({
     setSaving(false);
     if (!res.ok) {
       const json = await res.json().catch(() => null) as { error?: string } | null;
-      setMessage(json?.error ? `Save failed: ${json.error}` : "Save failed. Check Supabase env and admin session.");
+      setNotice({ tone: "error", text: json?.error ? `Save failed: ${json.error}` : "Save failed. Check Supabase env and admin session." });
       return;
     }
     setEditing(null);
+    setNotice({ tone: "success", text: wasNew ? `Created ${playerName}.` : `Saved ${playerName}.` });
     router.refresh();
   }
 
   async function doArchive(player: LeaguePlayer, unarchive = false) {
     setActionLoadingId(player.id);
-    setMessage("");
+    setNotice(null);
     const res = await fetch(`/api/admin/players/${player.id}/archive`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -109,23 +115,25 @@ export function AdminPlayersClient({
     setActionLoadingId(null);
     if (!res.ok) {
       const json = await res.json().catch(() => null) as { error?: string } | null;
-      setMessage(json?.error ?? "Archive action failed.");
+      setNotice({ tone: "error", text: json?.error ?? "Archive action failed." });
       return;
     }
+    setNotice({ tone: "success", text: unarchive ? `Unarchived ${player.ign}.` : `Archived ${player.ign}.` });
     router.refresh();
   }
 
   async function doScheduleDelete(player: LeaguePlayer) {
     setActionLoadingId(player.id);
     setConfirmScheduleId(null);
-    setMessage("");
+    setNotice(null);
     const res = await fetch(`/api/admin/players/${player.id}/schedule-delete`, { method: "POST" });
     setActionLoadingId(null);
     if (!res.ok) {
       const json = await res.json().catch(() => null) as { error?: string } | null;
-      setMessage(json?.error ?? "Schedule delete failed.");
+      setNotice({ tone: "error", text: json?.error ?? "Schedule delete failed." });
       return;
     }
+    setNotice({ tone: "success", text: `Scheduled ${player.ign} for deletion.` });
     router.refresh();
   }
 
@@ -214,15 +222,35 @@ export function AdminPlayersClient({
     );
   }
 
+  const rosterHref = `/admin/seasons/${encodeURIComponent(data.season.id)}/roster`;
+
   return (
     <div className="space-y-5">
+      <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 p-4">
+        <p className="text-sm font-semibold text-slate-200">
+          This screen edits league-wide player identities. Season membership — which team a player is on, and who is captain —
+          is decided per season. A returning player&apos;s org should be <strong className="text-white">enrolled into the season, not recreated here</strong>.
+        </p>
+        {isSuperAdmin ? (
+          <Link href={rosterHref} className="mt-2 inline-block text-sm font-black uppercase text-cyan-300 hover:text-cyan-100">
+            Manage {data.season.name} Roster →
+          </Link>
+        ) : (
+          <p className="mt-2 text-xs font-semibold text-slate-400">A super admin performs season enrollment from the Manage Roster screen.</p>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-400">
             {activePlayers.length} active · {filtered.length} shown
             {archivedPlayers.length > 0 && ` · ${archivedPlayers.length} archived`}
           </p>
-          {message && <p className="mt-1 text-sm font-semibold text-orange-200">{message}</p>}
+          {notice && (
+            <p role={notice.tone === "success" ? "status" : "alert"} className={cn("mt-1 text-sm font-semibold", notice.tone === "success" ? "text-emerald-300" : "text-orange-200")}>
+              {notice.text}
+            </p>
+          )}
         </div>
         {isSuperAdmin && (
           <button onClick={openNew} className="rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-4 py-2 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20">
