@@ -820,8 +820,8 @@ export async function saveOrgForCurrentSeason(org: Org): Promise<void> {
   const seasonId = await getCurrentSeasonId();
   if (!seasonId) return;
 
-  await saveSeasonOrgAssignment(seasonId, org.id, org.divisionId);
   if (org.captainId) {
+    await saveSeasonOrgAssignment(seasonId, org.id, org.divisionId);
     await saveSeasonRosterAssignment({
       seasonId,
       playerId: org.captainId,

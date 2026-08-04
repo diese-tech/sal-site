@@ -362,6 +362,8 @@ describe("legacy admin forms synchronize the current season", () => {
 
     await saveOrgForCurrentSeason({ ...org, captainId: undefined });
 
+    expect(executed.some((q) => q.table === "season_orgs" && q.op === "upsert")).toBe(false);
+
     expect(executed.find((q) =>
       q.table === "season_rosters"
       && q.op === "update"
