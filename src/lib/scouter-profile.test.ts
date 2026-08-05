@@ -5,10 +5,20 @@ const participantRows = [
   {
     id: "participant-2",
     side: "chaos",
+    raw_ign: "Player One",
+    player_level: 18,
     kills: 2,
     deaths: 4,
     assists: 6,
+    gpm: 450,
     player_damage: 12000,
+    minion_damage: 10000,
+    jungle_damage: null,
+    structure_damage: 0,
+    damage_taken: 22000,
+    damage_mitigated: 30000,
+    self_healing: 500,
+    ally_healing: 1000,
     wards_placed: 3,
     role: "support",
     god: { name: "Ymir" },
@@ -32,10 +42,20 @@ const participantRows = [
   {
     id: "participant-1",
     side: "order",
+    raw_ign: "Player One",
+    player_level: 20,
     kills: 8,
     deaths: 2,
     assists: 10,
+    gpm: 600,
     player_damage: 28000,
+    minion_damage: 18000,
+    jungle_damage: 5000,
+    structure_damage: 4000,
+    damage_taken: 15000,
+    damage_mitigated: null,
+    self_healing: 0,
+    ally_healing: 2500,
     wards_placed: 5,
     role: "mid",
     god: { name: "Ra" },
@@ -59,10 +79,20 @@ const participantRows = [
   {
     id: "participant-old",
     side: "chaos",
+    raw_ign: "Legacy IGN",
+    player_level: null,
     kills: 4,
     deaths: 2,
     assists: 4,
+    gpm: null,
     player_damage: 18000,
+    minion_damage: null,
+    jungle_damage: null,
+    structure_damage: null,
+    damage_taken: null,
+    damage_mitigated: null,
+    self_healing: null,
+    ally_healing: null,
     wards_placed: 2,
     role: "solo",
     god: null,
@@ -165,11 +195,31 @@ describe("getPlayerScouterProfile", () => {
       losses: 1,
       averageKda: 5.5,
       averageDamage: 20000,
+      averageGpm: 525,
+      averageMinionDamage: 14000,
+      averageJungleDamage: 5000,
+      averageStructureDamage: 2000,
+      averageDamageTaken: 18500,
+      averageDamageMitigated: 30000,
+      averageSelfHealing: 250,
+      averageAllyHealing: 1750,
+      averageWardsPlaced: 4,
     });
     expect(profile.games.map((game) => game.id)).toEqual(["game-2", "game-1"]);
     expect(profile.games[0]).toMatchObject({
       matchId: "match-2",
+      rawIgn: "Player One",
+      side: "chaos",
       godName: "Ymir",
+      playerLevel: 18,
+      gpm: 450,
+      minionDamage: 10000,
+      jungleDamage: null,
+      structureDamage: 0,
+      damageTaken: 22000,
+      damageMitigated: 30000,
+      selfHealing: 500,
+      allyHealing: 1000,
       won: false,
     });
   });
@@ -188,8 +238,17 @@ describe("getPlayerScouterProfile", () => {
       gamesPlayed: 1,
       wins: 1,
       losses: 0,
+      averageDamage: 18000,
+      averageGpm: null,
+      averageDamageTaken: null,
+      averageWardsPlaced: 2,
     });
-    expect(profile.games[0]).toMatchObject({ godName: null, role: "solo" });
+    expect(profile.games[0]).toMatchObject({
+      rawIgn: "Legacy IGN",
+      godName: null,
+      role: "solo",
+      gpm: null,
+    });
   });
 
   it("returns an empty current-season view when the player has no scouter games", async () => {
@@ -204,6 +263,11 @@ describe("getPlayerScouterProfile", () => {
     expect(profile.selectedSeason?.id).toBe("preseason2");
     expect(profile.availableSeasons).toEqual([]);
     expect(profile.games).toEqual([]);
-    expect(profile.summary.gamesPlayed).toBe(0);
+    expect(profile.summary).toMatchObject({
+      gamesPlayed: 0,
+      averageDamage: null,
+      averageGpm: null,
+      averageDamageMitigated: null,
+    });
   });
 });
