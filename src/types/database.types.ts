@@ -1465,15 +1465,18 @@ export type Database = {
           damage_dealt: number | null
           damage_mitigated: number | null
           deaths: number | null
+          division_id: string | null
           game_number: number
           god_played: string | null
           healing_done: number | null
           id: string
           kills: number | null
           match_id: string
+          org_id: string | null
           pending_stat_record_id: string | null
           player_id: string
           role: string | null
+          season_id: string | null
           won: boolean | null
         }
         Insert: {
@@ -1482,15 +1485,18 @@ export type Database = {
           damage_dealt?: number | null
           damage_mitigated?: number | null
           deaths?: number | null
+          division_id?: string | null
           game_number?: number
           god_played?: string | null
           healing_done?: number | null
           id?: string
           kills?: number | null
           match_id: string
+          org_id?: string | null
           pending_stat_record_id?: string | null
           player_id: string
           role?: string | null
+          season_id?: string | null
           won?: boolean | null
         }
         Update: {
@@ -1499,15 +1505,18 @@ export type Database = {
           damage_dealt?: number | null
           damage_mitigated?: number | null
           deaths?: number | null
+          division_id?: string | null
           game_number?: number
           god_played?: string | null
           healing_done?: number | null
           id?: string
           kills?: number | null
           match_id?: string
+          org_id?: string | null
           pending_stat_record_id?: string | null
           player_id?: string
           role?: string | null
+          season_id?: string | null
           won?: boolean | null
         }
         Relationships: [
@@ -1531,6 +1540,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "players"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_stats_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_stats_season_org_division_fkey"
+            columns: ["season_id", "org_id", "division_id"]
+            isOneToOne: false
+            referencedRelation: "season_orgs"
+            referencedColumns: ["season_id", "org_id", "division_id"]
           },
         ]
       }
@@ -1671,6 +1694,56 @@ export type Database = {
             columns: ["season_id"]
             isOneToOne: false
             referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scouter_game_corrections: {
+        Row: {
+          actor_discord_id: string
+          correction_key: string
+          created_at: string
+          expected_revision: number
+          id: string
+          new_value_json: Json
+          old_value_json: Json
+          reason: string
+          request_json: Json
+          resulting_revision: number
+          scouter_game_id: string
+        }
+        Insert: {
+          actor_discord_id: string
+          correction_key: string
+          created_at?: string
+          expected_revision: number
+          id?: string
+          new_value_json: Json
+          old_value_json: Json
+          reason: string
+          request_json: Json
+          resulting_revision: number
+          scouter_game_id: string
+        }
+        Update: {
+          actor_discord_id?: string
+          correction_key?: string
+          created_at?: string
+          expected_revision?: number
+          id?: string
+          new_value_json?: Json
+          old_value_json?: Json
+          reason?: string
+          request_json?: Json
+          resulting_revision?: number
+          scouter_game_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scouter_game_corrections_scouter_game_id_fkey"
+            columns: ["scouter_game_id"]
+            isOneToOne: false
+            referencedRelation: "scouter_games"
             referencedColumns: ["id"]
           },
         ]
@@ -1865,9 +1938,12 @@ export type Database = {
           game_ordinal: number
           id: string
           match_length_seconds: number | null
+          revision: number
           scoreboard_image_path: string
           scouter_match_id: string
           smite_match_id: string | null
+          updated_at: string
+          updated_by_discord_id: string | null
           winning_side: string | null
         }
         Insert: {
@@ -1877,9 +1953,12 @@ export type Database = {
           game_ordinal: number
           id?: string
           match_length_seconds?: number | null
+          revision?: number
           scoreboard_image_path: string
           scouter_match_id: string
           smite_match_id?: string | null
+          updated_at?: string
+          updated_by_discord_id?: string | null
           winning_side?: string | null
         }
         Update: {
@@ -1889,9 +1968,12 @@ export type Database = {
           game_ordinal?: number
           id?: string
           match_length_seconds?: number | null
+          revision?: number
           scoreboard_image_path?: string
           scouter_match_id?: string
           smite_match_id?: string | null
+          updated_at?: string
+          updated_by_discord_id?: string | null
           winning_side?: string | null
         }
         Relationships: [
@@ -2216,6 +2298,17 @@ export type Database = {
           p_bucket_hash: string
           p_submission_limit?: number
           p_window_seconds?: number
+        }
+        Returns: Json
+      }
+      correct_scouter_game: {
+        Args: {
+          p_actor_discord_id: string
+          p_correction_key: string
+          p_expected_revision: number
+          p_game: Json
+          p_reason: string
+          p_scouter_game_id: string
         }
         Returns: Json
       }
