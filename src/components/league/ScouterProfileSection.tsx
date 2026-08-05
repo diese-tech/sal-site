@@ -6,6 +6,11 @@ type Props = {
   profile: ScouterProfile;
 };
 
+type StatItem = {
+  label: string;
+  value: string | number;
+};
+
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
@@ -83,7 +88,7 @@ export function ScouterProfileSection({ playerId, profile }: Props) {
             { label: "Avg KDA", value: profile.summary.averageKda.toFixed(2) },
             {
               label: "Avg Damage",
-              value: profile.summary.averageDamage.toLocaleString("en-US"),
+              value: formatStat(profile.summary.averageDamage),
             },
           ].map(({ label, value }) => (
             <div
@@ -97,6 +102,64 @@ export function ScouterProfileSection({ playerId, profile }: Props) {
             </div>
           ))}
         </div>
+
+        {profile.summary.gamesPlayed > 0 && (
+          <details className="mt-3 rounded-xl border border-white/8 bg-white/[0.02]">
+            <summary className="cursor-pointer px-4 py-3 text-xs font-black uppercase tracking-wide text-cyan-100">
+              Season averages
+            </summary>
+            <div className="grid gap-4 border-t border-white/8 p-4 md:grid-cols-3">
+              <StatGroup
+                title="Combat"
+                items={[
+                  {
+                    label: "Damage taken",
+                    value: formatStat(profile.summary.averageDamageTaken),
+                  },
+                  {
+                    label: "Damage mitigated",
+                    value: formatStat(profile.summary.averageDamageMitigated),
+                  },
+                  {
+                    label: "Self healing",
+                    value: formatStat(profile.summary.averageSelfHealing),
+                  },
+                  {
+                    label: "Ally healing",
+                    value: formatStat(profile.summary.averageAllyHealing),
+                  },
+                ]}
+              />
+              <StatGroup
+                title="Economy & objectives"
+                items={[
+                  { label: "GPM", value: formatStat(profile.summary.averageGpm) },
+                  {
+                    label: "Structure damage",
+                    value: formatStat(profile.summary.averageStructureDamage),
+                  },
+                  {
+                    label: "Jungle damage",
+                    value: formatStat(profile.summary.averageJungleDamage),
+                  },
+                  {
+                    label: "Minion damage",
+                    value: formatStat(profile.summary.averageMinionDamage),
+                  },
+                ]}
+              />
+              <StatGroup
+                title="Utility"
+                items={[
+                  {
+                    label: "Wards placed",
+                    value: formatStat(profile.summary.averageWardsPlaced),
+                  },
+                ]}
+              />
+            </div>
+          </details>
+        )}
       </div>
 
       <div className="p-5">
@@ -105,64 +168,126 @@ export function ScouterProfileSection({ playerId, profile }: Props) {
             No scouter games recorded for {selectedSeasonName}.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-xs">
-              <thead>
-                <tr className="border-b border-white/8">
-                  {[
-                    "Date",
-                    "SMITE ID",
-                    "God",
-                    "Role",
-                    "K / D / A",
-                    "Damage",
-                    "Wards",
-                  ].map((heading) => (
-                    <th
-                      key={heading}
-                      className="pb-2 pr-3 text-left font-black uppercase text-slate-500 last:pr-0 last:text-right"
+          <div className="space-y-3">
+            {profile.games.map((game) => (
+              <details
+                key={game.id}
+                className="group rounded-xl border border-white/8 bg-white/[0.02]"
+              >
+                <summary className="grid cursor-pointer list-none gap-3 p-4 text-xs sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                  <div>
+                    <p className="font-black text-white">
+                      {game.godName ?? "Unknown god"}
+                      <span className="font-medium capitalize text-slate-400">
+                        {game.role ? ` · ${game.role}` : ""}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-slate-500">
+                      {dateFormatter.format(new Date(game.hostedAt))} · {resultLabel(game.won)}
+                    </p>
+                  </div>
+                  <p className="font-black text-white">
+                    {game.kills} / {game.deaths} / {game.assists}
+                    <span className="ml-1 font-medium text-slate-500">KDA</span>
+                  </p>
+                  <p className="font-black text-slate-300">
+                    {formatStat(game.playerDamage)}
+                    <span className="ml-1 font-medium text-slate-500">damage</span>
+                  </p>
+                </summary>
+
+                <div className="border-t border-white/8 p-4">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[0.65rem] font-black uppercase tracking-wide text-cyan-200">
+                      Full recorded line
+                    </p>
+                    <Link
+                      href={`/scouters/${game.matchId}`}
+                      className="font-mono text-xs font-bold text-cyan-300 transition hover:text-cyan-100"
                     >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.04]">
-                {profile.games.map((game) => (
-                  <tr key={game.id} className="hover:bg-white/[0.02]">
-                    <td className="whitespace-nowrap py-2 pr-3 font-black text-slate-400">
-                      {dateFormatter.format(new Date(game.hostedAt))}
-                    </td>
-                    <td className="py-2 pr-3">
-                      <Link
-                        href={`/scouters/${game.matchId}`}
-                        className="font-mono font-bold text-cyan-300 transition hover:text-cyan-100"
-                      >
-                        {game.smiteMatchId ?? "Receipt"}
-                      </Link>
-                    </td>
-                    <td className="py-2 pr-3 font-black text-slate-200">
-                      {game.godName ?? "—"}
-                    </td>
-                    <td className="py-2 pr-3 capitalize text-slate-300">
-                      {game.role ?? "—"}
-                    </td>
-                    <td className="py-2 pr-3 font-black text-white">
-                      {game.kills} / {game.deaths} / {game.assists}
-                    </td>
-                    <td className="py-2 pr-3 text-right font-black text-slate-300">
-                      {game.playerDamage?.toLocaleString("en-US") ?? "—"}
-                    </td>
-                    <td className="py-2 text-right font-black text-slate-300">
-                      {game.wardsPlaced ?? "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      {game.smiteMatchId ?? "View receipt"}
+                    </Link>
+                  </div>
+                  <StatGrid
+                    items={[
+                      { label: "Recorded IGN", value: game.rawIgn },
+                      { label: "Side", value: capitalize(game.side) },
+                      { label: "God", value: game.godName ?? MISSING_STAT },
+                      {
+                        label: "Role",
+                        value: game.role ? capitalize(game.role) : MISSING_STAT,
+                      },
+                      { label: "Player level", value: formatStat(game.playerLevel) },
+                      {
+                        label: "K / D / A",
+                        value: `${game.kills} / ${game.deaths} / ${game.assists}`,
+                      },
+                      { label: "GPM", value: formatStat(game.gpm) },
+                      { label: "Player damage", value: formatStat(game.playerDamage) },
+                      { label: "Minion damage", value: formatStat(game.minionDamage) },
+                      { label: "Jungle damage", value: formatStat(game.jungleDamage) },
+                      { label: "Structure damage", value: formatStat(game.structureDamage) },
+                      { label: "Damage taken", value: formatStat(game.damageTaken) },
+                      { label: "Damage mitigated", value: formatStat(game.damageMitigated) },
+                      { label: "Self healing", value: formatStat(game.selfHealing) },
+                      { label: "Ally healing", value: formatStat(game.allyHealing) },
+                      { label: "Wards placed", value: formatStat(game.wardsPlaced) },
+                    ]}
+                  />
+                </div>
+              </details>
+            ))}
           </div>
         )}
       </div>
     </section>
   );
+}
+
+function StatGroup({ title, items }: { title: string; items: StatItem[] }) {
+  return (
+    <div>
+      <h3 className="mb-2 text-[0.65rem] font-black uppercase tracking-wide text-slate-500">
+        {title}
+      </h3>
+      <StatGrid items={items} compact />
+    </div>
+  );
+}
+
+function StatGrid({ items, compact = false }: { items: StatItem[]; compact?: boolean }) {
+  return (
+    <dl className={compact ? "space-y-1.5" : "grid gap-2 sm:grid-cols-2 lg:grid-cols-4"}>
+      {items.map((item) => (
+        <div
+          key={item.label}
+          className={
+            compact
+              ? "flex items-center justify-between gap-3"
+              : "rounded-lg border border-white/[0.06] bg-black/10 p-2.5"
+          }
+        >
+          <dt className="text-[0.65rem] font-bold uppercase text-slate-500">
+            {item.label}
+          </dt>
+          <dd className="font-black text-slate-200">{item.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function formatStat(value: number | null): string {
+  return value === null ? MISSING_STAT : value.toLocaleString("en-US");
+}
+
+const MISSING_STAT = "\u2014";
+
+function resultLabel(won: boolean | null): string {
+  if (won === null) return "Result unavailable";
+  return won ? "Win" : "Loss";
+}
+
+function capitalize(value: string): string {
+  return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1);
 }

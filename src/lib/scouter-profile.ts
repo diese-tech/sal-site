@@ -15,12 +15,23 @@ export type ScouterProfileGame = {
   seasonId: string;
   hostedAt: string;
   smiteMatchId: string | null;
+  rawIgn: string;
+  side: string;
   godName: string | null;
   role: string | null;
+  playerLevel: number | null;
   kills: number;
   deaths: number;
   assists: number;
+  gpm: number | null;
   playerDamage: number | null;
+  minionDamage: number | null;
+  jungleDamage: number | null;
+  structureDamage: number | null;
+  damageTaken: number | null;
+  damageMitigated: number | null;
+  selfHealing: number | null;
+  allyHealing: number | null;
   wardsPlaced: number | null;
   won: boolean | null;
 };
@@ -33,7 +44,16 @@ export type ScouterProfile = {
     wins: number;
     losses: number;
     averageKda: number;
-    averageDamage: number;
+    averageDamage: number | null;
+    averageGpm: number | null;
+    averageMinionDamage: number | null;
+    averageJungleDamage: number | null;
+    averageStructureDamage: number | null;
+    averageDamageTaken: number | null;
+    averageDamageMitigated: number | null;
+    averageSelfHealing: number | null;
+    averageAllyHealing: number | null;
+    averageWardsPlaced: number | null;
   };
   games: ScouterProfileGame[];
 };
@@ -41,10 +61,20 @@ export type ScouterProfile = {
 type ParticipantRow = {
   id: string;
   side: string;
+  raw_ign: string;
+  player_level: number | null;
   kills: number;
   deaths: number;
   assists: number;
+  gpm: number | null;
   player_damage: number | null;
+  minion_damage: number | null;
+  jungle_damage: number | null;
+  structure_damage: number | null;
+  damage_taken: number | null;
+  damage_mitigated: number | null;
+  self_healing: number | null;
+  ally_healing: number | null;
   wards_placed: number | null;
   role: string | null;
   god: { name: string } | null;
@@ -71,7 +101,16 @@ const EMPTY_SUMMARY: ScouterProfile["summary"] = {
   wins: 0,
   losses: 0,
   averageKda: 0,
-  averageDamage: 0,
+  averageDamage: null,
+  averageGpm: null,
+  averageMinionDamage: null,
+  averageJungleDamage: null,
+  averageStructureDamage: null,
+  averageDamageTaken: null,
+  averageDamageMitigated: null,
+  averageSelfHealing: null,
+  averageAllyHealing: null,
+  averageWardsPlaced: null,
 };
 
 export async function getPlayerScouterProfile(
@@ -99,7 +138,10 @@ export async function getPlayerScouterProfile(
       .from("scouter_game_participants")
       .select(
         `
-        id, side, kills, deaths, assists, player_damage, wards_placed, role,
+        id, side, raw_ign, player_level, kills, deaths, assists, gpm,
+        player_damage, minion_damage, jungle_damage, structure_damage,
+        damage_taken, damage_mitigated, self_healing, ally_healing,
+        wards_placed, role,
         god:gods(name),
         game:scouter_games!inner(
           id, smite_match_id, winning_side,
@@ -131,12 +173,23 @@ export async function getPlayerScouterProfile(
       seasonId: row.game.match.season_id,
       hostedAt: row.game.match.hosted_at,
       smiteMatchId: row.game.smite_match_id,
+      rawIgn: row.raw_ign,
+      side: row.side,
       godName: row.god?.name ?? null,
       role: row.role,
+      playerLevel: row.player_level,
       kills: row.kills,
       deaths: row.deaths,
       assists: row.assists,
+      gpm: row.gpm,
       playerDamage: row.player_damage,
+      minionDamage: row.minion_damage,
+      jungleDamage: row.jungle_damage,
+      structureDamage: row.structure_damage,
+      damageTaken: row.damage_taken,
+      damageMitigated: row.damage_mitigated,
+      selfHealing: row.self_healing,
+      allyHealing: row.ally_healing,
       wardsPlaced: row.wards_placed,
       won: winningSide === null ? null : winningSide === row.side,
     };
@@ -177,22 +230,42 @@ function summarizeGames(
         total + (game.kills + game.assists) / Math.max(game.deaths, 1),
       0,
     ) / games.length;
-  const damageGames = games.filter((game) => game.playerDamage !== null);
-  const averageDamage =
-    damageGames.length > 0
-      ? damageGames.reduce(
-          (total, game) => total + (game.playerDamage ?? 0),
-          0,
-        ) / damageGames.length
-      : 0;
 
   return {
     gamesPlayed: games.length,
     wins,
     losses,
     averageKda: Number(averageKda.toFixed(2)),
-    averageDamage: Math.round(averageDamage),
+    averageDamage: averageRecorded(games, (game) => game.playerDamage),
+    averageGpm: averageRecorded(games, (game) => game.gpm),
+    averageMinionDamage: averageRecorded(games, (game) => game.minionDamage),
+    averageJungleDamage: averageRecorded(games, (game) => game.jungleDamage),
+    averageStructureDamage: averageRecorded(
+      games,
+      (game) => game.structureDamage,
+    ),
+    averageDamageTaken: averageRecorded(games, (game) => game.damageTaken),
+    averageDamageMitigated: averageRecorded(
+      games,
+      (game) => game.damageMitigated,
+    ),
+    averageSelfHealing: averageRecorded(games, (game) => game.selfHealing),
+    averageAllyHealing: averageRecorded(games, (game) => game.allyHealing),
+    averageWardsPlaced: averageRecorded(games, (game) => game.wardsPlaced),
   };
+}
+
+function averageRecorded(
+  games: ScouterProfileGame[],
+  select: (game: ScouterProfileGame) => number | null,
+): number | null {
+  const recorded = games
+    .map(select)
+    .filter((value): value is number => value !== null);
+  if (recorded.length === 0) return null;
+  return Math.round(
+    recorded.reduce((total, value) => total + value, 0) / recorded.length,
+  );
 }
 
 function toSeason(row: {
