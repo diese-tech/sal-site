@@ -30,4 +30,12 @@ describe("capabilitiesForAdminRole", () => {
       });
     },
   );
+
+  it("keeps password-only sessions read-only because they have no audited Discord actor", () => {
+    expect(capabilitiesForAdminRole("super_admin", "password-admin")).toEqual({
+      canViewQueue: true,
+      canActOnTickets: false,
+      canViewRestrictedIdentities: false,
+    });
+  });
 });

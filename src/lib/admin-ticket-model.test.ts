@@ -29,6 +29,16 @@ function pendingActionRow(overrides: Partial<PendingActionSourceRow> = {}): Pend
     updated_at: "2026-07-01T10:00:00Z",
     division_id: "solar",
     match_id: "mmmm2222-0000-0000-0000-000000000001",
+    payload_json: {
+      winnerOrgId: "org-home",
+      score: "2-1",
+      parsed: {
+        winnerGames: 2,
+        loserGames: 1,
+        gamesPlayed: 3,
+        expectedScreenshots: 6,
+      },
+    },
     admin_note: null,
     source_discord_message_url: "https://discord.com/channels/1/2/3",
     approved_at: null,
@@ -46,6 +56,15 @@ function statRecordRow(
     updated_at: "2026-07-02T10:00:00Z",
     match_id: "mmmm2222-0000-0000-0000-000000000001",
     player_id: null,
+    stats_json: null,
+    extracted_json: {
+      game_number: 2,
+      kills: 4,
+      deaths: 1,
+      assists: 9,
+      damage_dealt: 22000,
+      role: "mid",
+    },
     confidence: 0.9,
     source: "ocr",
     screenshot_url: "https://cdn.example.com/shot.png",
@@ -113,10 +132,37 @@ describe("normalizePendingAction", () => {
     expect(t.title).toBe("Match Result request");
     expect(t.workflow).toEqual({
       kind: "discord",
-      label: "Managed through the Discord review workflow",
+      label: "Review here; Discord remains the durable receipt source",
     });
     expect(t.links).toEqual([
       { label: "Discord source message", href: "https://discord.com/channels/1/2/3", external: true },
+    ]);
+    expect(t.operationType).toBe("match_result");
+    expect(t.details).toEqual(
+      expect.arrayContaining([
+        { label: "Winner organization ID", value: "org-home" },
+        { label: "Score", value: "2-1" },
+        { label: "Games played", value: "3" },
+        { label: "Expected screenshots", value: "6" },
+      ]),
+    );
+  });
+
+  it("shows the exact admin-review request after its Discord message is lost", () => {
+    const t = normalizePendingAction(
+      pendingActionRow({
+        type: "admin_review",
+        match_id: null,
+        payload_json: {
+          issueType: "eligibility_concern",
+          description: "Please verify the substitute before game time.",
+        },
+      }),
+    );
+
+    expect(t.details).toEqual([
+      { label: "Issue type", value: "Eligibility Concern" },
+      { label: "Description", value: "Please verify the substitute before game time." },
     ]);
   });
 
@@ -174,6 +220,15 @@ describe("normalizePendingStatRecord", () => {
     expect(t.links).toEqual([
       { label: "Stat screenshot", href: "https://cdn.example.com/shot.png", external: true },
     ]);
+    expect(t.details).toEqual(
+      expect.arrayContaining([
+        { label: "Player ID", value: "Not linked" },
+        { label: "Game number", value: "2" },
+        { label: "K / D / A", value: "4 / 1 / 9" },
+        { label: "Damage dealt", value: "22,000" },
+        { label: "Role", value: "Mid" },
+      ]),
+    );
   });
 
   it("raises priority for low-confidence extractions", () => {

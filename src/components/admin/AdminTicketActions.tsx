@@ -61,12 +61,198 @@ export function AdminTicketActions({
     );
   }
 
+  if (mode === "operation" || mode === "stat_review") {
+    return (
+      <ReviewResolutionActions
+        ticket={ticket}
+        kind={mode}
+        onTicketChange={onTicketChange}
+        onActionSuccess={onActionSuccess}
+      />
+    );
+  }
+
   return (
     <p className="mt-2 text-[0.65rem] text-slate-500">
       {capabilities.canActOnTickets
         ? "This ticket has no safe queue action available. Use the owning workflow."
         : "This queue is read-only for your account. Use the owning workflow."}
     </p>
+  );
+}
+
+type ReviewResolutionKind = "operation" | "stat_review";
+type ReviewResolutionDecision = "approve" | "deny" | "needs_info";
+
+function ReviewResolutionActions({
+  ticket,
+  kind,
+  onTicketChange,
+  onActionSuccess,
+}: Omit<AdminTicketActionsProps, "capabilities" | "actionMode"> & {
+  kind: ReviewResolutionKind;
+}) {
+  const [note, setNote] = useState("");
+  const [decision, setDecision] = useState<ReviewResolutionDecision | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const noteRequired = decision === "deny" || decision === "needs_info";
+  const approvalAvailable =
+    kind === "operation"
+      ? ["match_result", "reschedule", "admin_review"].includes(
+          ticket.operationType ?? "",
+        )
+      : Boolean(ticket.statPlayerId);
+
+  async function submitDecision() {
+    if (!decision || busy || (noteRequired && !note.trim())) return;
+    setBusy(true);
+    setError(null);
+    const action: TicketAction =
+      kind === "operation"
+        ? {
+            kind: "resolve_operation",
+            decision,
+            ...(note.trim() ? { note: note.trim() } : {}),
+          }
+        : {
+            kind: "resolve_stat_review",
+            decision: decision === "approve" ? "approve" : "deny",
+            ...(note.trim() ? { note: note.trim() } : {}),
+          };
+    const result = await runTicketAction({
+      ticket,
+      action,
+      fetcher: fetch,
+      onOptimistic: onTicketChange,
+      onRollback: onTicketChange,
+      onSuccess: onTicketChange,
+    });
+    if (!result.ok) {
+      setBusy(false);
+      setError(result.error);
+      return;
+    }
+    setCompleted(true);
+    setDecision(null);
+    onActionSuccess();
+  }
+
+  if (completed) {
+    return (
+      <p className="mt-3 text-xs font-semibold text-emerald-300">
+        Ticket updated atomically. Refreshing queue...
+      </p>
+    );
+  }
+
+  const choices: Array<{ decision: ReviewResolutionDecision; label: string }> =
+    kind === "operation"
+      ? [
+          ...(approvalAvailable
+            ? [{ decision: "approve" as const, label: "Approve" }]
+            : []),
+          ...(ticket.status === "open"
+            ? [{ decision: "needs_info" as const, label: "Needs Info" }]
+            : []),
+          { decision: "deny", label: "Deny" },
+        ]
+      : [
+          ...(approvalAvailable
+            ? [{ decision: "approve" as const, label: "Approve Stats" }]
+            : []),
+          { decision: "deny", label: "Deny Stats" },
+        ];
+
+  return (
+    <div className="mt-3 border-t border-white/8 pt-3">
+      <p className="mb-3 text-[0.65rem] text-slate-400">
+        {kind === "operation"
+          ? "This uses the audited operation resolver and preserves its Discord receipt."
+          : "Approval publishes this pending official stat record; denial leaves official stats unchanged."}
+      </p>
+      {!approvalAvailable ? (
+        <p className="mb-3 rounded-lg border border-amber-300/20 bg-amber-300/8 px-3 py-2 text-xs font-semibold text-amber-200">
+          {kind === "operation"
+            ? "This operation type cannot be approved by the canonical resolver. You may deny it or request more information."
+            : "This stat record is not linked to a player, so it cannot be approved. Denial remains available."}
+        </p>
+      ) : null}
+      <label className="block">
+        <span className="mb-1 block text-[0.6rem] font-black uppercase tracking-wider text-slate-500">
+          Admin note
+        </span>
+        <textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          maxLength={500}
+          rows={3}
+          placeholder={
+            kind === "operation"
+              ? "Optional for approval. Required for denial or Needs Info."
+              : "Optional for approval. Required for denial."
+          }
+          className="w-full resize-y rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-cyan-300/40 focus:outline-none"
+        />
+      </label>
+
+      {decision ? (
+        <div className="mt-2 rounded-lg border border-amber-300/25 bg-amber-300/8 p-3">
+          <p className="text-xs font-semibold text-amber-100">
+            Confirm {decision.replace("_", " ")} for {ticket.displayId}.
+          </p>
+          {noteRequired && !note.trim() ? (
+            <p className="mt-1 text-[0.65rem] text-red-300">
+              Add an admin note before continuing.
+            </p>
+          ) : null}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void submitDecision()}
+              disabled={busy || (noteRequired && !note.trim())}
+              className="rounded-lg border border-emerald-300/40 bg-emerald-300/15 px-3 py-1.5 text-xs font-black uppercase text-emerald-100 disabled:opacity-50"
+            >
+              {busy ? "Saving..." : "Confirm"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDecision(null)}
+              disabled={busy}
+              className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-black uppercase text-slate-300 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {choices.map((choice) => (
+            <button
+              key={choice.decision}
+              type="button"
+              onClick={() => setDecision(choice.decision)}
+              className={
+                choice.decision === "deny"
+                  ? "rounded-lg border border-red-300/35 bg-red-300/10 px-3 py-1.5 text-xs font-black uppercase text-red-200"
+                  : choice.decision === "needs_info"
+                    ? "rounded-lg border border-sky-300/35 bg-sky-300/10 px-3 py-1.5 text-xs font-black uppercase text-sky-100"
+                    : "rounded-lg border border-emerald-300/40 bg-emerald-300/15 px-3 py-1.5 text-xs font-black uppercase text-emerald-100"
+              }
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {error ? (
+        <p role="alert" className="mt-2 text-xs font-semibold text-red-300">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

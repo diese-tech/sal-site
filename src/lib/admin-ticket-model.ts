@@ -3,6 +3,7 @@ import type {
   AdminTicket,
   TicketCategory,
   TicketCounts,
+  TicketDetailField,
   TicketFilters,
   TicketLink,
   TicketPriority,
@@ -28,6 +29,7 @@ export type PendingActionSourceRow = Pick<
   | "updated_at"
   | "division_id"
   | "match_id"
+  | "payload_json"
   | "admin_note"
   | "source_discord_message_url"
   | "approved_at"
@@ -41,6 +43,8 @@ export type PendingStatRecordSourceRow = Pick<
   | "updated_at"
   | "match_id"
   | "player_id"
+  | "stats_json"
+  | "extracted_json"
   | "confidence"
   | "source"
   | "screenshot_url"
@@ -119,9 +123,9 @@ export const MATCH_REPORT_TERMINAL_STATUSES = ["done"] as const;
 export const BUG_REPORT_TERMINAL_STATUSES = ["resolved", "no_response"] as const;
 
 export const PENDING_ACTION_COLUMNS =
-  "id,type,status,created_at,updated_at,division_id,match_id,admin_note,source_discord_message_url,approved_at";
+  "id,type,status,created_at,updated_at,division_id,match_id,payload_json,admin_note,source_discord_message_url,approved_at";
 export const PENDING_STAT_RECORD_COLUMNS =
-  "id,status,created_at,updated_at,match_id,player_id,confidence,source,screenshot_url,correction_note,reviewed_at";
+  "id,status,created_at,updated_at,match_id,player_id,stats_json,extracted_json,confidence,source,screenshot_url,correction_note,reviewed_at";
 export const REGISTRATION_COLUMNS =
   "id,status,created_at,reviewed_at,reviewer_note,season_id,player_id,discord_username,discord_display_name,form_data";
 export const MATCH_REPORT_COLUMNS =
@@ -177,6 +181,81 @@ function humanizeToken(value: string): string {
     .split(" ")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+function jsonObject(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function detailValue(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed.slice(0, 4000) : null;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value.toLocaleString("en-US");
+  }
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return null;
+}
+
+function operationDetails(type: string, payloadValue: unknown): TicketDetailField[] {
+  const payload = jsonObject(payloadValue);
+  if (!payload) return [];
+  const details: TicketDetailField[] = [];
+  const add = (label: string, value: unknown) => {
+    const text = detailValue(value);
+    if (text) details.push({ label, value: text });
+  };
+
+  if (type === "match_result") {
+    add("Winner organization ID", payload.winnerOrgId);
+    add("Score", payload.score);
+    const parsed = jsonObject(payload.parsed);
+    if (parsed) {
+      add("Games played", parsed.gamesPlayed);
+      add("Expected screenshots", parsed.expectedScreenshots);
+    }
+  } else if (type === "reschedule") {
+    add("New date", payload.newDate);
+    add("New time", payload.newTime);
+    add("Reason", payload.reason);
+  } else if (type === "admin_review") {
+    const issueType = detailValue(payload.issueType);
+    if (issueType) details.push({ label: "Issue type", value: humanizeToken(issueType) });
+    add("Description", payload.description);
+    add("Related match ID", payload.relatedMatchId);
+  } else if (type === "alias_change") {
+    add("Target player ID", payload.targetPlayerId);
+    add("Current IGN", payload.oldIgn);
+    add("Requested IGN", payload.newIgn);
+  }
+  return details;
+}
+
+function statReviewDetails(row: PendingStatRecordSourceRow): TicketDetailField[] {
+  const stats = jsonObject(row.stats_json) ?? jsonObject(row.extracted_json) ?? {};
+  const value = (key: string) => detailValue(stats[key]) ?? "Not provided";
+  const details: TicketDetailField[] = [
+    { label: "Player ID", value: row.player_id ?? "Not linked" },
+    { label: "Stat source", value: row.stats_json === null ? "Extracted" : "Corrected" },
+    { label: "Game number", value: value("game_number") },
+    {
+      label: "K / D / A",
+      value: `${value("kills")} / ${value("deaths")} / ${value("assists")}`,
+    },
+    { label: "Damage dealt", value: value("damage_dealt") },
+    { label: "Damage mitigated", value: value("damage_mitigated") },
+    { label: "Healing done", value: value("healing_done") },
+  ];
+  const god = detailValue(stats.god_played) ?? detailValue(stats.godPlayed);
+  if (god) details.push({ label: "God", value: god });
+  const role = detailValue(stats.role);
+  if (role) details.push({ label: "Role", value: humanizeToken(role) });
+  const orgId = detailValue(stats.org_id);
+  if (orgId) details.push({ label: "Organization ID", value: orgId });
+  return details;
 }
 
 function timeline(events: (TicketTimelineEvent | null)[]): TicketTimelineEvent[] {
@@ -321,6 +400,9 @@ export function normalizePendingAction(row: PendingActionSourceRow): AdminTicket
   const links: TicketLink[] = [];
   const sourceUrl = safeHttpUrl(row.source_discord_message_url);
   if (sourceUrl) links.push({ label: "Discord source message", href: sourceUrl, external: true });
+  const payload = jsonObject(row.payload_json);
+  const proofUrl = safeHttpUrl(payload?.proofScreenshotUrl);
+  if (proofUrl) links.push({ label: "Alias proof screenshot", href: proofUrl, external: true });
   return {
     id: `operation:${row.id}`,
     displayId: displayIdFor("operation", row.id),
@@ -335,10 +417,12 @@ export function normalizePendingAction(row: PendingActionSourceRow): AdminTicket
     slaDeadline: slaDeadlineFor("operation", row.created_at, status),
     divisionId: row.division_id ?? undefined,
     matchId: row.match_id ?? undefined,
+    operationType: row.type,
     title: `${typeLabel} request`,
     summary: matchRef
       ? `Bot-submitted ${typeLabel.toLowerCase()} for match ${matchRef}, reviewed in Discord.`
       : `Bot-submitted ${typeLabel.toLowerCase()} request, reviewed in Discord.`,
+    details: operationDetails(row.type, row.payload_json),
     privacy: "identity_restricted",
     links,
     timeline: timeline([
@@ -348,7 +432,10 @@ export function normalizePendingAction(row: PendingActionSourceRow): AdminTicket
         ? { at: row.updated_at, label: "Admin note", detail: row.admin_note }
         : null,
     ]),
-    workflow: { kind: "discord", label: "Managed through the Discord review workflow" },
+    workflow: {
+      kind: "discord",
+      label: "Review here; Discord remains the durable receipt source",
+    },
   };
 }
 
@@ -372,8 +459,10 @@ export function normalizePendingStatRecord(row: PendingStatRecordSourceRow): Adm
     updatedAt: row.updated_at,
     slaDeadline: slaDeadlineFor("stat_review", row.created_at, status),
     matchId: row.match_id,
+    statPlayerId: row.player_id ?? undefined,
     title: matchRef ? `Stat review for match ${matchRef}` : "Stat review",
     summary: `Extracted stats (${humanizeToken(row.source).toLowerCase()} source, ${confidencePct}% confidence) awaiting Discord review.`,
+    details: statReviewDetails(row),
     privacy: "identity_restricted",
     links,
     timeline: timeline([
@@ -383,7 +472,10 @@ export function normalizePendingStatRecord(row: PendingStatRecordSourceRow): Adm
         ? { at: row.updated_at, label: "Correction note", detail: row.correction_note }
         : null,
     ]),
-    workflow: { kind: "discord", label: "Managed through the Discord review workflow" },
+    workflow: {
+      kind: "discord",
+      label: "Review here; Discord remains the durable receipt source",
+    },
   };
 }
 

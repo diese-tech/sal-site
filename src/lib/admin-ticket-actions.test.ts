@@ -23,6 +23,90 @@ function registrationTicket(): AdminTicket {
 }
 
 describe("runTicketAction", () => {
+  it("sends an operation Needs Info decision through the queue endpoint", async () => {
+    const ticket: AdminTicket = {
+      ...registrationTicket(),
+      id: "operation:action-1",
+      sourceId: "action-1",
+      category: "operation",
+    };
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true, status: "pending_info" }), {
+        status: 200,
+      }),
+    );
+    const onOptimistic = vi.fn();
+
+    const result = await runTicketAction({
+      ticket,
+      action: {
+        kind: "resolve_operation",
+        decision: "needs_info",
+        note: "Upload the missing detail screen.",
+      },
+      fetcher,
+      now: () => "2026-08-05T04:00:00.000Z",
+      onOptimistic,
+      onRollback: vi.fn(),
+      onSuccess: vi.fn(),
+    });
+
+    expect(fetcher).toHaveBeenCalledWith("/api/admin/tickets/operations/action-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        decision: "needs_info",
+        note: "Upload the missing detail screen.",
+      }),
+    });
+    expect(onOptimistic).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "needs_info", sourceStatus: "pending_info" }),
+    );
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("restores a stat-review ticket when its denial fails", async () => {
+    const ticket: AdminTicket = {
+      ...registrationTicket(),
+      id: "stat_review:record-1",
+      sourceId: "record-1",
+      category: "stat_review",
+    };
+    const onRollback = vi.fn();
+    const onOptimistic = vi.fn();
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 409 }));
+
+    const result = await runTicketAction({
+      ticket,
+      action: {
+        kind: "resolve_stat_review",
+        decision: "deny",
+        note: "The screenshot does not support this line.",
+      },
+      fetcher,
+      onOptimistic,
+      onRollback,
+      onSuccess: vi.fn(),
+    });
+
+    expect(fetcher).toHaveBeenCalledWith("/api/admin/tickets/stat-reviews/record-1", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        decision: "deny",
+        note: "The screenshot does not support this line.",
+      }),
+    });
+    expect(onOptimistic).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "denied", sourceStatus: "rejected" }),
+    );
+    expect(onRollback).toHaveBeenCalledWith(ticket);
+    expect(result).toEqual({
+      ok: false,
+      error: "The action failed. The ticket was restored.",
+    });
+  });
+
   it("optimistically approves a registration, then confirms it through the existing endpoint", async () => {
     const original = registrationTicket();
     const fetcher = vi.fn().mockResolvedValue(
@@ -155,7 +239,7 @@ describe("runTicketAction", () => {
 });
 
 describe("getTicketActionMode", () => {
-  it("keeps actions unavailable without the capability and for unsupported Wave 1 categories", () => {
+  it("gates each queue category by capability and source state", () => {
     const registration = registrationTicket();
     const canAct = {
       canViewQueue: true,
@@ -166,8 +250,20 @@ describe("getTicketActionMode", () => {
     expect(
       getTicketActionMode(registration, { ...canAct, canActOnTickets: false }),
     ).toBe("read_only");
-    expect(getTicketActionMode({ ...registration, category: "operation" }, canAct)).toBe("read_only");
-    expect(getTicketActionMode({ ...registration, category: "stat_review" }, canAct)).toBe("read_only");
+    expect(getTicketActionMode({ ...registration, category: "operation" }, canAct)).toBe("operation");
+    expect(
+      getTicketActionMode(
+        { ...registration, category: "operation", status: "needs_info" },
+        canAct,
+      ),
+    ).toBe("operation");
+    expect(getTicketActionMode({ ...registration, category: "stat_review" }, canAct)).toBe("stat_review");
+    expect(
+      getTicketActionMode(
+        { ...registration, category: "stat_review", status: "needs_info" },
+        canAct,
+      ),
+    ).toBe("read_only");
     expect(getTicketActionMode(registration, canAct)).toBe("registration");
     expect(getTicketActionMode({ ...registration, category: "match_report" }, canAct)).toBe("match_report");
     expect(getTicketActionMode({ ...registration, category: "bug_report" }, canAct)).toBe("bug_report");
