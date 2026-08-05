@@ -27,7 +27,7 @@ const participantSchema = z.object({
   wardsPlaced: optionalStatSchema,
 }).strict();
 
-const extractedGameSchema = z.object({
+export const scouterExtractedGameSchema = z.object({
   smiteMatchId: z.string().trim().min(1).max(128).nullable(),
   gameMode: z.string().trim().min(1).max(64).nullable(),
   winningSide: z.enum(["order", "chaos"]),
@@ -45,7 +45,7 @@ const extractedGameSchema = z.object({
   }
 });
 
-export type ScouterExtractedGame = z.infer<typeof extractedGameSchema>;
+export type ScouterExtractedGame = z.infer<typeof scouterExtractedGameSchema>;
 
 interface ScouterOcrInput {
   scoreboardImagePath: string;
@@ -153,7 +153,7 @@ export async function extractScouterGameFromStorage(
     throw new ScouterExtractionError("OCR response was not valid JSON.", rawResponse);
   }
 
-  const parsed = extractedGameSchema.safeParse(json);
+  const parsed = scouterExtractedGameSchema.safeParse(json);
   if (!parsed.success) {
     throw new ScouterExtractionError("OCR response was not valid scouter data.", rawResponse);
   }
