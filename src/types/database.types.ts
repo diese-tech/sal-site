@@ -1675,6 +1675,85 @@ export type Database = {
           },
         ]
       }
+      scouter_game_drafts: {
+        Row: {
+          completed_at: string | null
+          confirmed_scouter_game_id: string | null
+          created_at: string
+          details_image_path: string
+          extracted_game: Json
+          game_ordinal: number
+          hosted_by_discord_id: string
+          id: string
+          identity_override_reason: string | null
+          revised_game: Json | null
+          revision: number
+          scoreboard_image_path: string
+          scouter_match_id: string | null
+          season_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          confirmed_scouter_game_id?: string | null
+          created_at?: string
+          details_image_path: string
+          extracted_game: Json
+          game_ordinal: number
+          hosted_by_discord_id: string
+          id?: string
+          identity_override_reason?: string | null
+          revised_game?: Json | null
+          revision?: number
+          scoreboard_image_path: string
+          scouter_match_id?: string | null
+          season_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          confirmed_scouter_game_id?: string | null
+          created_at?: string
+          details_image_path?: string
+          extracted_game?: Json
+          game_ordinal?: number
+          hosted_by_discord_id?: string
+          id?: string
+          identity_override_reason?: string | null
+          revised_game?: Json | null
+          revision?: number
+          scoreboard_image_path?: string
+          scouter_match_id?: string | null
+          season_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scouter_game_drafts_confirmed_scouter_game_id_fkey"
+            columns: ["confirmed_scouter_game_id"]
+            isOneToOne: false
+            referencedRelation: "scouter_games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scouter_game_drafts_scouter_match_id_fkey"
+            columns: ["scouter_match_id"]
+            isOneToOne: false
+            referencedRelation: "scouter_matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scouter_game_drafts_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       scouter_game_participants: {
         Row: {
           ally_healing: number | null
@@ -2066,6 +2145,10 @@ export type Database = {
         }
         Returns: Json
       }
+      cancel_scouter_game_draft: {
+        Args: { p_draft_id: string; p_hosted_by_discord_id: string }
+        Returns: Json
+      }
       claim_operation_outbox: {
         Args: { p_limit?: number; p_worker_id: string }
         Returns: {
@@ -2117,6 +2200,15 @@ export type Database = {
         }
         Returns: Json
       }
+      confirm_scouter_game_draft: {
+        Args: {
+          p_draft_id: string
+          p_expected_revision: number
+          p_hosted_by_discord_id: string
+          p_identity_override_reason?: string
+        }
+        Returns: Json
+      }
       consume_bug_report_allowance: {
         Args: {
           p_action: string
@@ -2157,6 +2249,18 @@ export type Database = {
         }
         Returns: Json
       }
+      create_scouter_game_draft: {
+        Args: {
+          p_details_image_path: string
+          p_extracted_game: Json
+          p_game_ordinal: number
+          p_hosted_by_discord_id: string
+          p_scoreboard_image_path: string
+          p_scouter_match_id?: string
+          p_season_id: string
+        }
+        Returns: Json
+      }
       enqueue_operation_outbox: {
         Args: {
           p_aggregate_id: string
@@ -2190,6 +2294,17 @@ export type Database = {
           p_season_id: string
           p_smite_match_id?: string
           p_winning_side: string
+        }
+        Returns: Json
+      }
+      onboard_season_captain: {
+        Args: {
+          p_actor_discord_id: string
+          p_discord_id: string
+          p_division_id: string
+          p_org_id: string
+          p_player_id: string
+          p_season_id: string
         }
         Returns: Json
       }
@@ -2241,6 +2356,16 @@ export type Database = {
         }
         Returns: Json
       }
+      revise_scouter_game_draft: {
+        Args: {
+          p_draft_id: string
+          p_expected_revision: number
+          p_hosted_by_discord_id: string
+          p_revised_game: Json
+        }
+        Returns: Json
+      }
+      scouter_game_draft_diagnostics: { Args: { p_game: Json }; Returns: Json }
       set_current_season: {
         Args: { p_season_id: string }
         Returns: {
