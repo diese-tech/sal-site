@@ -198,6 +198,15 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
             )}
           </section>
 
+          {/* Caster / spectator overlay */}
+          <section className="rounded-2xl border border-white/8 bg-slate-950/70 p-4">
+            <h2 className="mb-3 text-xs font-black uppercase text-slate-400">Caster Overlay</h2>
+            <p className="mb-2 text-xs text-slate-500">Read-only full-screen view for casting or spectating — no login required.</p>
+            <p className="break-all font-mono text-[0.6rem] text-cyan-300/70">
+              {typeof window !== "undefined" ? `${window.location.origin}/draft/${room.id}/overlay` : `/draft/${room.id}/overlay`}
+            </p>
+          </section>
+
           {/* Captain tokens */}
           <section className="rounded-2xl border border-white/8 bg-slate-950/70 p-4">
             <h2 className="mb-3 text-xs font-black uppercase text-slate-400">Captain Tokens</h2>
