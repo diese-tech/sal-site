@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useId, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LeagueData, Match } from "@/types/league";
 import type { ExtractedGame, ExtractedPlayer, MatchReportWithMatch } from "@/types/match-report";
 import { MatchReportCard } from "@/components/admin/MatchReportCard";
+import { ReviewScreenshotPane } from "@/components/admin/ReviewScreenshotPane";
+import { IgnInput, StatInput } from "@/components/admin/stat-inputs";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -87,70 +89,6 @@ function makeBlankPlayers(orgId: string, players: LeagueData["players"], side: "
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return <p className="mb-3 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">{children}</p>;
-}
-
-function StatInput({
-  value,
-  onChange,
-  wide,
-}: {
-  value: number | undefined;
-  onChange: (v: number) => void;
-  wide?: boolean;
-}) {
-  return (
-    <input
-      type="number"
-      min={0}
-      value={value ?? ""}
-      onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
-      className={cn(
-        "rounded border border-white/10 bg-black/30 px-1 py-0.5 text-center text-xs font-semibold text-white focus:border-cyan-300/40 focus:outline-none",
-        wide ? "w-16" : "w-10",
-      )}
-    />
-  );
-}
-
-function IgnInput({
-  value,
-  onChange,
-  roster,
-  onPlayerMatch,
-  unmatched,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  roster: Array<{ id: string; ign: string }>;
-  onPlayerMatch: (id?: string) => void;
-  unmatched?: boolean;
-}) {
-  const listId = useId();
-  return (
-    <div className="relative">
-      <input
-        type="text"
-        value={value}
-        list={listId}
-        onChange={(e) => {
-          const v = e.target.value;
-          onChange(v);
-          const match = roster.find((r) => r.ign.toLowerCase() === v.toLowerCase());
-          onPlayerMatch(match?.id);
-        }}
-        placeholder="IGN"
-        className={cn(
-          "w-full rounded border px-1.5 py-0.5 text-xs font-semibold text-white focus:outline-none",
-          unmatched
-            ? "border-amber-400/40 bg-amber-400/8 focus:border-amber-400/60"
-            : "border-white/10 bg-black/30 focus:border-cyan-300/40",
-        )}
-      />
-      <datalist id={listId}>
-        {roster.map((p) => <option key={p.id} value={p.ign} />)}
-      </datalist>
-    </div>
-  );
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -510,6 +448,12 @@ export function MatchReportClient({
   const homePlayers = currentGame?.players.filter((p) => p.side === "home") ?? [];
   const awayPlayers = currentGame?.players.filter((p) => p.side === "away") ?? [];
 
+  // Uploaded URLs survive a reopened report; object URLs cover the not-yet-
+  // uploaded case (manual entry, or review before "Extract with AI").
+  const reviewScreenshots = uploadedUrls.length > 0
+    ? uploadedUrls
+    : previewFiles.map((f) => f.objectUrl);
+
   function addPlayerToSide(gameIdx: number, side: "home" | "away") {
     setGames((prev) => prev.map((g, gi) =>
       gi !== gameIdx ? g : {
@@ -823,8 +767,19 @@ export function MatchReportClient({
               </button>
             </div>
 
-            {/* Stat tables — side by side */}
-            <div className="grid gap-4 xl:grid-cols-2">
+            {/* Evidence + stat tables. The screenshot sticks to the viewport on
+                wide screens so the scoreboard stays readable while editing; on
+                narrow screens it sits above the tables and can be collapsed. */}
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(19rem,26rem)]">
+              <aside className="min-w-0 xl:order-last xl:sticky xl:top-4 xl:self-start">
+                <ReviewScreenshotPane
+                  urls={reviewScreenshots}
+                  activeIndex={activeGameIdx}
+                  onSelect={setActiveGameIdx}
+                />
+              </aside>
+
+              <div className="grid min-w-0 gap-4 2xl:grid-cols-2">
               {(["home", "away"] as const).map((side) => {
                 const sideOrg = side === "home" ? homeOrg : awayOrg;
                 const sideRoster = side === "home" ? homeRoster : awayRoster;
@@ -922,6 +877,7 @@ export function MatchReportClient({
                   </div>
                 );
               })}
+              </div>
             </div>
 
             {/* Submit button */}
