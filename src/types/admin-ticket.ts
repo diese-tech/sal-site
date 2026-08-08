@@ -130,6 +130,10 @@ export interface AdminTicket {
   seasonId?: string;
   divisionId?: string;
   matchId?: string;
+  /** Canonical pending_actions type; used to suppress unsupported approvals. */
+  operationType?: string;
+  /** Linked player required by the canonical pending-stat approval RPC. */
+  statPlayerId?: string;
   /** Public registration value that approval uses to create or link a player. */
   registrationIgn?: string;
   /** Public-safe claimant label; never a hidden identity. */
@@ -165,21 +169,24 @@ export interface TicketViewerCapabilities {
  * the auth model only issues super_admin and admin, and new roles slot in here
  * additively without reshaping TicketViewerCapabilities.
  *
- * Capabilities are a UX hint; the action endpoints are the source of truth.
- * Both Wave 1 action endpoints (/api/admin/registrations/[id] and
- * /api/admin/match-reports/[id]/submit) accept any valid admin session, so
- * both current roles get canActOnTickets. Accepts `string` so a stale or
- * unrecognized role value degrades to deny-by-default instead of failing.
+ * Capabilities are a UX hint; each action endpoint and its database RPC remain
+ * the source of truth. Current roles may act only when the session also names
+ * a real Discord identity, because transactional review RPCs record that actor
+ * in their audit rows. Accepts `string` so a stale or unrecognized role value
+ * degrades to deny-by-default instead of failing.
  */
 export function capabilitiesForAdminRole(
   role: string | null | undefined,
+  actorDiscordId?: string,
 ): TicketViewerCapabilities {
   switch (role) {
     case "super_admin":
     case "admin":
       return {
         canViewQueue: true,
-        canActOnTickets: true,
+        // Password fallback sessions are not backed by an admin_users Discord
+        // identity, so they cannot be the actor on audited database RPCs.
+        canActOnTickets: actorDiscordId !== "password-admin",
         // Restricted identities stay off for every role until an audited
         // reveal path exists; they remain in the owning workflows.
         canViewRestrictedIdentities: false,

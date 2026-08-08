@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { getAdminSession } from "@/lib/admin-auth";
 import { getScouterReceipt } from "@/lib/scouter-receipt";
 
-export const revalidate = 30;
+// The public receipt is cached by Supabase/CDN, but this page must render per
+// request because the correction link is visible only to an admin session.
+export const dynamic = "force-dynamic";
 
 function titleCase(value: string | null) {
   if (!value) return "Unknown";
@@ -15,7 +18,10 @@ export default async function ScouterReceiptPage({
   params: Promise<{ matchId: string }>;
 }) {
   const { matchId } = await params;
-  const receipt = await getScouterReceipt(matchId);
+  const [receipt, adminSession] = await Promise.all([
+    getScouterReceipt(matchId),
+    getAdminSession(),
+  ]);
   if (!receipt) notFound();
 
   const hostedAt = new Date(receipt.hostedAt).toLocaleString("en-US", {
@@ -64,6 +70,14 @@ export default async function ScouterReceiptPage({
               <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-3 py-1 text-xs font-black uppercase text-cyan-100">
                 {game.participants.length} players
               </span>
+              {adminSession ? (
+                <Link
+                  href={`/admin/scouters/${encodeURIComponent(game.id)}`}
+                  className="rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-xs font-black uppercase text-amber-100 transition hover:bg-amber-300/20"
+                >
+                  Correct game
+                </Link>
+              ) : null}
             </div>
 
             <div className="overflow-x-auto">

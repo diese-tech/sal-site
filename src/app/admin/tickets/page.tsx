@@ -21,7 +21,7 @@ export default async function AdminTicketsPage({
   const queryString = query.toString();
   const session = await requireAdmin(`/admin/tickets${queryString ? `?${queryString}` : ""}`);
   const queue = await getAdminTicketQueue();
-  const capabilities = capabilitiesForAdminRole(session.role);
+  const capabilities = capabilitiesForAdminRole(session.role, session.discordId);
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <div className="mb-6">
@@ -31,6 +31,12 @@ export default async function AdminTicketsPage({
           One queue for review work across the league. Safe actions are available here, with owning workflows linked for everything else.
         </p>
       </div>
+      {session.discordId === "password-admin" ? (
+        <div className="mb-5 rounded-xl border border-amber-300/25 bg-amber-300/8 px-4 py-3 text-xs text-amber-100">
+          Ticket actions require an audited Discord admin identity. Sign out, then use
+          Discord login to approve, deny, or request more information.
+        </div>
+      ) : null}
       <Suspense>
         <AdminTicketsClient
           key={queue.tickets.map((ticket) => `${ticket.id}:${ticket.sourceStatus}:${ticket.updatedAt}`).join("|")}

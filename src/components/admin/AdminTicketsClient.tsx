@@ -215,7 +215,7 @@ function TicketDetail({
 
       {ticket.details && ticket.details.length > 0 && (
         <div className="mb-4 space-y-3 rounded-xl border border-white/8 bg-black/20 p-4">
-          <p className="text-[0.6rem] font-black uppercase tracking-wider text-slate-500">Report details</p>
+          <p className="text-[0.6rem] font-black uppercase tracking-wider text-slate-500">Ticket details</p>
           {ticket.details.map((detail) => (
             <div key={detail.label}>
               <p className="text-[0.6rem] font-black uppercase tracking-wider text-slate-500">{detail.label}</p>

@@ -25,6 +25,16 @@ export type TicketAction =
   | { kind: "reject_registration"; reviewerNote?: string }
   | { kind: "resolve_match_report"; games: MatchReportResolutionGame[] }
   | {
+      kind: "resolve_operation";
+      decision: "approve" | "deny" | "needs_info";
+      note?: string;
+    }
+  | {
+      kind: "resolve_stat_review";
+      decision: "approve" | "deny";
+      note?: string;
+    }
+  | {
       kind: "update_bug_report_status";
       status: "acknowledged" | "investigating" | "resolved";
     };
@@ -43,7 +53,13 @@ interface RunTicketActionOptions {
 
 export type TicketActionResult = { ok: true } | { ok: false; error: string };
 
-export type TicketActionMode = "registration" | "match_report" | "bug_report" | "read_only";
+export type TicketActionMode =
+  | "operation"
+  | "stat_review"
+  | "registration"
+  | "match_report"
+  | "bug_report"
+  | "read_only";
 
 export function getTicketActionMode(
   ticket: AdminTicket,
@@ -53,7 +69,14 @@ export function getTicketActionMode(
   if (ticket.category === "bug_report" && !["resolved", "denied", "cancelled"].includes(ticket.status)) {
     return "bug_report";
   }
+  if (
+    ticket.category === "operation" &&
+    (ticket.status === "open" || ticket.status === "needs_info")
+  ) {
+    return "operation";
+  }
   if (ticket.status !== "open") return "read_only";
+  if (ticket.category === "stat_review") return "stat_review";
   if (ticket.category === "registration") return "registration";
   if (ticket.category === "match_report") return "match_report";
   return "read_only";
@@ -89,6 +112,17 @@ export async function runTicketAction({
 }
 
 function actionRequest(ticket: AdminTicket, action: TicketAction): { url: string; init: RequestInit } {
+  if (action.kind === "resolve_operation" || action.kind === "resolve_stat_review") {
+    const segment = action.kind === "resolve_operation" ? "operations" : "stat-reviews";
+    return {
+      url: `/api/admin/tickets/${segment}/${encodeURIComponent(ticket.sourceId)}`,
+      init: {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision: action.decision, note: action.note }),
+      },
+    };
+  }
   if (action.kind === "update_bug_report_status") {
     return {
       url: `/api/admin/bug-reports/${encodeURIComponent(ticket.sourceId)}`,
@@ -122,6 +156,38 @@ function actionRequest(ticket: AdminTicket, action: TicketAction): { url: string
 }
 
 function optimisticTicket(ticket: AdminTicket, action: TicketAction, updatedAt: string): AdminTicket {
+  if (action.kind === "resolve_operation" || action.kind === "resolve_stat_review") {
+    const needsInfo = action.kind === "resolve_operation" && action.decision === "needs_info";
+    const denied = action.decision === "deny";
+    const sourceStatus = needsInfo
+      ? "pending_info"
+      : denied
+        ? action.kind === "resolve_stat_review"
+          ? "rejected"
+          : "denied"
+        : "approved";
+    const label = needsInfo
+      ? "More information requested"
+      : denied
+        ? action.kind === "resolve_stat_review"
+          ? "Stat record denied"
+          : "Admin request denied"
+        : action.kind === "resolve_stat_review"
+          ? "Stat record approved"
+          : "Admin request approved";
+    const note = action.note?.trim() || undefined;
+
+    return {
+      ...ticket,
+      status: needsInfo ? "needs_info" : denied ? "denied" : "resolved",
+      sourceStatus,
+      updatedAt,
+      timeline: [
+        ...ticket.timeline,
+        { at: updatedAt, label, ...(note ? { detail: note } : {}) },
+      ],
+    };
+  }
   if (action.kind === "update_bug_report_status") {
     return {
       ...ticket,
