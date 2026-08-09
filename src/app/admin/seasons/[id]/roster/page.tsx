@@ -6,11 +6,22 @@ import { getSeasonRosterAdminData } from "@/lib/league-data";
 
 export const metadata = { title: "Manage Season Roster - SAL Admin" };
 
-export default async function AdminSeasonRosterPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AdminSeasonRosterPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{
+    mergedFrom?: string | string[];
+    mergedInto?: string | string[];
+  }>;
+}) {
   const session = await requireAdmin();
   if (session.role !== "super_admin") redirect("/admin");
   const { id } = await params;
-  const data = await getSeasonRosterAdminData(id);
+  const [data, query] = await Promise.all([getSeasonRosterAdminData(id), searchParams]);
+  const mergedFrom = Array.isArray(query.mergedFrom) ? query.mergedFrom[0] : query.mergedFrom;
+  const mergedInto = Array.isArray(query.mergedInto) ? query.mergedInto[0] : query.mergedInto;
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
@@ -22,6 +33,11 @@ export default async function AdminSeasonRosterPage({ params }: { params: Promis
           {data.orgAssignments.length} divisional teams across {new Set(data.orgAssignments.map((row) => row.org_id)).size} organizations · {data.rosterAssignments.length} players. Global identities remain intact when a season assignment is removed.
         </p>
       </div>
+      {mergedFrom && mergedInto && (
+        <p role="status" className="mb-4 rounded-xl border border-emerald-300/25 bg-emerald-300/5 p-3 text-sm font-semibold text-emerald-200">
+          Organization merge completed. {mergedFrom} was merged into {mergedInto}, which is now the canonical identity.
+        </p>
+      )}
       <AdminSeasonRosterClient data={data} />
     </main>
   );

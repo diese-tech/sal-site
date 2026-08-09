@@ -5,9 +5,21 @@ import { AdminTeamsClient } from "@/components/admin/AdminTeamsClient";
 
 export const metadata = { title: "Manage Teams - SAL Admin" };
 
-export default async function AdminTeamsPage() {
+function first(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function safeAdminReturnTo(value: string | undefined): string | undefined {
+  return value?.startsWith("/admin/") && !value.startsWith("//") ? value : undefined;
+}
+
+export default async function AdminTeamsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await requireAdmin();
-  const [data, catalog] = await Promise.all([getAdminLeagueData(), getAdminIdentityCatalog()]);
+  const [data, catalog, query] = await Promise.all([getAdminLeagueData(), getAdminIdentityCatalog(), searchParams]);
   const teamsData = {
     ...data,
     orgs: mergeSeasonAndCatalogOrgs(data.orgs, catalog.orgs),
@@ -23,7 +35,13 @@ export default async function AdminTeamsPage() {
           Create and edit team profiles. Roster assignment is handled from the Roster screen.
         </p>
       </div>
-      <AdminTeamsClient data={teamsData} isSuperAdmin={session.role === "super_admin"} />
+      <AdminTeamsClient
+        data={teamsData}
+        isSuperAdmin={session.role === "super_admin"}
+        initialEditOrgId={first(query.edit)}
+        initialMergeOrgId={first(query.merge)}
+        returnTo={safeAdminReturnTo(first(query.returnTo))}
+      />
     </main>
   );
 }
