@@ -55,5 +55,7 @@ describe("AdminDraftRoomClient delegated draft access", () => {
     expect(html).toContain("Generate Beta - TD access link");
     expect(html).toContain("one-time");
     expect(html).toContain("only this organization&#x27;s seat");
+    expect(html).toContain('href="/draft/room-1"');
+    expect(html).toContain("Open Public Draftboard");
   });
 });

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { DraftState } from "@/types/draft";
 import type { LeaguePlayer, Org } from "@/types/league";
 import { formatDraftTeamLabel } from "@/lib/draft-team";
@@ -182,6 +183,14 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
           </span>
         </div>
         <div className="flex gap-2">
+          <Link
+            href={`/draft/${room.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-4 py-2 text-xs font-black uppercase text-cyan-100 transition hover:bg-cyan-300/25"
+          >
+            Open Public Draftboard
+          </Link>
           {isPending && <AdminBtn onClick={() => call("start")} disabled={busy || room.baseOrder.length === 0}>Start Draft</AdminBtn>}
           {isActive && <AdminBtn onClick={() => call("pause")} disabled={busy} variant="yellow">Pause</AdminBtn>}
           {isPaused && <AdminBtn onClick={() => call("resume")} disabled={busy}>Resume</AdminBtn>}
