@@ -130,6 +130,30 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
   const isPaused = room.status === "paused";
   const isComplete = room.status === "complete";
 
+  const [selectedPickerId, setSelectedPickerId] = useState<string>("");
+
+  async function submitAdminPick() {
+    if (!selectedPickerId || !currentOrgId) {
+      setMessage("Select a player to pick.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    const res = await fetch(`/api/admin/draft/${room.id}/pick`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: selectedPickerId, expectedPickIndex: room.currentPickIndex }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null) as { error?: string } | null;
+      setMessage(data?.error ?? "Pick failed.");
+      return;
+    }
+    setSelectedPickerId("");
+    router.refresh();
+  }
+
   return (
     <div className="space-y-6">
       {/* Status bar */}
@@ -257,6 +281,40 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
               {availablePlayers.length === 0 && <p className="col-span-2 text-sm text-slate-500">All players picked.</p>}
             </div>
           </section>
+
+          {/* Admin emergency pick */}
+          {isActive && currentOrgId ? (
+            <section className="rounded-2xl border border-white/8 bg-slate-950/70 p-4">
+              <h2 className="mb-3 text-xs font-black uppercase text-slate-400">Emergency Pick for {getTeamLabel(currentOrgId)}</h2>
+              <div className="space-y-3">
+                <select
+                  value={selectedPickerId}
+                  onChange={(e) => setSelectedPickerId(e.target.value)}
+                  disabled={busy}
+                  className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white disabled:opacity-60"
+                >
+                  <option value="">Select a player...</option>
+                  {availablePlayers.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.ign} · {p.primaryRole}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={submitAdminPick}
+                  disabled={busy || !selectedPickerId}
+                  className="w-full rounded-lg border border-orange-300/35 bg-orange-300/15 px-3 py-2 text-sm font-black uppercase text-orange-100 disabled:opacity-60"
+                >
+                  Submit Pick
+                </button>
+              </div>
+            </section>
+          ) : isPaused ? (
+            <section className="rounded-2xl border border-white/8 bg-slate-950/70 p-4">
+              <h2 className="mb-3 text-xs font-black uppercase text-slate-400">Emergency Pick</h2>
+              <p className="text-sm text-slate-400">Resume the draft to pick for a team.</p>
+            </section>
+          ) : null}
 
           {/* Pick sequence preview */}
           {pickSequence.length > 0 && (
