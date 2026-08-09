@@ -66,6 +66,31 @@ guesses.
 
 ## Captain access
 
+### Current draft-day delegated access
+
+Until Discord role-to-organization ownership is available as a trusted server-side
+mapping, commissioners delegate access with one-time, room-and-organization-scoped
+links from **Admin → Draft → Captain / Org Owner Access**:
+
+1. Find the organization in the draft room.
+2. Select **Generate access link** once for the captain and again for each backup
+   org owner. Do not send the same link to two people; the first redemption
+   consumes it.
+3. Send each generated link only to the intended captain or owner.
+4. Opening the link creates a signed session for exactly that draft room and
+   organization. The recipient cannot select another organization in the client,
+   and the pick and shortlist APIs enforce the same scope on the server.
+
+The requested Discord Org Owner role ID `1482930940886909079` is deliberately
+not an authorization input yet. The current player OAuth flow requests only
+Discord `identify`, and neither `sal-site` nor the database has a trustworthy
+owner-to-organization mapping. Hard-coding that global role would therefore
+either be unverifiable or grant cross-organization access. No
+`DISCORD_ORG_OWNER_ROLE_ID` environment variable is active until both guild-role
+membership and organization ownership can be verified server-side.
+
+### Intended role-mapped access
+
 Captains do not need unique permanent links. Access is based on:
 
 - Discord OAuth;

@@ -31,3 +31,8 @@ export interface Registration {
   reviewedAt?: string;
   reviewerNote?: string;
 }
+
+export interface AuthAccount {
+  discordUsername: string;
+  player: { id: string; ign: string } | null;
+}

@@ -5,9 +5,17 @@ import { AdminPlayersClient } from "@/components/admin/AdminPlayersClient";
 
 export const metadata = { title: "Edit Roster - SAL Admin" };
 
-export default async function AdminPlayersPage() {
+function first(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function AdminPlayersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const session = await requireAdmin();
-  const [data, catalog] = await Promise.all([getAdminLeagueData(), getAdminIdentityCatalog()]);
+  const [data, catalog, query] = await Promise.all([getAdminLeagueData(), getAdminIdentityCatalog(), searchParams]);
   const playersData = {
     ...data,
     orgs: mergeSeasonAndCatalogOrgs(data.orgs, catalog.orgs),
@@ -20,7 +28,11 @@ export default async function AdminPlayersPage() {
         <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">Admin</p>
         <h1 className="text-2xl font-black text-white">Edit Roster</h1>
       </div>
-      <AdminPlayersClient data={playersData} isSuperAdmin={session.role === "super_admin"} />
+      <AdminPlayersClient
+        data={playersData}
+        isSuperAdmin={session.role === "super_admin"}
+        initialMergePlayerId={first(query.merge)}
+      />
     </main>
   );
 }

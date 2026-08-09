@@ -208,6 +208,14 @@ function fromDbPlayer(row: DbPlayer): LeaguePlayer {
   };
 }
 
+function fromDbAdminPlayer(row: DbPlayer): LeaguePlayer {
+  return {
+    ...fromDbPlayer(row),
+    profileClaimed: row.profile_claimed,
+    hasDiscordId: !!row.discord_id,
+  };
+}
+
 function toDbPlayer(player: LeaguePlayer): DbPlayerInsert {
   return {
     id: player.id,
@@ -475,7 +483,7 @@ export async function getAdminLeagueData(seasonId?: string): Promise<LeagueData>
     }
     const scoped = scopeSeasonEntities(
       (orgRes.data as DbOrg[]).map(fromDbOrg),
-      (playerRes.data as DbPlayer[]).map(fromDbPlayer),
+      (playerRes.data as DbPlayer[]).map(fromDbAdminPlayer),
       orgAssignments,
       rosterAssignments,
     );
@@ -622,7 +630,7 @@ export async function getAdminIdentityCatalog(): Promise<{ orgs: Org[]; players:
   if (error) throw error;
   return {
     orgs: (orgRes.data as DbOrg[]).map(fromDbOrg),
-    players: (playerRes.data as DbPlayer[]).map(fromDbPlayer),
+    players: (playerRes.data as DbPlayer[]).map(fromDbAdminPlayer),
   };
 }
 
@@ -643,7 +651,7 @@ export async function getSeasonRosterAdminData(seasonId: string): Promise<Season
     season: fromDbSeason(seasonRes.data as DbSeason),
     divisions: (divisionRes.data as DbDivision[]).map(fromDbDivision),
     orgCatalog: (orgRes.data as DbOrg[]).map(fromDbOrg),
-    playerCatalog: (playerRes.data as DbPlayer[]).map(fromDbPlayer),
+    playerCatalog: (playerRes.data as DbPlayer[]).map(fromDbAdminPlayer),
     orgAssignments: (seasonOrgRes.data ?? []) as SeasonOrgAdminAssignment[],
     rosterAssignments: (rosterRes.data ?? []) as SeasonRosterAdminAssignment[],
   };
@@ -1412,6 +1420,49 @@ export async function updateRegistrationStatus(
   await writeAuditLog("update_registration", "registration", id, { status, reviewerNote });
 }
 
+export async function approveRegistrationAfterProfileClaim(
+  registrationId: string,
+  discordId: string,
+  playerId: string,
+): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+
+  const reviewerNote = "Auto-approved via profile claim";
+  const { data, error } = await supabase
+    .from("registrations")
+    .update({
+      status: "approved",
+      player_id: playerId,
+      reviewer_note: reviewerNote,
+      reviewed_at: new Date().toISOString(),
+    })
+    .eq("id", registrationId)
+    .eq("discord_id", discordId)
+    .eq("status", "pending")
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+
+  if (!data) {
+    const { data: existing, error: existingError } = await supabase
+      .from("registrations")
+      .select("status, player_id")
+      .eq("id", registrationId)
+      .eq("discord_id", discordId)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (existing?.status === "approved" && existing.player_id === playerId) return;
+    throw new Error("Pending registration could not be linked to the claimed player.");
+  }
+
+  await writeAuditLog("update_registration", "registration", registrationId, {
+    status: "approved",
+    playerId,
+    reviewerNote,
+  });
+}
+
 type DbPlayerUpdateWithAvatar = Database["public"]["Tables"]["players"]["Update"] & { avatar_url?: string };
 
 export async function claimPlayerProfile(discordId: string, playerId: string, avatarUrl?: string): Promise<void> {
@@ -1453,6 +1504,8 @@ export async function claimPlayerByDiscordUsername(
     .from("players")
     .select("id, discord_id, profile_claimed")
     .ilike("discord_username", safeUsername)
+    .is("archived_at", null)
+    .is("deletion_scheduled_at", null)
     .order("id")
     .limit(2);
   if (error) throw error;
@@ -1522,6 +1575,46 @@ export async function getPlayerByDiscordId(discordId: string): Promise<LeaguePla
     .maybeSingle();
   if (error) throw error;
   return data ? fromDbPlayer(data) : null;
+}
+
+export type PlayerClaimCandidateLookup =
+  | { kind: "none" }
+  | { kind: "ambiguous" }
+  | { kind: "available"; player: LeaguePlayer }
+  | { kind: "unavailable"; player: LeaguePlayer };
+
+/**
+ * Finds an active player identity by the authenticated Discord handle without
+ * applying current-season, division, role, or roster-status filters. Imported
+ * identities must remain claimable even before they are enrolled in a season.
+ */
+export async function getPlayerClaimCandidateByDiscordUsername(
+  discordUsername: string,
+): Promise<PlayerClaimCandidateLookup> {
+  const username = discordUsername.trim();
+  if (!username) return { kind: "none" };
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return { kind: "none" };
+
+  const safeUsername = username.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+  const { data: rows, error } = await supabase
+    .from("players")
+    .select("*")
+    .ilike("discord_username", safeUsername)
+    .is("archived_at", null)
+    .is("deletion_scheduled_at", null)
+    .order("id")
+    .limit(2);
+
+  if (error) throw error;
+  if (!rows || rows.length === 0) return { kind: "none" };
+  if (rows.length > 1) return { kind: "ambiguous" };
+
+  const row = rows[0];
+  return row.profile_claimed || row.discord_id
+    ? { kind: "unavailable", player: fromDbPlayer(row) }
+    : { kind: "available", player: fromDbPlayer(row) };
 }
 
 /**

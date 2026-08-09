@@ -47,7 +47,7 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
   const { room, picks, pickSequence, currentOrgId, totalPicks } = liveState;
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [tokens, setTokens] = useState<Record<string, string> | null>(null);
+  const [accessLinks, setAccessLinks] = useState<Record<string, string[]>>({});
   const [baseOrderDraft, setBaseOrderDraft] = useState<string[]>(room.baseOrder);
 
   const divOrgs = orgs.filter((o) => o.divisionId === room.divisionId);
@@ -112,18 +112,30 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
     router.refresh();
   }
 
-  async function generateTokens() {
+  async function generateAccessLink(orgId: string) {
     setBusy(true);
     setMessage("");
-    const res = await fetch(`/api/admin/draft/${room.id}/tokens`, { method: "POST" });
+    const res = await fetch(`/api/admin/draft/${room.id}/tokens`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orgId }),
+    });
     setBusy(false);
     if (!res.ok) {
       const data = await res.json().catch(() => null) as { error?: string } | null;
-      setMessage(data?.error ?? "Failed to generate tokens.");
+      setMessage(data?.error ?? "Failed to generate access link.");
       return;
     }
     const data = await res.json() as { tokens: Record<string, string> };
-    setTokens(data.tokens);
+    const token = data.tokens[orgId];
+    if (!token) {
+      setMessage("The server did not return an access link for this organization.");
+      return;
+    }
+    setAccessLinks((current) => ({
+      ...current,
+      [orgId]: [...(current[orgId] ?? []), token],
+    }));
   }
 
   const isPending = room.status === "pending";
@@ -229,27 +241,39 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
             )}
           </section>
 
-          {/* Captain tokens */}
+          {/* Captain / organization-owner delegated access */}
           <section className="rounded-2xl border border-white/8 bg-slate-950/70 p-4">
-            <h2 className="mb-3 text-xs font-black uppercase text-slate-400">Captain Tokens</h2>
-            <p className="mb-3 text-xs text-slate-500">Share these links with each team captain. Each link auto-authenticates them to the draft board.</p>
-            {tokens ? (
-              <div className="space-y-2">
-                {Object.entries(tokens).map(([orgId, token]) => {
-                  const url = typeof window !== "undefined" ? `${window.location.origin}/draft/${room.id}?token=${token}` : token;
-                  return (
-                    <div key={orgId} className="rounded-lg border border-white/8 bg-black/30 p-2">
-                      <p className="text-xs font-black text-white">{getTeamLabel(orgId)}</p>
-                      <p className="mt-1 break-all font-mono text-[0.6rem] text-cyan-300/70">{url}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <button onClick={generateTokens} disabled={busy || room.baseOrder.length === 0} className="rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-4 py-2 text-xs font-black uppercase text-cyan-100 disabled:opacity-60">
-                Generate Tokens
-              </button>
-            )}
+            <h2 className="mb-3 text-xs font-black uppercase text-slate-400">Captain / Org Owner Access</h2>
+            <p className="mb-3 text-xs text-slate-500">
+              Generate a separate one-time link for each captain or backup org owner. A redeemed link controls only this organization&apos;s seat in this draft room.
+            </p>
+            <div className="space-y-2">
+              {room.baseOrder.map((orgId) => (
+                <div key={orgId} className="rounded-lg border border-white/8 bg-black/30 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-black text-white">{getTeamLabel(orgId)}</p>
+                    <button
+                      type="button"
+                      aria-label={`Generate ${getTeamLabel(orgId)} access link`}
+                      onClick={() => generateAccessLink(orgId)}
+                      disabled={busy}
+                      className="rounded-lg border border-cyan-300/35 bg-cyan-300/15 px-3 py-1.5 text-[0.65rem] font-black uppercase text-cyan-100 disabled:opacity-60"
+                    >
+                      {accessLinks[orgId]?.length ? "Generate another link" : "Generate access link"}
+                    </button>
+                  </div>
+                  {accessLinks[orgId]?.map((token, index) => {
+                    const url = typeof window !== "undefined" ? `${window.location.origin}/draft/${room.id}?token=${token}` : token;
+                    return (
+                      <div key={token} className="mt-2 rounded border border-cyan-300/10 bg-cyan-950/15 p-2">
+                        <p className="text-[0.6rem] font-black uppercase text-slate-500">One-time link {index + 1}</p>
+                        <p className="mt-1 break-all font-mono text-[0.6rem] text-cyan-300/70">{url}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
           </section>
         </div>
 

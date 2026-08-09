@@ -317,9 +317,10 @@ export async function generateCaptainToken(draftRoomId: string, orgId: string): 
   const token = randomBytes(24).toString("base64url");
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
-  await supabase
+  const { error } = await supabase
     .from("captain_tokens")
-    .upsert({ id: token, draft_room_id: draftRoomId, org_id: orgId, token_hash: tokenHash, expires_at: expiresAt });
+    .insert({ id: token, draft_room_id: draftRoomId, org_id: orgId, token_hash: tokenHash, expires_at: expiresAt });
+  if (error) throw error;
   return token;
 }
 

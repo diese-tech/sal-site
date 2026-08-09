@@ -6,10 +6,144 @@ import Link from "next/link";
 import type { DivisionId, LeagueData, LeaguePlayer } from "@/types/league";
 import type { PlayerRole, PlayerStatus } from "@/types/card-lab";
 import { cn } from "@/lib/utils";
+import type { PlayerMergePreview } from "@/lib/player-merge";
 
 const roles: PlayerRole[] = ["Solo", "Jungle", "Mid", "Carry", "Support", "Flex"];
 
 type Notice = { tone: "success" | "error"; text: string } | null;
+
+const mergeCountLabels: Record<string, string> = {
+  players: "Player identities",
+  seasonRosters: "Roster assignments",
+  organizationCaptainLinks: "Organization captain links",
+  pendingStatRecords: "Pending stat records",
+  registrations: "Registration rows",
+  playerMatchStats: "Match-report stats",
+  playerStats: "Official player stats",
+  draftPicks: "Draft picks",
+  draftShortlists: "Captain shortlist rows",
+  captainTokens: "Captain access tokens",
+  godPicks: "God picks",
+  godBans: "God bans",
+  standings: "Standing rows",
+  scouterParticipants: "Scouter participants",
+  immutableAuditLogs: "Audit logs (preserved)",
+  immutableAdminAuditLogs: "Admin audit logs (preserved)",
+  immutableOutboxEvents: "Outbox evidence (preserved)",
+  immutableScouterCorrections: "Scouter corrections (preserved)",
+};
+
+export function getPlayerMergeTargets(players: LeaguePlayer[], sourcePlayerId: string): LeaguePlayer[] {
+  return players.filter((player) => (
+    player.id !== sourcePlayerId
+    && !player.archivedAt
+    && !player.deletionScheduledAt
+  ));
+}
+
+export function canApplyPlayerMerge(
+  preview: PlayerMergePreview | null,
+  sourcePlayerId: string,
+  targetPlayerId: string,
+  confirmation: string,
+): boolean {
+  return !!preview?.canMerge
+    && preview.source?.id === sourcePlayerId
+    && preview.target?.id === targetPlayerId
+    && confirmation === "MERGE";
+}
+
+export function playerMergeSuccessMessage(
+  sourceName: string,
+  targetName: string,
+  code: "merged" | "already_merged",
+  warning?: string | null,
+): string {
+  const message = code === "already_merged"
+    ? `${sourceName} was already merged into ${targetName}.`
+    : `Merged ${sourceName} into ${targetName}.`;
+  return warning ? `${message} ${warning}` : message;
+}
+
+function playerMergeTargetLabel(player: LeaguePlayer, orgs: LeagueData["orgs"]): string {
+  const orgName = orgs.find((org) => org.id === player.orgId)?.name ?? "Free agent";
+  const division = player.divisionId
+    ? player.divisionId.charAt(0).toUpperCase() + player.divisionId.slice(1)
+    : "No division";
+  const rosterRole = player.isCaptain ? "Captain" : player.isStarter ? "Starter" : "Sub";
+  const claimState = player.profileClaimed ? "Claimed" : "Unclaimed";
+  const discordState = player.hasDiscordId ? "Discord linked" : "Discord not linked";
+  return `${player.ign} (@${player.discordUsername}) · ${orgName} · ${division} · ${rosterRole} · ${claimState} · ${discordState} · ${player.id}`;
+}
+
+function mergeIdentityDetails(
+  identity: NonNullable<PlayerMergePreview["source"]>,
+  orgs: LeagueData["orgs"],
+): string[] {
+  const orgName = orgs.find((org) => org.id === identity.orgId)?.name ?? "Free agent";
+  const division = identity.divisionId
+    ? identity.divisionId.charAt(0).toUpperCase() + identity.divisionId.slice(1)
+    : "No division";
+  return [
+    orgName,
+    division,
+    identity.isCaptain ? "Captain" : identity.isStarter ? "Starter" : "Sub",
+    identity.profileClaimed ? "Profile claimed" : "Profile unclaimed",
+    identity.hasDiscordId ? "Discord linked" : "Discord not linked",
+  ];
+}
+
+export function PlayerMergePreviewSummary({
+  preview,
+  orgs,
+}: {
+  preview: PlayerMergePreview;
+  orgs: LeagueData["orgs"];
+}) {
+  return (
+    <div className="space-y-3 rounded-xl border border-white/10 bg-black/25 p-3">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {[
+          { label: "Duplicate", player: preview.source },
+          { label: "Canonical", player: preview.target },
+        ].map(({ label, player }) => (
+          <div key={label} className="rounded-lg border border-white/8 bg-black/20 p-3">
+            <p className="text-[0.6rem] font-black uppercase text-slate-500">{label}</p>
+            <p className="font-black text-white">{player?.ign ?? "Unavailable"}</p>
+            {player && (
+              <>
+                <p className="text-xs font-semibold text-slate-500">@{player.discordUsername} · {player.id}</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {mergeIdentityDetails(player, orgs).map((detail) => (
+                    <span key={detail} className="rounded border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[0.6rem] font-black uppercase text-slate-300">
+                      {detail}
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-1 text-xs font-semibold text-slate-300 sm:grid-cols-2">
+        {Object.entries(preview.counts).filter(([, count]) => count > 0).map(([key, count]) => (
+          <p key={key}>{mergeCountLabels[key] ?? key}: <strong className="text-white">{count}</strong></p>
+        ))}
+      </div>
+      {preview.blockers.length > 0 ? (
+        <div role="alert" className="rounded-lg border border-rose-300/25 bg-rose-300/5 p-3 text-xs font-semibold text-rose-200">
+          {preview.blockers.map((blocker, index) => (
+            <p key={`${preview.blockerCodes[index] ?? "BLOCKED"}:${blocker}`}>
+              {preview.blockerCodes[index] ? `[${preview.blockerCodes[index]}] ` : ""}{blocker}
+            </p>
+          ))}
+        </div>
+      ) : (
+        <p role="status" className="text-xs font-semibold text-emerald-300">No merge blockers found.</p>
+      )}
+    </div>
+  );
+}
 
 function emptyPlayer(): LeaguePlayer {
   return {
@@ -29,9 +163,11 @@ function emptyPlayer(): LeaguePlayer {
 export function AdminPlayersClient({
   data,
   isSuperAdmin = false,
+  initialMergePlayerId,
 }: {
   data: LeagueData;
   isSuperAdmin?: boolean;
+  initialMergePlayerId?: string;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<LeaguePlayer | null>(null);
@@ -41,6 +177,19 @@ export function AdminPlayersClient({
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [confirmScheduleId, setConfirmScheduleId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [mergeSourceId, setMergeSourceId] = useState<string | null>(() => {
+    if (!isSuperAdmin) return null;
+    const initial = data.players.find((player) => (
+      player.id === initialMergePlayerId
+      && !player.archivedAt
+      && !player.deletionScheduledAt
+    ));
+    return initial?.id ?? null;
+  });
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [mergePreview, setMergePreview] = useState<PlayerMergePreview | null>(null);
+  const [mergeConfirmation, setMergeConfirmation] = useState("");
+  const [mergeBusy, setMergeBusy] = useState(false);
 
   // Filters
   const [search, setSearch] = useState("");
@@ -58,16 +207,18 @@ export function AdminPlayersClient({
 
   const activePlayers = data.players.filter((p) => !p.archivedAt);
   const archivedPlayers = data.players.filter((p) => !!p.archivedAt);
+  const mergeSource = isSuperAdmin
+    ? activePlayers.find((player) => player.id === mergeSourceId)
+    : undefined;
+  const mergeTargets = mergeSource ? getPlayerMergeTargets(activePlayers, mergeSource.id) : [];
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return activePlayers.filter((p) => {
-      if (divFilter !== "all" && p.divisionId !== divFilter) return false;
-      if (orgFilter !== "all" && (orgFilter === "__free_agent__" ? !!p.orgId : p.orgId !== orgFilter)) return false;
-      if (q && !p.ign.toLowerCase().includes(q) && !p.discordUsername.toLowerCase().includes(q)) return false;
-      return true;
-    });
-  }, [activePlayers, search, divFilter, orgFilter]);
+  const q = search.toLowerCase();
+  const filtered = activePlayers.filter((p) => {
+    if (divFilter !== "all" && p.divisionId !== divFilter) return false;
+    if (orgFilter !== "all" && (orgFilter === "__free_agent__" ? !!p.orgId : p.orgId !== orgFilter)) return false;
+    if (q && !p.ign.toLowerCase().includes(q) && !p.discordUsername.toLowerCase().includes(q)) return false;
+    return true;
+  });
 
   function openEdit(player: LeaguePlayer) {
     setEditing({ ...player });
@@ -79,6 +230,101 @@ export function AdminPlayersClient({
     setEditing(emptyPlayer());
     setIsNew(true);
     setNotice(null);
+  }
+
+  function openMerge(player: LeaguePlayer) {
+    setMergeSourceId(player.id);
+    setMergeTargetId("");
+    setMergePreview(null);
+    setMergeConfirmation("");
+    setEditing(null);
+    setNotice(null);
+  }
+
+  function closeMerge() {
+    setMergeSourceId(null);
+    setMergeTargetId("");
+    setMergePreview(null);
+    setMergeConfirmation("");
+  }
+
+  async function previewMerge() {
+    if (!mergeSource || !mergeTargetId) return;
+    setMergeBusy(true);
+    setMergePreview(null);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/admin/players/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "preview",
+          sourcePlayerId: mergeSource.id,
+          targetPlayerId: mergeTargetId,
+        }),
+      });
+      const payload = await response.json().catch(() => null) as {
+        error?: string;
+        preview?: PlayerMergePreview;
+      } | null;
+      if (!response.ok || !payload?.preview) {
+        setNotice({ tone: "error", text: payload?.error ?? "Unable to preview player merge." });
+        return;
+      }
+      setMergePreview(payload.preview);
+    } catch {
+      setNotice({ tone: "error", text: "Unable to preview player merge." });
+    } finally {
+      setMergeBusy(false);
+    }
+  }
+
+  async function applyMerge() {
+    if (!mergeSource || !canApplyPlayerMerge(
+      mergePreview,
+      mergeSource.id,
+      mergeTargetId,
+      mergeConfirmation,
+    )) return;
+    const target = data.players.find((player) => player.id === mergeTargetId);
+    if (!target) return;
+
+    setMergeBusy(true);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/admin/players/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "apply",
+          sourcePlayerId: mergeSource.id,
+          targetPlayerId: target.id,
+          confirmation: mergeConfirmation,
+        }),
+      });
+      const payload = await response.json().catch(() => null) as {
+        error?: string;
+        code?: "merged" | "already_merged";
+        warning?: string | null;
+      } | null;
+      if (!response.ok || !payload?.code) {
+        setNotice({ tone: "error", text: payload?.error ?? "Unable to merge players." });
+        return;
+      }
+      const successText = playerMergeSuccessMessage(
+        mergeSource.ign,
+        target.ign,
+        payload.code,
+        payload.warning,
+      );
+      closeMerge();
+      setNotice({ tone: "success", text: successText });
+      router.refresh();
+    } catch {
+      setNotice({ tone: "error", text: "Unable to merge players." });
+    } finally {
+      setMergeBusy(false);
+    }
   }
 
   async function save() {
@@ -182,6 +428,14 @@ export function AdminPlayersClient({
         {/* Superadmin actions */}
         {isSuperAdmin && (
           <div className="mt-3 flex flex-wrap gap-1.5 border-t border-white/5 pt-3">
+            {!archived && !isScheduled && (
+              <button
+                onClick={() => openMerge(player)}
+                className="rounded-lg border border-violet-300/25 px-2.5 py-1 text-[0.65rem] font-black uppercase text-violet-200 transition hover:border-violet-300/50"
+              >
+                Merge Duplicate
+              </button>
+            )}
             {!archived ? (
               <button
                 onClick={() => void doArchive(player)}
@@ -285,6 +539,85 @@ export function AdminPlayersClient({
           <FilterChip key={org.id} active={orgFilter === org.id} onClick={() => setOrgFilter(org.id)}>{org.tag}</FilterChip>
         ))}
       </div>
+
+      {mergeSource && (
+        <div className="rounded-2xl border border-violet-300/25 bg-slate-950/84 p-4 shadow-xl shadow-violet-950/20">
+          <p className="text-xs font-black uppercase text-violet-200">Merge duplicate player</p>
+          <h2 className="mt-1 text-lg font-black text-white">Move {mergeSource.ign} into a canonical player identity</h2>
+          <p className="mt-1 text-sm font-semibold text-slate-400">
+            The canonical profile wins. Live account, roster, draft, match, and statistics references move in one database transaction.
+          </p>
+          <p className="mt-2 text-xs font-semibold text-amber-200">
+            Review both directions carefully: the linked Discord profile is not always the identity with the competitive history.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+            <Field label="Canonical player identity">
+              <select
+                aria-label="Canonical player identity"
+                value={mergeTargetId}
+                onChange={(event) => {
+                  setMergeTargetId(event.target.value);
+                  setMergePreview(null);
+                  setMergeConfirmation("");
+                }}
+                className={inputClass}
+              >
+                <option value="">Select the identity to keep</option>
+                {mergeTargets.map((player) => (
+                  <option key={player.id} value={player.id}>{playerMergeTargetLabel(player, data.orgs)}</option>
+                ))}
+              </select>
+            </Field>
+            <button
+              onClick={() => void previewMerge()}
+              disabled={!mergeTargetId || mergeBusy}
+              className="rounded-xl border border-violet-300/35 bg-violet-300/15 px-4 py-2 text-sm font-black uppercase text-violet-100 disabled:opacity-50"
+            >
+              {mergeBusy ? "Checking…" : "Preview Merge"}
+            </button>
+          </div>
+          {mergePreview && (
+            <div className="mt-4">
+              <PlayerMergePreviewSummary preview={mergePreview} orgs={data.orgs} />
+            </div>
+          )}
+          {mergePreview?.canMerge && (
+            <div className="mt-4">
+              <Field label="Type MERGE to confirm permanent deletion of the duplicate">
+                <input
+                  aria-label="Merge confirmation"
+                  value={mergeConfirmation}
+                  onChange={(event) => setMergeConfirmation(event.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          )}
+          <div className="mt-4 flex gap-2">
+            {mergePreview?.canMerge && (
+              <button
+                onClick={() => void applyMerge()}
+                disabled={mergeBusy || !canApplyPlayerMerge(
+                  mergePreview,
+                  mergeSource.id,
+                  mergeTargetId,
+                  mergeConfirmation,
+                )}
+                className="rounded-xl border border-rose-300/35 bg-rose-300/15 px-4 py-2 text-sm font-black uppercase text-rose-100 disabled:opacity-50"
+              >
+                Merge and Delete Duplicate
+              </button>
+            )}
+            <button
+              onClick={closeMerge}
+              disabled={mergeBusy}
+              className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black uppercase text-slate-300 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Edit / New panel */}
       {editing && (

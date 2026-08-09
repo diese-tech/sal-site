@@ -36,6 +36,8 @@ vi.mock("@/lib/league-data", () => ({
   createRegistration: vi.fn().mockResolvedValue(undefined),
   getCurrentSeasonId: vi.fn().mockResolvedValue("preseason-2"),
   getRegistrationByDiscordId: vi.fn().mockResolvedValue(null),
+  getPlayerByDiscordId: vi.fn().mockResolvedValue(null),
+  getPlayerClaimCandidateByDiscordUsername: vi.fn().mockResolvedValue({ kind: "none" }),
 }));
 
 function makeUser(user_metadata: Record<string, unknown>, identities: unknown[] = []): User {
@@ -59,7 +61,10 @@ function makeRequest() {
 
 describe("POST /api/auth/register — Discord username guard", () => {
   it("returns 400 and never creates a registration when no username can be resolved anywhere in the session", async () => {
-    authUser = makeUser({ provider_id: "123456789" }); // no user_name, no matching discord identity
+    authUser = makeUser(
+      { provider_id: "attacker-id" },
+      [{ id: "123456789", provider: "discord", identity_data: {} }],
+    );
     const { POST } = await import("@/app/api/auth/register/route");
     const { createRegistration } = await import("@/lib/league-data");
     vi.mocked(createRegistration).mockClear();
@@ -72,23 +77,21 @@ describe("POST /api/auth/register — Discord username guard", () => {
     expect(createRegistration).not.toHaveBeenCalled();
   });
 
-  it("succeeds using user_metadata.user_name when present", async () => {
+  it("rejects mutable top-level identity metadata when no Discord identity exists", async () => {
     authUser = makeUser({ provider_id: "123456789", user_name: "brawler99" });
     const { POST } = await import("@/app/api/auth/register/route");
     const { createRegistration } = await import("@/lib/league-data");
     vi.mocked(createRegistration).mockClear();
 
     const res = await POST(makeRequest());
-    expect(res.status).toBe(200);
-    expect(createRegistration).toHaveBeenCalledWith(
-      expect.objectContaining({ discordUsername: "brawler99" }),
-    );
+    expect(res.status).toBe(400);
+    expect(createRegistration).not.toHaveBeenCalled();
   });
 
   it("recovers the username from the Discord identity's identity_data when user_metadata.user_name is absent", async () => {
     authUser = makeUser(
       { provider_id: "123456789" },
-      [{ provider: "discord", identity_data: { user_name: "recovered_handle" } }],
+      [{ id: "123456789", provider: "discord", identity_data: { user_name: "recovered_handle" } }],
     );
     const { POST } = await import("@/app/api/auth/register/route");
     const { createRegistration } = await import("@/lib/league-data");

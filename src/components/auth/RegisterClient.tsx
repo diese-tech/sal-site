@@ -8,10 +8,10 @@ import type { FormField, Registration } from "@/types/auth";
 import { cn } from "@/lib/utils";
 
 interface Props {
-  discordId: string;
   discordDisplayName: string;
   claimedPlayer: LeaguePlayer | null;
   matchedByUsername: LeaguePlayer | null;
+  identityBlocker: "ambiguous" | "unavailable" | "declined-match" | "username-missing" | null;
   existingRegistration: Registration | null;
   formFields: FormField[];
 }
@@ -28,10 +28,10 @@ const STATUS_STYLE: Record<Registration["status"], string> = {
 };
 
 export function RegisterClient({
-  discordId,
   discordDisplayName,
   claimedPlayer,
   matchedByUsername,
+  identityBlocker,
   existingRegistration,
   formFields,
 }: Props) {
@@ -74,7 +74,7 @@ export function RegisterClient({
   }
 
   // ── Flow A: username match, prompt to claim ──────────────────────────────
-  if (matchedByUsername && !existingRegistration) {
+  if (matchedByUsername) {
     return (
       <div className="space-y-4">
         <div className="rounded-2xl border border-cyan-300/20 bg-slate-950/84 p-6 backdrop-blur">
@@ -130,6 +130,22 @@ export function RegisterClient({
           </div>
           {claimError && <p className="mt-2 text-xs font-semibold text-red-400">{claimError}</p>}
         </div>
+      </div>
+    );
+  }
+
+  if (identityBlocker) {
+    const message = {
+      ambiguous: "Multiple existing player profiles match your Discord username. An admin must reconcile them before you can register or claim a profile.",
+      unavailable: "The player profile matching your Discord username is already linked. Contact an admin so they can verify the correct identity.",
+      "declined-match": "We will not create another profile while an existing player identity matches your Discord username. Contact an admin if the suggested profile is not yours.",
+      "username-missing": "Discord did not provide a verified username for this session. Sign out and sign back in with Discord before continuing.",
+    }[identityBlocker];
+
+    return (
+      <div className="rounded-2xl border border-amber-300/25 bg-slate-950/84 p-6 backdrop-blur">
+        <p className="font-black text-amber-200">Identity verification required</p>
+        <p className="mt-2 text-sm text-slate-400">{message}</p>
       </div>
     );
   }

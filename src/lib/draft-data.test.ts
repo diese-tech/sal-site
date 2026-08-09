@@ -3,12 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/league-data", () => ({ saveSeasonRosterAssignment: vi.fn(), getCurrentSeasonId: vi.fn() }));
 
 import { getCurrentSeasonId, saveSeasonRosterAssignment } from "@/lib/league-data";
-import { finalizeDraftRosters, getTopShortlistPick } from "./draft-data";
+import { finalizeDraftRosters, generateCaptainToken, getTopShortlistPick } from "./draft-data";
 
 type QueryState = {
   table: string;
-  op: "select" | "update";
+  op: "select" | "update" | "insert" | "upsert";
   update?: Record<string, unknown>;
+  insert?: Record<string, unknown>;
   eqs: Array<[string, unknown]>;
   neqs: Array<[string, unknown]>;
   ins: Array<[string, unknown[]]>;
@@ -41,6 +42,18 @@ class FakeQuery {
 
   neq(column: string, value: unknown) {
     this.state.neqs.push([column, value]);
+    return this;
+  }
+
+  insert(values: Record<string, unknown>) {
+    this.state.op = "insert";
+    this.state.insert = values;
+    return this;
+  }
+
+  upsert(values: Record<string, unknown>) {
+    this.state.op = "upsert";
+    this.state.insert = values;
     return this;
   }
 
@@ -230,5 +243,34 @@ describe("getTopShortlistPick excludes season-wide drafted players (#206)", () =
     await expect(
       getTopShortlistPick("room-1", "org-a", "season-1", () => false),
     ).resolves.toBeNull();
+  });
+});
+
+describe("generateCaptainToken persistence", () => {
+  it("inserts a separate token row before returning the plaintext token", async () => {
+    client = makeClient(handlerFor({ captain_tokens: { data: null, error: null } }));
+
+    const token = await generateCaptainToken("room-1", "org-a");
+
+    expect(token).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    const query = executed.find((entry) => entry.table === "captain_tokens");
+    expect(query?.op).toBe("insert");
+    expect(query?.insert).toMatchObject({
+      id: token,
+      draft_room_id: "room-1",
+      org_id: "org-a",
+      token_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      expires_at: expect.any(String),
+    });
+  });
+
+  it("does not return an unpersisted token when the database rejects the insert", async () => {
+    client = makeClient(handlerFor({
+      captain_tokens: { data: null, error: { message: "captain token insert failed" } },
+    }));
+
+    await expect(generateCaptainToken("room-1", "org-a")).rejects.toMatchObject({
+      message: "captain token insert failed",
+    });
   });
 });

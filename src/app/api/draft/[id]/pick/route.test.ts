@@ -54,6 +54,28 @@ beforeEach(() => {
 });
 
 describe("division-locked drafting (#206)", () => {
+  it("rejects a valid room session for a different organization's seat", async () => {
+    vi.mocked(getCaptainSessionFromRequest).mockReturnValue({ draftRoomId: "room-1", orgId: "org-b" });
+
+    const res = await POST(req(), ctx);
+
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toEqual({ error: "It is not your turn to pick." });
+    expect(submitPickAtomic).not.toHaveBeenCalled();
+  });
+
+  it("uses the server-issued organization scope and ignores a client-supplied orgId", async () => {
+    const forged = new NextRequest("http://localhost/api/draft/room-1/pick", {
+      method: "POST",
+      body: JSON.stringify({ playerId: "player-9", orgId: "org-b" }),
+    });
+
+    const res = await POST(forged, ctx);
+
+    expect(res.status).toBe(200);
+    expect(submitPickAtomic).toHaveBeenCalledWith("room-1", "org-a", "player-9", 3, 4);
+  });
+
   it("rejects a player whose division differs from the room's", async () => {
     mockLeaguePlayers([{ id: "player-9", divisionId: "terra" }]);
 

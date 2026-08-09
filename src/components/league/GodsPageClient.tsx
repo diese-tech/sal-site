@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import type { DivisionId, OrgGodTendency, PlayerGodStats } from "@/types/league";
+import { DIVISION_FILTER_OPTIONS } from "@/lib/division-order";
 import { cn } from "@/lib/utils";
 
 type DivisionFilter = DivisionId | "all";
@@ -12,9 +13,7 @@ type SortDirection = "asc" | "desc";
 
 const DIVISION_FILTERS: { id: DivisionFilter; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "solar", label: "Solar" },
-  { id: "lunar", label: "Lunar" },
-  { id: "terra", label: "Terra" },
+  ...DIVISION_FILTER_OPTIONS,
 ];
 
 const divisionActive: Record<DivisionId, string> = {

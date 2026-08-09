@@ -3,10 +3,11 @@ import {
   getAuthUser,
   getDiscordId,
   getDiscordDisplayName,
+  getDiscordUsername,
 } from "@/lib/supabase-auth-server";
 import {
-  getLeagueData,
   getFormFields,
+  getPlayerClaimCandidateByDiscordUsername,
   getPlayerByDiscordId,
   getRegistrationByDiscordId,
 } from "@/lib/league-data";
@@ -26,22 +27,29 @@ export default async function RegisterPage({
 
   const discordId = getDiscordId(user);
   if (!discordId) redirect("/auth/error?message=discord_id_missing");
+  const discordUsername = getDiscordUsername(user);
 
-  const [{ players }, formFields, claimedPlayer, existingReg] = await Promise.all([
-    getLeagueData(),
+  const [formFields, claimedPlayer, existingReg, claimCandidate] = await Promise.all([
     getFormFields(),
     getPlayerByDiscordId(discordId),
     getRegistrationByDiscordId(discordId),
+    getPlayerClaimCandidateByDiscordUsername(discordUsername),
   ]);
 
-  // Try to match by discord username if no discord_id link yet.
-  // Suppressed when skip=1 (user clicked "Not me" on the claim prompt).
-  const discordUsername = user.user_metadata?.user_name as string | undefined;
-  const matchedByUsername = !claimedPlayer && !skip && discordUsername
-    ? players.find(
-        (p) => p.discordUsername.toLowerCase() === discordUsername.toLowerCase(),
-      ) ?? null
+  const matchedByUsername = !claimedPlayer && !skip && claimCandidate.kind === "available"
+    ? claimCandidate.player
     : null;
+  const identityBlocker = claimedPlayer
+    ? null
+    : !discordUsername
+      ? "username-missing"
+      : claimCandidate.kind === "ambiguous"
+        ? "ambiguous"
+        : claimCandidate.kind === "unavailable"
+          ? "unavailable"
+          : skip && claimCandidate.kind === "available"
+            ? "declined-match"
+            : null;
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
@@ -54,10 +62,10 @@ export default async function RegisterPage({
         </h1>
       </div>
       <RegisterClient
-        discordId={discordId}
         discordDisplayName={getDiscordDisplayName(user)}
         claimedPlayer={claimedPlayer}
         matchedByUsername={matchedByUsername}
+        identityBlocker={identityBlocker}
         existingRegistration={existingReg}
         formFields={formFields}
       />

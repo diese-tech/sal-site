@@ -5,6 +5,7 @@ import type { Division, OrgStanding, Org, DivisionId } from "@/types/league";
 import { OrgLogo } from "@/components/card-lab/ui";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { compareDivisionHierarchy } from "@/lib/division-order";
 import { sortStandings } from "@/lib/standings";
 
 const divisionTab: Record<DivisionId, { active: string; label: string }> = {
@@ -71,7 +72,7 @@ export function StandingsTable({
       {/* Division tab bar */}
       <div className="flex items-center gap-2 border-b border-white/10 p-3">
         <span className="mr-1 text-xs font-black uppercase text-slate-500">Division</span>
-        {divisions.map((d) => {
+        {[...divisions].sort((a, b) => compareDivisionHierarchy(a.id, b.id)).map((d) => {
           const tab = divisionTab[d.id];
           const isActive = d.id === activeDivision;
           return (
