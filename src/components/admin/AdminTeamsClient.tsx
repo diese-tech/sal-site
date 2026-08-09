@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { DivisionId, LeagueData, Org } from "@/types/league";
 import { OrgLogo } from "@/components/card-lab/ui";
 import { cn } from "@/lib/utils";
+import type { OrganizationMergePreview } from "@/lib/organization-merge";
 
 const inputClass = "w-full rounded-lg border border-white/10 bg-black/45 px-3 py-2 text-sm font-semibold text-white outline-none focus:border-cyan-300/50";
 
@@ -36,24 +37,87 @@ function emptyOrg(): Org {
   };
 }
 
+const mergeCountLabels: Record<string, string> = {
+  seasonTeams: "Season teams",
+  seasonRosters: "Roster assignments",
+  players: "Player identity mirrors",
+  matches: "Matches",
+  playerMatchStats: "Match-report stats",
+  playerStats: "Official player stats",
+  draftPicks: "Draft picks",
+  draftShortlists: "Captain shortlist rows",
+  captainTokens: "Captain access tokens",
+  draftRooms: "Draft rooms",
+  godPicks: "God picks",
+  godBans: "God bans",
+  standings: "Standing rows",
+};
+
+export function OrganizationMergePreviewSummary({ preview }: { preview: OrganizationMergePreview }) {
+  return (
+    <div className="space-y-3 rounded-xl border border-white/10 bg-black/25 p-3">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {[{ label: "Duplicate", org: preview.source }, { label: "Canonical", org: preview.target }].map(({ label, org }) => (
+          <div key={label} className="rounded-lg border border-white/8 bg-black/20 p-3">
+            <p className="text-[0.6rem] font-black uppercase text-slate-500">{label}</p>
+            <p className="font-black text-white">{org ? `${org.name} [${org.tag}]` : "Unavailable"}</p>
+            {org && <p className="text-xs font-semibold text-slate-500">{org.id} · {org.divisionId}</p>}
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-1 text-xs font-semibold text-slate-300 sm:grid-cols-2">
+        {Object.entries(preview.counts).filter(([, count]) => count > 0).map(([key, count]) => (
+          <p key={key}>{mergeCountLabels[key] ?? key}: <strong className="text-white">{count}</strong></p>
+        ))}
+      </div>
+      {preview.blockers.length > 0 ? (
+        <div role="alert" className="rounded-lg border border-rose-300/25 bg-rose-300/5 p-3 text-xs font-semibold text-rose-200">
+          {preview.blockers.map((blocker) => <p key={blocker}>{blocker}</p>)}
+        </div>
+      ) : (
+        <p role="status" className="text-xs font-semibold text-emerald-300">No merge blockers found.</p>
+      )}
+    </div>
+  );
+}
+
 export function AdminTeamsClient({
   data,
   isSuperAdmin,
+  initialEditOrgId,
+  initialMergeOrgId,
+  returnTo,
 }: {
   data: LeagueData;
   isSuperAdmin: boolean;
+  initialEditOrgId?: string;
+  initialMergeOrgId?: string;
+  returnTo?: string;
 }) {
   const router = useRouter();
-  const [editing, setEditing] = useState<Org | null>(null);
+  const [editing, setEditing] = useState<Org | null>(() => {
+    const initial = data.orgs.find((org) => org.id === initialEditOrgId);
+    return initial ? { ...initial } : null;
+  });
   const [isNew, setIsNew] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [saving, setSaving] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [confirmScheduleId, setConfirmScheduleId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [mergeSourceId, setMergeSourceId] = useState<string | null>(() => {
+    const initial = data.orgs.find((org) => org.id === initialMergeOrgId && !org.archivedAt && !org.deletionScheduledAt);
+    return initial?.id ?? null;
+  });
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [mergePreview, setMergePreview] = useState<OrganizationMergePreview | null>(null);
+  const [mergeConfirmation, setMergeConfirmation] = useState("");
+  const [mergeBusy, setMergeBusy] = useState(false);
 
   const activeOrgs = data.orgs.filter((o) => !o.archivedAt);
   const archivedOrgs = data.orgs.filter((o) => !!o.archivedAt);
+  const mergeSource = data.orgs.find((org) => org.id === mergeSourceId);
+  const mergeTargets = activeOrgs.filter((org) => org.id !== mergeSourceId && !org.deletionScheduledAt);
 
   function openEdit(org: Org) {
     setEditing({ ...org });
@@ -65,6 +129,76 @@ export function AdminTeamsClient({
     setEditing(emptyOrg());
     setIsNew(true);
     setNotice(null);
+  }
+
+  function openMerge(org: Org) {
+    setMergeSourceId(org.id);
+    setMergeTargetId("");
+    setMergePreview(null);
+    setMergeConfirmation("");
+    setEditing(null);
+    setNotice(null);
+  }
+
+  function closeMerge() {
+    setMergeSourceId(null);
+    setMergeTargetId("");
+    setMergePreview(null);
+    setMergeConfirmation("");
+  }
+
+  async function previewMerge() {
+    if (!mergeSource || !mergeTargetId) return;
+    setMergeBusy(true);
+    setMergePreview(null);
+    setNotice(null);
+    const response = await fetch("/api/admin/orgs/merge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "preview", sourceOrgId: mergeSource.id, targetOrgId: mergeTargetId }),
+    });
+    const payload = await response.json().catch(() => null) as { error?: string; preview?: OrganizationMergePreview } | null;
+    setMergeBusy(false);
+    if (!response.ok || !payload?.preview) {
+      setNotice({ tone: "error", text: payload?.error ?? "Unable to preview organization merge." });
+      return;
+    }
+    setMergePreview(payload.preview);
+  }
+
+  async function applyMerge() {
+    if (!mergeSource || !mergeTargetId || !mergePreview?.canMerge || mergeConfirmation !== "MERGE") return;
+    const target = data.orgs.find((org) => org.id === mergeTargetId);
+    if (!target) return;
+    setMergeBusy(true);
+    setNotice(null);
+    const response = await fetch("/api/admin/orgs/merge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "apply",
+        sourceOrgId: mergeSource.id,
+        targetOrgId: target.id,
+        confirmation: mergeConfirmation,
+      }),
+    });
+    const payload = await response.json().catch(() => null) as { error?: string; warning?: string | null } | null;
+    setMergeBusy(false);
+    if (!response.ok) {
+      setNotice({ tone: "error", text: payload?.error ?? "Unable to merge organizations." });
+      return;
+    }
+    const successText = `Merged ${mergeSource.name} into ${target.name}.${payload?.warning ? ` ${payload.warning}` : ""}`;
+    closeMerge();
+    setNotice({ tone: "success", text: successText });
+    if (returnTo) {
+      const separator = returnTo.includes("?") ? "&" : "?";
+      router.push(
+        `${returnTo}${separator}mergedFrom=${encodeURIComponent(mergeSource.name)}&mergedInto=${encodeURIComponent(target.name)}`,
+      );
+    } else {
+      router.refresh();
+    }
   }
 
   async function save() {
@@ -140,10 +274,7 @@ export function AdminTeamsClient({
         )}
       >
         {/* Identity */}
-        <button
-          onClick={() => openEdit(org)}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left hover:opacity-80"
-        >
+        <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
           <OrgLogo initials={org.logoInitials} gradient={org.logoGradient} className="h-8 w-8 shrink-0 text-xs" />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -161,7 +292,7 @@ export function AdminTeamsClient({
             </div>
             <p className="text-[0.6rem] font-black uppercase text-slate-500">{org.tag} · {org.divisionId}</p>
           </div>
-        </button>
+        </div>
 
         {/* Stats */}
         <span className="text-sm font-semibold text-slate-400 shrink-0">
@@ -174,6 +305,20 @@ export function AdminTeamsClient({
         {/* Superadmin actions */}
         {isSuperAdmin && (
           <div className="flex shrink-0 gap-1">
+            <button
+              onClick={() => openEdit(org)}
+              className="rounded-lg border border-cyan-300/25 px-2.5 py-1 text-[0.65rem] font-black uppercase text-cyan-200 transition hover:border-cyan-300/50"
+            >
+              Edit
+            </button>
+            {!org.archivedAt && !isScheduled && (
+              <button
+                onClick={() => openMerge(org)}
+                className="rounded-lg border border-violet-300/25 px-2.5 py-1 text-[0.65rem] font-black uppercase text-violet-200 transition hover:border-violet-300/50"
+              >
+                Merge Duplicate
+              </button>
+            )}
             {!org.archivedAt ? (
               <button
                 onClick={() => void doArchive(org)}
@@ -264,6 +409,48 @@ export function AdminTeamsClient({
       </div>
 
       {/* Edit / New panel */}
+      {mergeSource && (
+        <div className="rounded-2xl border border-violet-300/25 bg-slate-950/84 p-4 shadow-xl shadow-violet-950/20">
+          <p className="text-xs font-black uppercase text-violet-200">Merge duplicate organization</p>
+          <h2 className="mt-1 text-lg font-black text-white">Move {mergeSource.name} [{mergeSource.tag}] into a canonical organization</h2>
+          <p className="mt-1 text-sm font-semibold text-slate-400">The canonical profile wins. Every live historical reference moves in one database transaction.</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+            <Field label="Canonical organization">
+              <select
+                aria-label="Canonical organization"
+                value={mergeTargetId}
+                onChange={(event) => {
+                  setMergeTargetId(event.target.value);
+                  setMergePreview(null);
+                  setMergeConfirmation("");
+                }}
+                className={inputClass}
+              >
+                <option value="">Select the identity to keep</option>
+                {mergeTargets.map((org) => <option key={org.id} value={org.id}>{org.name} [{org.tag}] · {org.id}</option>)}
+              </select>
+            </Field>
+            <button onClick={() => void previewMerge()} disabled={!mergeTargetId || mergeBusy} className="rounded-xl border border-violet-300/35 bg-violet-300/15 px-4 py-2 text-sm font-black uppercase text-violet-100 disabled:opacity-50">
+              {mergeBusy ? "Checking…" : "Preview Merge"}
+            </button>
+          </div>
+          {mergePreview && <div className="mt-4"><OrganizationMergePreviewSummary preview={mergePreview} /></div>}
+          {mergePreview?.canMerge && (
+            <Field label="Type MERGE to confirm permanent deletion of the duplicate">
+              <input aria-label="Merge confirmation" value={mergeConfirmation} onChange={(event) => setMergeConfirmation(event.target.value)} className={inputClass} />
+            </Field>
+          )}
+          <div className="mt-4 flex gap-2">
+            {mergePreview?.canMerge && (
+              <button onClick={() => void applyMerge()} disabled={mergeBusy || mergeConfirmation !== "MERGE"} className="rounded-xl border border-rose-300/35 bg-rose-300/15 px-4 py-2 text-sm font-black uppercase text-rose-100 disabled:opacity-50">
+                Merge and Delete Duplicate
+              </button>
+            )}
+            <button onClick={closeMerge} disabled={mergeBusy} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black uppercase text-slate-300 disabled:opacity-50">Cancel</button>
+          </div>
+        </div>
+      )}
+
       {editing && (
         <div className="rounded-2xl border border-emerald-300/20 bg-slate-950/84 p-4 shadow-xl shadow-emerald-950/20">
           <p className="mb-3 text-xs font-black uppercase text-slate-400">{isNew ? "New Team" : `Editing: ${editing.name || "…"}`}</p>

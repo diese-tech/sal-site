@@ -11,6 +11,10 @@ import type {
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
+vi.mock("next/link", () => ({
+  default: ({ children, ...props }: { children: React.ReactNode }) =>
+    createElement("a", props, children),
+}));
 
 import {
   AdminSeasonRosterClient,
@@ -170,6 +174,9 @@ describe("AdminSeasonRosterClient render", () => {
     expect(html).toContain("Shared Org — Solar");
     expect(html).toContain("Shared Org — Lunar");
     expect(html).toContain("Enroll in Terra");
+    expect(html).toContain("Edit organization");
+    expect(html).toContain("Merge duplicate");
+    expect(html).toContain("returnTo=%2Fadmin%2Fseasons%2Fseason-1%2Froster");
   });
 
   it("renders empty states for an empty org catalog", () => {
