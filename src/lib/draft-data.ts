@@ -20,6 +20,9 @@ type DbDraftRoom = {
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
+  voided_at: string | null;
+  voided_by_discord_id: string | null;
+  void_reason: string | null;
 };
 
 type DbDraftPick = {
@@ -47,6 +50,9 @@ function fromDbRoom(row: DbDraftRoom): DraftRoom {
     createdAt: row.created_at,
     startedAt: row.started_at ?? undefined,
     completedAt: row.completed_at ?? undefined,
+    voidedAt: row.voided_at ?? undefined,
+    voidedByDiscordId: row.voided_by_discord_id ?? undefined,
+    voidReason: row.void_reason ?? undefined,
   };
 }
 
@@ -100,7 +106,8 @@ export async function getSeasonDraftedPlayerIds(seasonId: string): Promise<Set<s
   const { data: rooms, error: roomsError } = await supabase
     .from("draft_rooms")
     .select("id")
-    .eq("season_id", seasonId);
+    .eq("season_id", seasonId)
+    .neq("status", "voided");
   if (roomsError) { console.error("getSeasonDraftedPlayerIds:", roomsError.message); return new Set(); }
   const roomIds = (rooms ?? []).map((r: { id: string }) => r.id);
   if (roomIds.length === 0) return new Set();
@@ -152,6 +159,43 @@ export async function createDraftRoom(input: {
   const { data, error } = await supabase.from("draft_rooms").insert(row).select().single();
   if (error) throw error;
   return fromDbRoom(data as DbDraftRoom);
+}
+
+export interface DraftRoomLifecycleResult {
+  code: "deleted" | "already_deleted" | "voided" | "already_voided";
+  applied: boolean;
+  draftRoomId: string;
+  room?: unknown;
+}
+
+export async function deletePendingDraftRoom(
+  draftRoomId: string,
+  actorDiscordId: string,
+): Promise<DraftRoomLifecycleResult> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const { data, error } = await supabase.rpc("delete_pending_draft_room", {
+    p_draft_room_id: draftRoomId,
+    p_actor_discord_id: actorDiscordId,
+  });
+  if (error) throw error;
+  return data as unknown as DraftRoomLifecycleResult;
+}
+
+export async function voidDraftRoom(
+  draftRoomId: string,
+  actorDiscordId: string,
+  reason: string,
+): Promise<DraftRoomLifecycleResult> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const { data, error } = await supabase.rpc("void_draft_room", {
+    p_draft_room_id: draftRoomId,
+    p_actor_discord_id: actorDiscordId,
+    p_reason: reason,
+  });
+  if (error) throw error;
+  return data as unknown as DraftRoomLifecycleResult;
 }
 
 export async function updateDraftRoom(id: string, patch: Partial<{

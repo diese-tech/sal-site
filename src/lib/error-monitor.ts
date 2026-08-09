@@ -34,7 +34,10 @@ export async function deliverErrorReport(
   error: unknown,
   extra?: Record<string, unknown>,
 ): Promise<"disabled" | "suppressed" | "sent"> {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorMessage(
+    error,
+    typeof error === "string" ? error : "Unknown error",
+  );
   const stack = error instanceof Error ? error.stack : undefined;
   const webhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL;
   if (!webhookUrl) return "disabled";

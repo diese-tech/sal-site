@@ -10,6 +10,7 @@ type QueryState = {
   op: "select" | "update";
   update?: Record<string, unknown>;
   eqs: Array<[string, unknown]>;
+  neqs: Array<[string, unknown]>;
   ins: Array<[string, unknown[]]>;
 };
 
@@ -20,7 +21,7 @@ class FakeQuery {
   private state: QueryState;
 
   constructor(table: string, private readonly handler: QueryHandler, private readonly executed: QueryState[]) {
-    this.state = { table, op: "select", eqs: [], ins: [] };
+    this.state = { table, op: "select", eqs: [], neqs: [], ins: [] };
   }
 
   select() {
@@ -35,6 +36,11 @@ class FakeQuery {
 
   eq(column: string, value: unknown) {
     this.state.eqs.push([column, value]);
+    return this;
+  }
+
+  neq(column: string, value: unknown) {
+    this.state.neqs.push([column, value]);
     return this;
   }
 
@@ -197,6 +203,8 @@ describe("getTopShortlistPick excludes season-wide drafted players (#206)", () =
     // Drafted set is built across every room in the season, not just room-1.
     const pickQuery = executed.find((q) => q.table === "draft_picks");
     expect(pickQuery?.ins).toEqual([["draft_room_id", ["room-1", "room-2"]]]);
+    const roomQuery = executed.find((q) => q.table === "draft_rooms");
+    expect(roomQuery?.neqs).toEqual([["status", "voided"]]);
   });
 
   it("returns null when every shortlisted player is drafted somewhere this season", async () => {

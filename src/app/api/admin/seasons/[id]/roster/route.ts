@@ -1,7 +1,7 @@
 import { revalidateTag } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { isSuperAdminRequest } from "@/lib/admin-auth";
+import { isAdminRequest } from "@/lib/admin-auth";
 import { errorMessage } from "@/lib/error-monitor";
 import {
   removeSeasonOrgAssignment,
@@ -31,8 +31,8 @@ const removeSchema = z.discriminatedUnion("entity", [
 ]);
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!isSuperAdminRequest(request)) {
-    return NextResponse.json({ error: "Unauthorized. Superadmin required." }, { status: 403 });
+  if (!isAdminRequest(request)) {
+    return NextResponse.json({ error: "Unauthorized. Admin required." }, { status: 403 });
   }
   const parsed = saveSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
@@ -54,8 +54,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!isSuperAdminRequest(request)) {
-    return NextResponse.json({ error: "Unauthorized. Superadmin required." }, { status: 403 });
+  if (!isAdminRequest(request)) {
+    return NextResponse.json({ error: "Unauthorized. Admin required." }, { status: 403 });
   }
   const parsed = removeSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

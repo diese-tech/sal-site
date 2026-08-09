@@ -188,6 +188,7 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
     active: "Draft in progress",
     paused: "Draft paused",
     complete: "Draft complete",
+    voided: "Draft voided",
   }[room.status];
 
   return (

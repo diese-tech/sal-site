@@ -1,6 +1,6 @@
 import type { DivisionId } from "@/types/league";
 
-export type DraftStatus = "pending" | "active" | "paused" | "complete";
+export type DraftStatus = "pending" | "active" | "paused" | "complete" | "voided";
 
 export interface DraftRoom {
   id: string;
@@ -15,6 +15,9 @@ export interface DraftRoom {
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
+  voidedAt?: string;
+  voidedByDiscordId?: string;
+  voidReason?: string;
 }
 
 export interface DraftPick {

@@ -31,8 +31,11 @@ export async function POST(request: NextRequest) {
     (r) => r.divisionId === result.data.divisionId && (r.status === "active" || r.status === "pending" || r.status === "paused")
   );
   if (conflict) {
+    const recovery = conflict.status === "pending"
+      ? "Delete the unused room before creating another."
+      : "Void the opened room before creating a replacement.";
     return NextResponse.json(
-      { error: `A ${draftDivisionName(result.data.divisionId)} draft is already ${conflict.status}. Complete or cancel it before creating another.` },
+      { error: `A ${draftDivisionName(result.data.divisionId)} draft is already ${conflict.status}. ${recovery}` },
       { status: 409 }
     );
   }
