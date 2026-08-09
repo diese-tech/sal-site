@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { DivisionId, LeaguePlayer, Org } from "@/types/league";
 import type {
   SeasonOrgAdminAssignment,
@@ -162,6 +163,18 @@ function OrgAssignmentRow({
               </button>
             );
           })}
+          <Link
+            href={`/admin/teams?edit=${encodeURIComponent(org.id)}&returnTo=${encodeURIComponent(`/admin/seasons/${seasonId}/roster`)}`}
+            className="rounded-lg border border-white/15 px-3 py-2 text-xs font-black uppercase text-slate-200"
+          >
+            Edit organization
+          </Link>
+          <Link
+            href={`/admin/teams?merge=${encodeURIComponent(org.id)}&returnTo=${encodeURIComponent(`/admin/seasons/${seasonId}/roster`)}`}
+            className="rounded-lg border border-violet-300/25 px-3 py-2 text-xs font-black uppercase text-violet-200"
+          >
+            Merge duplicate
+          </Link>
         </div>
       </div>
       <NoticeText notice={notice} />
