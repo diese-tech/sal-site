@@ -249,35 +249,6 @@ export async function submitPickAtomic(
   return { ok: true, isComplete: expectedPickIndex + 1 >= totalPicks };
 }
 
-/**
- * Atomically advances current_pick_index when the pick timer expires
- * (migration 020). Locks the room row, re-validates the index and timer
- * under the lock, then advances. Returns true if this caller won the race,
- * false if a concurrent request already advanced (caller should no-op).
- */
-export async function advancePickOnTimeout(
-  draftRoomId: string,
-  expectedPickIndex: number,
-  totalPicks: number,
-): Promise<boolean> {
-  const supabase = getSupabaseServerClient();
-  if (!supabase) throw new Error("Supabase env is missing.");
-  // This legacy RPC exists in the site migration archive but is not yet part
-  // of the released shared contract. Keep the exception isolated until its
-  // forward migration is released from sal-database.
-  const legacyRpc = supabase.rpc as unknown as (
-    name: "advance_pick_on_timeout",
-    args: { p_draft_room_id: string; p_expected_pick_index: number; p_total_picks: number },
-  ) => Promise<{ data: boolean | null; error: { message: string } | null }>;
-  const { data, error } = await legacyRpc("advance_pick_on_timeout", {
-    p_draft_room_id: draftRoomId,
-    p_expected_pick_index: expectedPickIndex,
-    p_total_picks: totalPicks,
-  });
-  if (error) throw error;
-  return data === true;
-}
-
 export async function recordPick(draftRoomId: string, pickNumber: number, orgId: string, playerId: string): Promise<DraftPick> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
