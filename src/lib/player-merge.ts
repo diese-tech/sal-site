@@ -53,32 +53,10 @@ export type PlayerMergeResult = z.infer<typeof playerMergeResultSchema>;
 
 export class PlayerMergeContractError extends Error {}
 
-type PlayerMergeRpcResult = PromiseLike<{
-  data: unknown;
-  error: unknown;
-}>;
-
-interface PlayerMergeRpcClient {
-  rpc(
-    name: "preview_player_merge",
-    args: { p_source_player_id: string; p_target_player_id: string },
-  ): PlayerMergeRpcResult;
-  rpc(
-    name: "merge_player",
-    args: {
-      p_source_player_id: string;
-      p_target_player_id: string;
-      p_actor_discord_id: string;
-    },
-  ): PlayerMergeRpcResult;
-}
-
-// Keep the additive RPC boundary isolated until the next immutable database
-// release regenerates the site's pinned Supabase types.
-function requireClient(): PlayerMergeRpcClient {
+function requireClient() {
   const client = getSupabaseServerClient();
   if (!client) throw new Error("Supabase env is missing.");
-  return client as unknown as PlayerMergeRpcClient;
+  return client;
 }
 
 export async function previewPlayerMerge(

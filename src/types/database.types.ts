@@ -2411,6 +2411,14 @@ export type Database = {
         }
         Returns: Json
       }
+      merge_player: {
+        Args: {
+          p_actor_discord_id: string
+          p_source_player_id: string
+          p_target_player_id: string
+        }
+        Returns: Json
+      }
       onboard_season_captain: {
         Args: {
           p_actor_discord_id: string
@@ -2424,6 +2432,10 @@ export type Database = {
       }
       preview_organization_merge: {
         Args: { p_source_org_id: string; p_target_org_id: string }
+        Returns: Json
+      }
+      preview_player_merge: {
+        Args: { p_source_player_id: string; p_target_player_id: string }
         Returns: Json
       }
       read_bug_report_status: {
