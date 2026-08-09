@@ -141,11 +141,9 @@ export function AdminMatchesClient({
           </p>
           {message && <p className="mt-1 text-sm font-semibold text-orange-200">{message}</p>}
         </div>
-        {isSuperAdmin && (
-          <button onClick={() => { setEditing(emptyMatch(data)); setMessage(""); }} className="rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-4 py-2 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20">
-            + Schedule Match
-          </button>
-        )}
+        <button onClick={() => { setEditing(emptyMatch(data)); setMessage(""); }} className="rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-4 py-2 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20">
+          + Schedule Match
+        </button>
       </div>
 
       {/* Filters */}

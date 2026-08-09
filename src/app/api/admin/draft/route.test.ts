@@ -36,7 +36,7 @@ describe("duplicate same-division room guard (#206)", () => {
 
     expect(res.status).toBe(409);
     await expect(res.json()).resolves.toEqual({
-      error: "A Solar Division draft is already paused. Complete or cancel it before creating another.",
+      error: "A Solar Division draft is already paused. Void the opened room before creating a replacement.",
     });
     expect(createDraftRoom).not.toHaveBeenCalled();
   });

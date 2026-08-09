@@ -42,9 +42,10 @@ describe("AdminPlayersClient season-roster callout", () => {
     expect(html).toContain("Manage Season One Roster");
   });
 
-  it("omits the Manage Roster link for a non-super-admin and explains who can enroll", () => {
+  it("links a regular admin to the current season roster", () => {
     const html = renderPlayers(false);
-    expect(html).not.toContain('href="/admin/seasons/season-1/roster"');
-    expect(html).toContain("A super admin performs season enrollment");
+    expect(html).toContain('href="/admin/seasons/season-1/roster"');
+    expect(html).toContain("Manage Season One Roster");
+    expect(html).not.toContain("A super admin performs season enrollment");
   });
 });

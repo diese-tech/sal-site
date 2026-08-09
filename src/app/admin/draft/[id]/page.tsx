@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
-import { buildDraftState, getDraftRooms } from "@/lib/draft-data";
+import { buildDraftState } from "@/lib/draft-data";
 import { getLeagueData } from "@/lib/league-data";
 import { AdminDraftRoomClient } from "@/components/admin/AdminDraftRoomClient";
 

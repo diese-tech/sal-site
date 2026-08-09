@@ -73,4 +73,23 @@ describe("deliverErrorReport", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(runtimeCache.delete).toHaveBeenCalledTimes(1);
   });
+
+  it("renders a Supabase-style error object's message instead of object Object", async () => {
+    runtimeCache.get.mockResolvedValue(undefined);
+    runtimeCache.set.mockResolvedValue(undefined);
+
+    await deliverErrorReport("standings recalculation", {
+      code: "21000",
+      message: "ON CONFLICT DO UPDATE command cannot affect row a second time",
+    });
+
+    const fetchCall = vi.mocked(fetch).mock.calls[0];
+    const requestBody = JSON.parse(String(fetchCall?.[1]?.body)) as {
+      embeds: Array<{ fields: Array<{ name: string; value: string }> }>;
+    };
+    expect(requestBody.embeds[0]?.fields).toContainEqual({
+      name: "Message",
+      value: "ON CONFLICT DO UPDATE command cannot affect row a second time",
+    });
+  });
 });

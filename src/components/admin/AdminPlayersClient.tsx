@@ -240,13 +240,9 @@ export function AdminPlayersClient({
           This screen edits league-wide player identities. Season membership — which team a player is on, and who is captain —
           is decided per season. A returning player&apos;s org should be <strong className="text-white">enrolled into the season, not recreated here</strong>.
         </p>
-        {isSuperAdmin ? (
-          <Link href={rosterHref} className="mt-2 inline-block text-sm font-black uppercase text-cyan-300 hover:text-cyan-100">
-            Manage {data.season.name} Roster →
-          </Link>
-        ) : (
-          <p className="mt-2 text-xs font-semibold text-slate-400">A super admin performs season enrollment from the Manage Roster screen.</p>
-        )}
+        <Link href={rosterHref} className="mt-2 inline-block text-sm font-black uppercase text-cyan-300 hover:text-cyan-100">
+          Manage {data.season.name} Roster →
+        </Link>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">

@@ -12,6 +12,7 @@ const STATUS_COLORS: Record<string, string> = {
   active: "border-orange-300/40 bg-orange-300/15 text-orange-100",
   paused: "border-yellow-300/40 bg-yellow-300/15 text-yellow-100",
   complete: "border-emerald-300/40 bg-emerald-300/15 text-emerald-100",
+  voided: "border-red-300/35 bg-red-300/10 text-red-200",
 };
 
 export function AdminDraftRoomClient({ state, orgs, players }: {
@@ -129,6 +130,7 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
   const isActive = room.status === "active";
   const isPaused = room.status === "paused";
   const isComplete = room.status === "complete";
+  const isVoided = room.status === "voided";
 
   return (
     <div className="space-y-6">
@@ -153,6 +155,11 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
         </div>
       </div>
       {message && <p className="text-sm font-semibold text-orange-200">{message}</p>}
+      {isVoided && (
+        <p className="rounded-xl border border-red-300/25 bg-red-950/25 px-4 py-3 text-sm font-semibold text-red-100">
+          This room was voided. Its history is read-only{room.voidReason ? `: ${room.voidReason}` : "."}
+        </p>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
         {/* Left: configuration */}
