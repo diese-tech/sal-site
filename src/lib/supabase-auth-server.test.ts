@@ -26,8 +26,11 @@ function makeUser(overrides: { user_metadata?: Record<string, unknown>; email?: 
 }
 
 describe("getDiscordUsername", () => {
-  it("returns user_metadata.user_name when present", () => {
-    const user = makeUser({ user_metadata: { user_name: "brawler99" } });
+  it("uses the Discord identity username and ignores mutable top-level metadata", () => {
+    const user = makeUser({
+      user_metadata: { user_name: "attacker_handle" },
+      identities: [{ id: "discord-123", provider: "discord", identity_data: { user_name: "brawler99" } }],
+    });
     expect(getDiscordUsername(user)).toBe("brawler99");
   });
 
@@ -53,12 +56,12 @@ describe("getDiscordUsername", () => {
     expect(getDiscordUsername(user)).toBe("recovered_handle");
   });
 
-  it("still prefers user_metadata.user_name over the identity_data fallback", () => {
+  it("never lets mutable user_metadata override the Discord identity", () => {
     const user = makeUser({
       user_metadata: { user_name: "top_level_handle" },
-      identities: [{ provider: "discord", identity_data: { user_name: "identity_handle" } }],
+      identities: [{ id: "discord-123", provider: "discord", identity_data: { user_name: "identity_handle" } }],
     });
-    expect(getDiscordUsername(user)).toBe("top_level_handle");
+    expect(getDiscordUsername(user)).toBe("identity_handle");
   });
 
   it("ignores identity_data from a non-Discord provider", () => {
@@ -73,15 +76,19 @@ describe("getDiscordUsername", () => {
   // every affected account had user_name AND identity_data.user_name empty,
   // but the raw OIDC `name` claim held "handle#0" (Discord's discriminator
   // placeholder for accounts on the newer global-handle system).
-  it("recovers the username by stripping the discriminator off user_metadata.name", () => {
-    const user = makeUser({ user_metadata: { name: "rteki#0" }, email: "totskablade8@gmail.com" });
+  it("recovers the username by stripping the discriminator off Discord identity_data.name", () => {
+    const user = makeUser({
+      user_metadata: { name: "attacker#0" },
+      email: "totskablade8@gmail.com",
+      identities: [{ id: "discord-123", provider: "discord", identity_data: { name: "rteki#0" } }],
+    });
     expect(getDiscordUsername(user)).toBe("rteki");
   });
 
   it("recovers the username from the Discord identity's identity_data.name as a last resort", () => {
     const user = makeUser({
       email: "realperson@example.com",
-      identities: [{ provider: "discord", identity_data: { name: "identity_handle#1234" } }],
+      identities: [{ id: "discord-123", provider: "discord", identity_data: { name: "identity_handle#1234" } }],
     });
     expect(getDiscordUsername(user)).toBe("identity_handle");
   });
@@ -102,7 +109,8 @@ describe("getDiscordUsername", () => {
 
   it("prefers name#discriminator parsing over full_name/global_name when both are present", () => {
     const user = makeUser({
-      user_metadata: { name: "ne1217#0", full_name: "XGN Ninjaa" },
+      user_metadata: { name: "attacker#0", full_name: "XGN Ninjaa" },
+      identities: [{ id: "discord-123", provider: "discord", identity_data: { name: "ne1217#0", global_name: "XGN Ninjaa" } }],
     });
     expect(getDiscordUsername(user)).toBe("ne1217");
   });
@@ -119,9 +127,17 @@ describe("getDiscordDisplayName", () => {
 });
 
 describe("getDiscordId", () => {
-  it("still resolves normally (unaffected by the username fix)", () => {
-    const user = makeUser({ user_metadata: { provider_id: "123456789" } });
+  it("uses the Discord identity ID and ignores mutable provider_id metadata", () => {
+    const user = makeUser({
+      user_metadata: { provider_id: "attacker-id" },
+      identities: [{ id: "123456789", provider: "discord", identity_data: {} }],
+    });
     expect(getDiscordId(user)).toBe("123456789");
+  });
+
+  it("returns null when no Discord identity exists even if provider_id metadata is present", () => {
+    const user = makeUser({ user_metadata: { provider_id: "attacker-id" } });
+    expect(getDiscordId(user)).toBeNull();
   });
 });
 

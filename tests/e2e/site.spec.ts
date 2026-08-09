@@ -158,6 +158,18 @@ for (const filter of ["All", "Solar", "Lunar", "Terra"]) {
   });
 }
 
+test("standings division tabs follow league hierarchy", async ({ page }) => {
+  await page.goto("/standings");
+  const filters = page.getByText("Division", { exact: true }).locator("..").getByRole("button");
+  await expect(filters).toHaveText(["Terra", "Solar", "Lunar"]);
+});
+
+test("teams division filters follow league hierarchy", async ({ page }) => {
+  await page.goto("/teams");
+  const filters = page.getByText("Division", { exact: true }).locator("..").getByRole("button");
+  await expect(filters).toHaveText(["All", "Terra", "Solar", "Lunar"]);
+});
+
 for (const query of ["Helix", "HRX", "does-not-exist"]) {
   test(`teams search handles ${query}`, async ({ page }) => {
     await page.goto("/teams");
@@ -592,6 +604,20 @@ test("players page division filter Solar is selectable", async ({ page }) => {
   await page.goto("/players");
   await page.getByRole("button", { name: "Solar" }).click();
   await expect(page.getByRole("button", { name: "Solar" })).toHaveClass(/orange/);
+});
+
+test("players filters follow league division and role hierarchy", async ({ page }) => {
+  await page.goto("/players");
+  const roleFilters = page.getByText("Role", { exact: true }).locator("..").getByRole("button");
+  const divisionFilters = page.getByText("Div", { exact: true }).locator("..").getByRole("button");
+  await expect(roleFilters).toHaveText(["All", "Solo", "Jungle", "Mid", "Support", "Carry", "Flex"]);
+  await expect(divisionFilters).toHaveText(["All", "Terra", "Solar", "Lunar"]);
+});
+
+test("gods division filters follow league hierarchy", async ({ page }) => {
+  await page.goto("/gods");
+  const filters = page.getByText("Division", { exact: true }).locator("..").getByRole("button");
+  await expect(filters).toHaveText(["All", "Terra", "Solar", "Lunar"]);
 });
 
 test("players page has no overflow on mobile", async ({ page }) => {

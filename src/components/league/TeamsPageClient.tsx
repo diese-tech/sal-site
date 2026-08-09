@@ -3,13 +3,12 @@
 import { useMemo, useState } from "react";
 import type { DivisionId, LeagueData } from "@/types/league";
 import { OrgCard } from "@/components/league/OrgCard";
+import { DIVISION_FILTER_OPTIONS } from "@/lib/division-order";
 import { cn } from "@/lib/utils";
 
 const DIVISION_FILTERS: { id: DivisionId | "all"; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "solar", label: "Solar" },
-  { id: "lunar", label: "Lunar" },
-  { id: "terra", label: "Terra" },
+  ...DIVISION_FILTER_OPTIONS,
 ];
 
 const divisionActive: Record<DivisionId, string> = {

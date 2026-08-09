@@ -1,13 +1,12 @@
 "use client";
 
 import type { DivisionId, MatchStatus } from "@/types/league";
+import { DIVISION_FILTER_OPTIONS } from "@/lib/division-order";
 import { cn } from "@/lib/utils";
 
 const DIVISIONS: { id: DivisionId | "all"; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "terra", label: "Terra" },
-  { id: "solar", label: "Solar" },
-  { id: "lunar", label: "Lunar" },
+  ...DIVISION_FILTER_OPTIONS,
 ];
 
 const STATUSES: { id: MatchStatus | "all"; label: string }[] = [

@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { createRegistration, getCurrentSeasonId, getRegistrationByDiscordId } from "@/lib/league-data";
+import {
+  createRegistration,
+  getCurrentSeasonId,
+  getPlayerByDiscordId,
+  getPlayerClaimCandidateByDiscordUsername,
+  getRegistrationByDiscordId,
+} from "@/lib/league-data";
 import { getAuthUser, getDiscordAvatarUrl, getDiscordId, getDiscordUsername, getDiscordDisplayName } from "@/lib/supabase-auth-server";
 import { checkRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
 
@@ -44,6 +50,47 @@ export async function POST(request: NextRequest) {
   if (existing) {
     return NextResponse.json(
       { error: "A registration already exists for this Discord account.", existing },
+      { status: 409 },
+    );
+  }
+
+  const linkedPlayer = await getPlayerByDiscordId(discordId);
+  if (linkedPlayer) {
+    return NextResponse.json(
+      {
+        code: "already_linked",
+        error: "This Discord account is already linked to a player profile.",
+        playerId: linkedPlayer.id,
+      },
+      { status: 409 },
+    );
+  }
+
+  const claimCandidate = await getPlayerClaimCandidateByDiscordUsername(discordUsername);
+  if (claimCandidate.kind === "available") {
+    return NextResponse.json(
+      {
+        code: "claim_required",
+        error: "An existing player profile matches your Discord username. Claim that profile instead of creating a duplicate registration.",
+      },
+      { status: 409 },
+    );
+  }
+  if (claimCandidate.kind === "ambiguous") {
+    return NextResponse.json(
+      {
+        code: "claim_ambiguous",
+        error: "Multiple player profiles match your Discord username. An admin must reconcile them before you can register or claim a profile.",
+      },
+      { status: 409 },
+    );
+  }
+  if (claimCandidate.kind === "unavailable") {
+    return NextResponse.json(
+      {
+        code: "claim_unavailable",
+        error: "The player profile matching your Discord username is already linked or otherwise unavailable. Contact an admin to reconcile the identity instead of creating a duplicate registration.",
+      },
       { status: 409 },
     );
   }

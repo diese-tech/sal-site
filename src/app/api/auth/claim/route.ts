@@ -1,11 +1,31 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
+  approveRegistrationAfterProfileClaim,
   claimPlayerByDiscordUsername,
   getPlayerByDiscordId,
   getRegistrationByDiscordId,
 } from "@/lib/league-data";
 import { getAuthUser, getDiscordAvatarUrl, getDiscordId, getDiscordUsername } from "@/lib/supabase-auth-server";
 import { checkRateLimit, getRateLimitIdentifier, retryAfterSeconds } from "@/lib/rate-limit";
+
+async function finishClaim(discordId: string, playerId: string, alreadyLinked = false) {
+  const registration = await getRegistrationByDiscordId(discordId);
+  if (registration?.status === "pending") {
+    try {
+      await approveRegistrationAfterProfileClaim(registration.id, discordId, playerId);
+    } catch {
+      return NextResponse.json(
+        {
+          code: "claim_reconciliation_failed",
+          error: "Your player profile is linked, but registration cleanup did not finish. Please retry.",
+        },
+        { status: 503 },
+      );
+    }
+  }
+
+  return NextResponse.json({ ok: true, alreadyLinked });
+}
 
 export async function POST(request: NextRequest) {
   const ip = getRateLimitIdentifier(request);
@@ -26,10 +46,11 @@ export async function POST(request: NextRequest) {
   const discordUsername = getDiscordUsername(user);
   if (!discordUsername) return NextResponse.json({ error: "Discord username not found in session." }, { status: 400 });
 
-  // Prevent double-claiming
+  // A prior attempt may have linked the player before registration cleanup
+  // failed or the response was lost. Repair that pending row idempotently.
   const alreadyClaimed = await getPlayerByDiscordId(discordId);
   if (alreadyClaimed) {
-    return NextResponse.json({ error: "This Discord account is already linked to a player profile." }, { status: 409 });
+    return finishClaim(discordId, alreadyClaimed.id, true);
   }
 
   // Match entirely server-side by discord_username — no client-supplied playerId
@@ -45,12 +66,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: msgs[result.reason] ?? "Claim failed." }, { status: 409 });
   }
 
-  // If a Flow B registration exists for this discord, mark it approved/linked
-  const reg = await getRegistrationByDiscordId(discordId);
-  if (reg && reg.status === "pending") {
-    const { updateRegistrationStatus } = await import("@/lib/league-data");
-    await updateRegistrationStatus(reg.id, "approved", "Auto-approved via profile claim");
-  }
-
-  return NextResponse.json({ ok: true });
+  return finishClaim(discordId, result.playerId);
 }

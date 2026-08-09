@@ -37,8 +37,10 @@ vi.mock("@/lib/league-data", () => ({
   createRegistration: vi.fn().mockResolvedValue(undefined),
   getCurrentSeasonId: vi.fn().mockResolvedValue("season-current"),
   getRegistrationByDiscordId: vi.fn().mockResolvedValue(null),
+  getPlayerClaimCandidateByDiscordUsername: vi.fn().mockResolvedValue({ kind: "none" }),
   claimPlayerByDiscordUsername: vi.fn(),
   getPlayerByDiscordId: vi.fn().mockResolvedValue(null),
+  approveRegistrationAfterProfileClaim: vi.fn().mockResolvedValue(undefined),
   updateRegistrationStatus: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -63,15 +65,19 @@ vi.mock("@/lib/supabase-server", () => ({
     from: () => ({
       select: () => ({
         ilike: () => ({
-          order: () => ({
-            limit: () =>
-              Promise.resolve({
-                data: [
-                  { id: "player-a", discord_id: null, profile_claimed: false },
-                  { id: "player-b", discord_id: null, profile_claimed: false },
-                ],
-                error: null,
+          is: () => ({
+            is: () => ({
+              order: () => ({
+                limit: () =>
+                  Promise.resolve({
+                    data: [
+                      { id: "player-a", discord_id: null, profile_claimed: false },
+                      { id: "player-b", discord_id: null, profile_claimed: false },
+                    ],
+                    error: null,
+                  }),
               }),
+            }),
           }),
         }),
       }),
@@ -90,8 +96,10 @@ import {
   createRegistration,
   getCurrentSeasonId,
   getRegistrationByDiscordId,
+  getPlayerClaimCandidateByDiscordUsername,
   claimPlayerByDiscordUsername,
   getPlayerByDiscordId,
+  approveRegistrationAfterProfileClaim,
 } from "@/lib/league-data";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -99,10 +107,12 @@ const mockGetAuthUser = vi.mocked(getAuthUser);
 const mockGetDiscordId = vi.mocked(getDiscordId);
 const mockGetDiscordUsername = vi.mocked(getDiscordUsername);
 const mockGetRegistrationByDiscordId = vi.mocked(getRegistrationByDiscordId);
+const mockGetPlayerClaimCandidate = vi.mocked(getPlayerClaimCandidateByDiscordUsername);
 const mockCreateRegistration = vi.mocked(createRegistration);
 const mockGetCurrentSeasonId = vi.mocked(getCurrentSeasonId);
 const mockClaimPlayer = vi.mocked(claimPlayerByDiscordUsername);
 const mockGetPlayerByDiscordId = vi.mocked(getPlayerByDiscordId);
+const mockApproveRegistrationAfterClaim = vi.mocked(approveRegistrationAfterProfileClaim);
 const mockCheckRateLimit = vi.mocked(checkRateLimit);
 
 // Minimal fake Discord user (only fields the mocked functions care about)
@@ -137,7 +147,9 @@ beforeEach(() => {
   mockGetDiscordId.mockReturnValue(DISCORD_ID);
   mockGetDiscordUsername.mockReturnValue(DISCORD_USERNAME);
   mockGetRegistrationByDiscordId.mockResolvedValue(null);
+  mockGetPlayerClaimCandidate.mockResolvedValue({ kind: "none" });
   mockGetPlayerByDiscordId.mockResolvedValue(null);
+  mockApproveRegistrationAfterClaim.mockResolvedValue(undefined);
 });
 
 // ── Flow A: POST /api/auth/register ─────────────────────────────────────────
@@ -184,6 +196,91 @@ describe("POST /api/auth/register — Flow A", () => {
     const body = await res.json() as { error: string };
     expect(res.status).toBe(409);
     expect(body.error).toMatch(/registration already exists/i);
+    expect(mockCreateRegistration).not.toHaveBeenCalled();
+  });
+
+  it("requires claiming a unique imported profile instead of creating a duplicate registration", async () => {
+    mockGetPlayerClaimCandidate.mockResolvedValueOnce({
+      kind: "available",
+      player: {
+        id: "imported-captain",
+        discordUsername: DISCORD_USERNAME,
+        ign: "Imported Captain",
+        avatarInitials: "IC",
+        avatarGradient: "from-cyan-500 to-indigo-500",
+        primaryRole: "Support",
+        secondaryRoles: [],
+        isStarter: true,
+        isCaptain: true,
+        divisionId: "terra",
+        status: "org-affiliated",
+      },
+    });
+
+    const { POST } = await import("@/app/api/auth/register/route");
+    const res = await POST(registerRequest());
+    const body = await res.json() as { code: string; error: string };
+
+    expect(res.status).toBe(409);
+    expect(body.code).toBe("claim_required");
+    expect(body.error).toMatch(/claim/i);
+    expect(mockGetPlayerClaimCandidate).toHaveBeenCalledWith(DISCORD_USERNAME);
+    expect(mockCreateRegistration).not.toHaveBeenCalled();
+  });
+
+  it("refuses a registration when this Discord account is already linked to a player", async () => {
+    mockGetPlayerByDiscordId.mockResolvedValueOnce({
+      id: "linked-player",
+      discordUsername: "renamed_handle",
+      ign: "Linked Player",
+    } as Awaited<ReturnType<typeof getPlayerByDiscordId>>);
+
+    const { POST } = await import("@/app/api/auth/register/route");
+    const res = await POST(registerRequest());
+    const body = await res.json() as { code: string; error: string };
+
+    expect(res.status).toBe(409);
+    expect(body.code).toBe("already_linked");
+    expect(mockCreateRegistration).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when multiple active profiles match the authenticated Discord username", async () => {
+    mockGetPlayerClaimCandidate.mockResolvedValueOnce({ kind: "ambiguous" });
+
+    const { POST } = await import("@/app/api/auth/register/route");
+    const res = await POST(registerRequest());
+    const body = await res.json() as { code: string; error: string };
+
+    expect(res.status).toBe(409);
+    expect(body.code).toBe("claim_ambiguous");
+    expect(body.error).toMatch(/multiple player profiles/i);
+    expect(mockCreateRegistration).not.toHaveBeenCalled();
+  });
+
+  it("does not create a duplicate when the unique username match is already linked", async () => {
+    mockGetPlayerClaimCandidate.mockResolvedValueOnce({
+      kind: "unavailable",
+      player: {
+        id: "claimed-player",
+        discordUsername: DISCORD_USERNAME,
+        ign: "Claimed Player",
+        avatarInitials: "CP",
+        avatarGradient: "from-cyan-500 to-indigo-500",
+        primaryRole: "Carry",
+        secondaryRoles: [],
+        isStarter: true,
+        isCaptain: false,
+        status: "active",
+      },
+    });
+
+    const { POST } = await import("@/app/api/auth/register/route");
+    const res = await POST(registerRequest());
+    const body = await res.json() as { code: string; error: string };
+
+    expect(res.status).toBe(409);
+    expect(body.code).toBe("claim_unavailable");
+    expect(body.error).toMatch(/already linked/i);
     expect(mockCreateRegistration).not.toHaveBeenCalled();
   });
 
@@ -264,7 +361,7 @@ describe("POST /api/auth/claim — Flow B", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 409 when this Discord account is already linked to a player", async () => {
+  it("returns idempotent success when this Discord account is already linked to a player", async () => {
     mockGetPlayerByDiscordId.mockResolvedValueOnce({
       id: "player-99",
       discordUsername: DISCORD_USERNAME,
@@ -273,7 +370,7 @@ describe("POST /api/auth/claim — Flow B", () => {
 
     const { POST } = await import("@/app/api/auth/claim/route");
     const res = await POST(claimRequest());
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(200);
     expect(mockClaimPlayer).not.toHaveBeenCalled();
   });
 
@@ -323,6 +420,45 @@ describe("POST /api/auth/claim — Flow B", () => {
     const body = await res.json() as { ok: boolean };
     expect(res.status).toBe(200);
     expect(body.ok).toBe(true);
+  });
+
+  it("repairs a pending registration on retry when the player claim succeeded before reconciliation failed", async () => {
+    const pendingRegistration = {
+      id: "reg-pending",
+      discordId: DISCORD_ID,
+      discordUsername: DISCORD_USERNAME,
+      formData: {},
+      status: "pending" as const,
+      createdAt: new Date().toISOString(),
+    };
+    const linkedPlayer = {
+      id: "player-42",
+      discordUsername: DISCORD_USERNAME,
+      ign: "Linked Player",
+    } as Awaited<ReturnType<typeof getPlayerByDiscordId>>;
+
+    mockGetRegistrationByDiscordId.mockResolvedValue(pendingRegistration);
+    mockGetPlayerByDiscordId
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(linkedPlayer);
+    mockClaimPlayer.mockResolvedValueOnce({ ok: true, playerId: "player-42" });
+    mockApproveRegistrationAfterClaim
+      .mockRejectedValueOnce(new Error("registration update timed out"))
+      .mockResolvedValueOnce(undefined);
+
+    const { POST } = await import("@/app/api/auth/claim/route");
+    const first = await POST(claimRequest());
+    const retry = await POST(claimRequest());
+
+    expect(first.status).toBe(503);
+    expect(retry.status).toBe(200);
+    expect(mockClaimPlayer).toHaveBeenCalledTimes(1);
+    expect(mockApproveRegistrationAfterClaim).toHaveBeenCalledTimes(2);
+    expect(mockApproveRegistrationAfterClaim).toHaveBeenLastCalledWith(
+      "reg-pending",
+      DISCORD_ID,
+      "player-42",
+    );
   });
 
   it("passes the server-resolved Discord username to claimPlayerByDiscordUsername — never a client value", async () => {

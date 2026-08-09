@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { DivisionId, LeagueData, LeaguePlayer } from "@/types/league";
 import type { PlayerRole } from "@/types/card-lab";
 import { AvatarMark, RolePill } from "@/components/card-lab/ui";
+import { DIVISION_FILTER_OPTIONS } from "@/lib/division-order";
 import { cn } from "@/lib/utils";
 
 const ROLE_FILTERS: { id: PlayerRole | "all"; label: string }[] = [
@@ -12,16 +13,14 @@ const ROLE_FILTERS: { id: PlayerRole | "all"; label: string }[] = [
   { id: "Solo", label: "Solo" },
   { id: "Jungle", label: "Jungle" },
   { id: "Mid", label: "Mid" },
-  { id: "Carry", label: "Carry" },
   { id: "Support", label: "Support" },
+  { id: "Carry", label: "Carry" },
   { id: "Flex", label: "Flex" },
 ];
 
 const DIVISION_FILTERS: { id: DivisionId | "all"; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "solar", label: "Solar" },
-  { id: "lunar", label: "Lunar" },
-  { id: "terra", label: "Terra" },
+  ...DIVISION_FILTER_OPTIONS,
 ];
 
 const divisionActive: Record<DivisionId, string> = {

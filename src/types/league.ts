@@ -67,6 +67,10 @@ export interface LeaguePlayer {
    * avatarInitials/avatarGradient when unset.
    */
   avatarUrl?: string;
+  /** Admin identity state only; the underlying Discord snowflake is never exposed. */
+  profileClaimed?: boolean;
+  /** Whether a verified Discord account is attached, without exposing its ID. */
+  hasDiscordId?: boolean;
   primaryRole: import("@/types/card-lab").PlayerRole;
   secondaryRoles: import("@/types/card-lab").PlayerRole[];
   isStarter: boolean;
