@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         code: "claim_unavailable",
-        error: "The player profile matching your Discord username is already linked. Contact an admin instead of creating a duplicate registration.",
+        error: "The player profile matching your Discord username is already linked or otherwise unavailable. Contact an admin to reconcile the identity instead of creating a duplicate registration.",
       },
       { status: 409 },
     );

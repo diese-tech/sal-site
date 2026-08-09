@@ -137,7 +137,7 @@ export function RegisterClient({
   if (identityBlocker) {
     const message = {
       ambiguous: "Multiple existing player profiles match your Discord username. An admin must reconcile them before you can register or claim a profile.",
-      unavailable: "The player profile matching your Discord username is already linked. Contact an admin so they can verify the correct identity.",
+      unavailable: "The player profile matching your Discord username is already linked or otherwise unavailable. Contact an admin so they can reconcile the identity safely.",
       "declined-match": "We will not create another profile while an existing player identity matches your Discord username. Contact an admin if the suggested profile is not yours.",
       "username-missing": "Discord did not provide a verified username for this session. Sign out and sign back in with Discord before continuing.",
     }[identityBlocker];

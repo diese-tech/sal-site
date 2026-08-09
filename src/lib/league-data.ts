@@ -1584,9 +1584,11 @@ export type PlayerClaimCandidateLookup =
   | { kind: "unavailable"; player: LeaguePlayer };
 
 /**
- * Finds an active player identity by the authenticated Discord handle without
+ * Finds any player identity by the authenticated Discord handle without
  * applying current-season, division, role, or roster-status filters. Imported
  * identities must remain claimable even before they are enrolled in a season.
+ * Archived and deletion-scheduled matches are returned as unavailable so they
+ * block duplicate registration until an admin reconciles the identity.
  */
 export async function getPlayerClaimCandidateByDiscordUsername(
   discordUsername: string,
@@ -1602,8 +1604,6 @@ export async function getPlayerClaimCandidateByDiscordUsername(
     .from("players")
     .select("*")
     .ilike("discord_username", safeUsername)
-    .is("archived_at", null)
-    .is("deletion_scheduled_at", null)
     .order("id")
     .limit(2);
 
@@ -1612,7 +1612,7 @@ export async function getPlayerClaimCandidateByDiscordUsername(
   if (rows.length > 1) return { kind: "ambiguous" };
 
   const row = rows[0];
-  return row.profile_claimed || row.discord_id
+  return row.archived_at || row.deletion_scheduled_at || row.profile_claimed || row.discord_id
     ? { kind: "unavailable", player: fromDbPlayer(row) }
     : { kind: "available", player: fromDbPlayer(row) };
 }
