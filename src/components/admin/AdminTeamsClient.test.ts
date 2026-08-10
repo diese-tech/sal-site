@@ -11,7 +11,12 @@ vi.mock("next/link", () => ({
     createElement("a", props, children),
 }));
 
-import { AdminTeamsClient, OrganizationMergePreviewSummary } from "@/components/admin/AdminTeamsClient";
+import {
+  AdminTeamsClient,
+  OrganizationMergePreviewSummary,
+  requiresOrgCaptainReassignment,
+  withOrgCaptainReassignmentConfirmation,
+} from "@/components/admin/AdminTeamsClient";
 import type { Org } from "@/types/league";
 
 function org(overrides: Partial<Org> = {}): Org {
@@ -75,6 +80,26 @@ describe("AdminTeamsClient season-roster callout", () => {
     expect(html).toContain("Merge Duplicate");
   });
 
+  it("lets a regular admin create, edit, and archive while hiding merge and pending-delete controls", () => {
+    const html = renderTeams(false, { orgs: [org()] }, "org-source");
+
+    expect(html).toContain("+ New Team");
+    expect(html).toContain(">Edit<");
+    expect(html).toContain("Archive");
+    expect(html).not.toContain("Merge Duplicate");
+    expect(html).not.toContain("Merge duplicate organization");
+    expect(html).not.toContain("Schedule Delete");
+    expect(html).not.toContain("Pending Delete");
+
+    const pendingDeleteHtml = renderTeams(false, {
+      orgs: [org({ deletionScheduledAt: "2026-08-09T00:00:00Z" })],
+    });
+    expect(pendingDeleteHtml).not.toContain(">Edit<");
+    expect(pendingDeleteHtml).not.toContain("Archive");
+    expect(pendingDeleteHtml).not.toContain("Unarchive");
+    expect(pendingDeleteHtml).not.toContain("Pending Delete");
+  });
+
   it("opens a deep-linked merge and excludes the source and unavailable orgs from canonical targets", () => {
     const html = renderTeams(true, {
       orgs: [
@@ -106,5 +131,27 @@ describe("AdminTeamsClient season-roster callout", () => {
     expect(html).toContain("Season teams");
     expect(html).toContain("Matches");
     expect(html).toContain("Source and target oppose each other in a match.");
+  });
+});
+
+describe("organization captain reassignment confirmation", () => {
+  it("requires confirmation for assignment, replacement, and removal but not metadata-only saves", () => {
+    const existing = org({ captainId: "player-captain" });
+
+    expect(requiresOrgCaptainReassignment(existing, { ...existing, name: "Renamed Grizzlies" })).toBe(false);
+    expect(requiresOrgCaptainReassignment(existing, { ...existing, divisionId: "solar" })).toBe(true);
+    expect(requiresOrgCaptainReassignment(existing, { ...existing, captainId: "player-new-captain" })).toBe(true);
+    expect(requiresOrgCaptainReassignment(existing, { ...existing, captainId: undefined })).toBe(true);
+    expect(requiresOrgCaptainReassignment(undefined, org({ captainId: "player-captain" }))).toBe(true);
+  });
+
+  it("sends the server confirmation field only after acceptance", () => {
+    const payload = { id: "org-source", name: "Grizzlies" };
+
+    expect(withOrgCaptainReassignmentConfirmation(payload, false)).toEqual(payload);
+    expect(withOrgCaptainReassignmentConfirmation(payload, true)).toEqual({
+      ...payload,
+      confirmCaptainReassignment: true,
+    });
   });
 });

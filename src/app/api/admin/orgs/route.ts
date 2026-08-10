@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
-import { isSuperAdminRequest } from "@/lib/admin-auth";
-import { saveOrgForCurrentSeason } from "@/lib/league-data";
+import { getAdminRequestSession } from "@/lib/admin-auth";
+import { CaptainReassignmentConfirmationError, saveOrgForCurrentSeason } from "@/lib/league-data";
 import { errorMessage } from "@/lib/error-monitor";
 
 const orgSchema = z.object({
@@ -21,11 +21,13 @@ const orgSchema = z.object({
     twitch: z.string().optional(),
     twitter: z.string().optional(),
   }).optional(),
+  confirmCaptainReassignment: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest) {
-  if (!isSuperAdminRequest(request)) {
-    return NextResponse.json({ error: "Unauthorized. Superadmin required." }, { status: 403 });
+  const session = getAdminRequestSession(request);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized. Admin required." }, { status: 403 });
   }
 
   const body = await request.json().catch(() => null);
@@ -52,10 +54,16 @@ export async function POST(request: NextRequest) {
       captainId: data.captainId,
       founded: data.founded,
       socialLinks: data.socialLinks,
+    }, {
+      confirmCaptainReassignment: data.confirmCaptainReassignment,
+      actorDiscordId: session.discordId,
     });
     revalidateTag("league-data", {});
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if (err instanceof CaptainReassignmentConfirmationError) {
+      return NextResponse.json({ error: err.message, confirmationRequired: true }, { status: 409 });
+    }
     const message = errorMessage(err, "Unknown error saving org.");
     console.error("POST /api/admin/orgs error:", err);
     return NextResponse.json({ error: message }, { status: 500 });

@@ -42,7 +42,7 @@ describe("AdminMatchesClient authorization affordances", () => {
     expect(html).toContain("+ Schedule Match");
   });
 
-  it("does not expose permanent-deletion scheduling to a regular admin", () => {
+  it("hides every routine mutation control for a pending-delete match", () => {
     const data = leagueData();
     data.orgs = [
       { id: "home", name: "Home", tag: "H", divisionId: "terra", logoInitials: "H", logoGradient: "", primaryColor: "#fff", accentGradient: "" },
@@ -60,11 +60,27 @@ describe("AdminMatchesClient authorization affordances", () => {
       week: 1,
     }];
 
+    const activeHtml = renderToStaticMarkup(createElement(AdminMatchesClient, {
+      data,
+      isSuperAdmin: false,
+    }));
+
+    expect(activeHtml).toContain(">Edit<");
+    expect(activeHtml).toContain("Archive");
+
+    data.matches = data.matches.map((match) => ({
+      ...match,
+      deletionScheduledAt: "2026-08-09T00:00:00Z",
+    }));
     const html = renderToStaticMarkup(createElement(AdminMatchesClient, {
       data,
       isSuperAdmin: false,
     }));
 
+    expect(html).not.toContain(">Edit<");
+    expect(html).not.toContain("Archive");
+    expect(html).not.toContain("Unarchive");
     expect(html).not.toContain("Schedule Delete");
+    expect(html).not.toContain("Pending Delete");
   });
 });

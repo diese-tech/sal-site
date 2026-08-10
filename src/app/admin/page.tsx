@@ -9,7 +9,7 @@ import Link from "next/link";
 export const metadata = { title: "Admin - SAL" };
 
 export default async function AdminOverviewPage() {
-  const session = await requireAdmin();
+  await requireAdmin();
   const [{ orgs, players, matches, standings, season }, auditLog] = await Promise.all([
     getLeagueData(),
     getAuditLog(30),
@@ -35,13 +35,11 @@ export default async function AdminOverviewPage() {
     { href: "/admin/matches", title: "Edit Schedule", body: "Create matches, change dates, set live status, and enter scores." },
     { href: "/admin/players", title: "Edit Roster", body: "Edit global player profiles — Discord, IGN, role, and status." },
     { href: "/admin/standings", title: "Edit Standings", body: "Use completed match scores to recalculate division tables." },
-    ...(session.role === "super_admin"
-      ? [{
-          href: `/admin/seasons/${encodeURIComponent(season.id)}/roster`,
-          title: "Manage Season Roster",
-          body: `Enroll orgs and players into ${season.name}. Returning orgs are enrolled here, not recreated on Teams.`,
-        }]
-      : []),
+    {
+      href: `/admin/seasons/${encodeURIComponent(season.id)}/roster`,
+      title: "Manage Season Roster",
+      body: `Enroll orgs and players into ${season.name}. Returning orgs are enrolled here, not recreated on Teams.`,
+    },
   ];
 
   return (

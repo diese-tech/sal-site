@@ -12,6 +12,19 @@ const inputClass = "w-full rounded-lg border border-white/10 bg-black/45 px-3 py
 
 type Notice = { tone: "success" | "error"; text: string } | null;
 
+export function requiresOrgCaptainReassignment(existing: Org | undefined, next: Org): boolean {
+  if (!existing) return !!next.captainId;
+  if (existing.captainId !== next.captainId) return true;
+  return !!(existing.captainId || next.captainId) && existing.divisionId !== next.divisionId;
+}
+
+export function withOrgCaptainReassignmentConfirmation<T extends object>(
+  payload: T,
+  accepted: boolean,
+): T & { confirmCaptainReassignment?: true } {
+  return accepted ? { ...payload, confirmCaptainReassignment: true } : payload;
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
@@ -102,10 +115,12 @@ export function AdminTeamsClient({
   const [isNew, setIsNew] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [saving, setSaving] = useState(false);
+  const [awaitingCaptainConfirmation, setAwaitingCaptainConfirmation] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [confirmScheduleId, setConfirmScheduleId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [mergeSourceId, setMergeSourceId] = useState<string | null>(() => {
+    if (!isSuperAdmin) return null;
     const initial = data.orgs.find((org) => org.id === initialMergeOrgId && !org.archivedAt && !org.deletionScheduledAt);
     return initial?.id ?? null;
   });
@@ -116,22 +131,27 @@ export function AdminTeamsClient({
 
   const activeOrgs = data.orgs.filter((o) => !o.archivedAt);
   const archivedOrgs = data.orgs.filter((o) => !!o.archivedAt);
-  const mergeSource = data.orgs.find((org) => org.id === mergeSourceId);
+  const mergeSource = isSuperAdmin
+    ? data.orgs.find((org) => org.id === mergeSourceId)
+    : undefined;
   const mergeTargets = activeOrgs.filter((org) => org.id !== mergeSourceId && !org.deletionScheduledAt);
 
   function openEdit(org: Org) {
     setEditing({ ...org });
     setIsNew(false);
+    setAwaitingCaptainConfirmation(false);
     setNotice(null);
   }
 
   function openNew() {
     setEditing(emptyOrg());
     setIsNew(true);
+    setAwaitingCaptainConfirmation(false);
     setNotice(null);
   }
 
   function openMerge(org: Org) {
+    if (!isSuperAdmin) return;
     setMergeSourceId(org.id);
     setMergeTargetId("");
     setMergePreview(null);
@@ -201,7 +221,7 @@ export function AdminTeamsClient({
     }
   }
 
-  async function save() {
+  async function save(confirmCaptainReassignment = false) {
     if (!editing) return;
     if (!editing.name.trim() || !editing.tag.trim()) {
       setNotice({ tone: "error", text: "Name and Tag are required." });
@@ -211,10 +231,21 @@ export function AdminTeamsClient({
     setNotice(null);
     const wasNew = isNew;
     const orgName = editing.name;
+    const payload = { ...editing, tag: editing.tag.toUpperCase() };
+    const existing = isNew ? undefined : data.orgs.find((org) => org.id === payload.id);
+    const needsCaptainConfirmation = requiresOrgCaptainReassignment(existing, payload);
+    if (needsCaptainConfirmation && !confirmCaptainReassignment) {
+      setSaving(false);
+      setAwaitingCaptainConfirmation(true);
+      return;
+    }
     const res = await fetch("/api/admin/orgs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...editing, tag: editing.tag.toUpperCase() }),
+      body: JSON.stringify(withOrgCaptainReassignmentConfirmation(
+        payload,
+        needsCaptainConfirmation && confirmCaptainReassignment,
+      )),
     });
     setSaving(false);
     if (!res.ok) {
@@ -223,6 +254,7 @@ export function AdminTeamsClient({
       return;
     }
     setEditing(null);
+    setAwaitingCaptainConfirmation(false);
     setNotice({ tone: "success", text: wasNew ? `Created ${orgName}.` : `Saved ${orgName}.` });
     router.refresh();
   }
@@ -264,13 +296,14 @@ export function AdminTeamsClient({
     const captain = data.players.find((p) => p.id === org.captainId);
     const standing = data.standings.find((s) => s.orgId === org.id && s.divisionId === org.divisionId);
     const isScheduled = !!org.deletionScheduledAt;
+    const showScheduled = isSuperAdmin && isScheduled;
 
     return (
       <div
         key={`${org.id}:${org.divisionId}`}
         className={cn(
           "flex flex-wrap items-center gap-3 border-b border-white/5 px-4 py-3 last:border-0",
-          isScheduled && "bg-red-950/20",
+          showScheduled && "bg-red-950/20",
         )}
       >
         {/* Identity */}
@@ -284,7 +317,7 @@ export function AdminTeamsClient({
                   Archived
                 </span>
               )}
-              {isScheduled && (
+              {showScheduled && (
                 <span className="rounded border border-red-400/40 bg-red-400/10 px-1.5 py-0.5 text-[0.55rem] font-black uppercase text-red-400">
                   Pending Delete
                 </span>
@@ -302,23 +335,22 @@ export function AdminTeamsClient({
           {captain?.ign ?? "No captain"}
         </span>
 
-        {/* Superadmin actions */}
-        {isSuperAdmin && (
+        {!isScheduled && (
           <div className="flex shrink-0 gap-1">
+          <button
+            onClick={() => openEdit(org)}
+            className="rounded-lg border border-cyan-300/25 px-2.5 py-1 text-[0.65rem] font-black uppercase text-cyan-200 transition hover:border-cyan-300/50"
+          >
+            Edit
+          </button>
+          {isSuperAdmin && !org.archivedAt && !isScheduled && (
             <button
-              onClick={() => openEdit(org)}
-              className="rounded-lg border border-cyan-300/25 px-2.5 py-1 text-[0.65rem] font-black uppercase text-cyan-200 transition hover:border-cyan-300/50"
+              onClick={() => openMerge(org)}
+              className="rounded-lg border border-violet-300/25 px-2.5 py-1 text-[0.65rem] font-black uppercase text-violet-200 transition hover:border-violet-300/50"
             >
-              Edit
+              Merge Duplicate
             </button>
-            {!org.archivedAt && !isScheduled && (
-              <button
-                onClick={() => openMerge(org)}
-                className="rounded-lg border border-violet-300/25 px-2.5 py-1 text-[0.65rem] font-black uppercase text-violet-200 transition hover:border-violet-300/50"
-              >
-                Merge Duplicate
-              </button>
-            )}
+          )}
             {!org.archivedAt ? (
               <button
                 onClick={() => void doArchive(org)}
@@ -336,7 +368,7 @@ export function AdminTeamsClient({
                 {actionLoadingId === org.id ? "…" : "Unarchive"}
               </button>
             )}
-            {!isScheduled ? (
+            {isSuperAdmin && !isScheduled ? (
               confirmScheduleId === org.id ? (
                 <div className="flex gap-1">
                   <button
@@ -394,18 +426,16 @@ export function AdminTeamsClient({
             </p>
           )}
         </div>
-        {isSuperAdmin && (
-          <button
-            onClick={openNew}
-            className="rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-4 py-2 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20"
-          >
-            + New Team
-          </button>
-        )}
+        <button
+          onClick={openNew}
+          className="rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-4 py-2 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20"
+        >
+          + New Team
+        </button>
       </div>
 
       {/* Edit / New panel */}
-      {mergeSource && (
+      {isSuperAdmin && mergeSource && (
         <div className="rounded-2xl border border-violet-300/25 bg-slate-950/84 p-4 shadow-xl shadow-violet-950/20">
           <p className="text-xs font-black uppercase text-violet-200">Merge duplicate organization</p>
           <h2 className="mt-1 text-lg font-black text-white">Move {mergeSource.name} [{mergeSource.tag}] into a canonical organization</h2>
@@ -511,11 +541,24 @@ export function AdminTeamsClient({
             </Field>
           </div>
           <div className="mt-4 flex gap-2">
-            <button onClick={() => void save()} disabled={saving} className="rounded-xl border border-emerald-300/35 bg-emerald-300/15 px-4 py-2 text-sm font-black uppercase text-emerald-100 disabled:opacity-60">
+            <button onClick={() => void save()} disabled={saving || awaitingCaptainConfirmation} className="rounded-xl border border-emerald-300/35 bg-emerald-300/15 px-4 py-2 text-sm font-black uppercase text-emerald-100 disabled:opacity-60">
               {saving ? "Saving..." : isNew ? "Create Team" : "Save Team"}
             </button>
             <button onClick={() => setEditing(null)} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black uppercase text-slate-300">Cancel</button>
           </div>
+          {awaitingCaptainConfirmation && (
+            <div role="alert" className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm font-semibold text-amber-100">
+              <p>This changes a captain assignment. Confirm before saving this team.</p>
+              <div className="mt-3 flex gap-2">
+                <button onClick={() => void save(true)} disabled={saving} className="rounded-lg border border-amber-300/40 bg-amber-300/15 px-3 py-1.5 text-xs font-black uppercase text-amber-50 disabled:opacity-50">
+                  Confirm Captain Reassignment
+                </button>
+                <button onClick={() => setAwaitingCaptainConfirmation(false)} disabled={saving} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-black uppercase text-slate-300 disabled:opacity-50">
+                  Continue Editing
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

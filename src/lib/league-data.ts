@@ -840,11 +840,154 @@ export async function removeSeasonRosterAssignment(seasonId: string, playerId: s
 
 // ─── Org write ─────────────────────────────────────────────────────────────────────────────
 
-export async function saveOrg(org: Org): Promise<void> {
+function pendingDeleteRoutineMutationError() {
+  return new Error(
+    "Record is scheduled for deletion, missing, or changed concurrently. Cancel the scheduled deletion through the superadmin pending-delete flow before editing it.",
+  );
+}
+
+export interface CaptainReassignmentOptions {
+  confirmCaptainReassignment?: boolean;
+  actorDiscordId?: string;
+}
+
+export class CaptainReassignmentConfirmationError extends Error {
+  constructor() {
+    super("Current-season captain reassignment requires explicit confirmation.");
+    this.name = "CaptainReassignmentConfirmationError";
+  }
+}
+
+type CaptainReassignmentAudit = {
+  seasonId: string;
+  entityType: "player" | "org";
+  entityId: string;
+  actorDiscordId: string;
+  from: Record<string, unknown>;
+  to: Record<string, unknown>;
+};
+
+function requireCaptainReassignmentConfirmation(options: CaptainReassignmentOptions | undefined): string {
+  if (options?.confirmCaptainReassignment !== true || !options.actorDiscordId) {
+    throw new CaptainReassignmentConfirmationError();
+  }
+  return options.actorDiscordId;
+}
+
+async function writeCaptainReassignmentAudit(audit: CaptainReassignmentAudit | null): Promise<void> {
+  if (!audit) return;
+  await writeAuditLog("captain_reassignment_confirmed", audit.entityType, audit.entityId, {
+    actorDiscordId: audit.actorDiscordId,
+    seasonId: audit.seasonId,
+    from: audit.from,
+    to: audit.to,
+  });
+
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
-  const { error } = await supabase.from("orgs").upsert(toDbOrg(org));
+  const { error } = await supabase.from("audit_logs").insert({
+    action_type: "captain_reassignment_confirmed",
+    actor_discord_id: audit.actorDiscordId,
+    entity_type: audit.entityType,
+    entity_id: audit.entityId,
+    old_value_json: toDatabaseJson(audit.from),
+    new_value_json: toDatabaseJson(audit.to),
+    note: `Season ${audit.seasonId} captain reassignment confirmed in SAL Admin.`,
+  });
   if (error) throw error;
+}
+
+async function preflightOrgCaptainReassignment(
+  org: Org,
+  options: CaptainReassignmentOptions | undefined,
+): Promise<{ seasonId: string | null; audit: CaptainReassignmentAudit | null }> {
+  const seasonId = await getCurrentSeasonId();
+  if (!seasonId) return { seasonId: null, audit: null };
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const { data: currentCaptainRows, error: currentCaptainError } = await supabase
+    .from("season_rosters")
+    .select("player_id")
+    .eq("season_id", seasonId)
+    .eq("org_id", org.id)
+    .eq("division_id", org.divisionId)
+    .eq("is_captain", true);
+  if (currentCaptainError) throw currentCaptainError;
+  const currentCaptainIds = (Array.isArray(currentCaptainRows) ? currentCaptainRows : [])
+    .map((row: { player_id: string }) => row.player_id)
+    .sort();
+  const desiredCaptainId = org.captainId ?? null;
+  const unchanged = desiredCaptainId === null
+    ? currentCaptainIds.length === 0
+    : currentCaptainIds.length === 1 && currentCaptainIds[0] === desiredCaptainId;
+
+  if (org.captainId) {
+    const { data: existingRoster, error: existingRosterError } = await supabase
+      .from("season_rosters")
+      .select("org_id, division_id")
+      .eq("season_id", seasonId)
+      .eq("player_id", org.captainId)
+      .maybeSingle();
+    if (existingRosterError) throw existingRosterError;
+    if (existingRoster?.org_id && (existingRoster.org_id !== org.id || existingRoster.division_id !== org.divisionId)) {
+      throw new Error(
+        "This player is already rostered to a different team this season. Remove them from that roster on the Manage Roster screen before making them captain here.",
+      );
+    }
+  }
+
+  if (unchanged) return { seasonId, audit: null };
+  const actorDiscordId = requireCaptainReassignmentConfirmation(options);
+  return {
+    seasonId,
+    audit: {
+      seasonId,
+      entityType: "org",
+      entityId: org.id,
+      actorDiscordId,
+      from: { captainIds: currentCaptainIds, divisionId: org.divisionId },
+      to: { captainId: desiredCaptainId, divisionId: org.divisionId },
+    },
+  };
+}
+
+export async function saveOrg(
+  org: Org,
+  options?: { preserveSeasonScopedFields?: boolean },
+): Promise<void> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const row = toDbOrg(org);
+  const { data: existing, error: existingError } = await supabase
+    .from("orgs")
+    .select("deletion_scheduled_at")
+    .eq("id", org.id)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  if (existing) {
+    if (existing.deletion_scheduled_at) throw pendingDeleteRoutineMutationError();
+    const updateRow: Partial<DbOrg> = { ...row };
+    if (options?.preserveSeasonScopedFields) {
+      // The Teams screen receives one display clone per (org, division). Its
+      // division and captain belong to season_orgs/season_rosters, not the
+      // single league-wide org identity row.
+      delete updateRow.division_id;
+      delete updateRow.captain_id;
+    }
+    const { data: updated, error } = await supabase
+      .from("orgs")
+      .update(updateRow)
+      .eq("id", org.id)
+      .is("deletion_scheduled_at", null)
+      .select("id");
+    if (error) throw error;
+    if (!updated || updated.length === 0) throw pendingDeleteRoutineMutationError();
+  } else {
+    const { error } = await supabase.from("orgs").insert(row);
+    if (error) throw error;
+  }
   await writeAuditLog("save_org", "org", org.id, { name: org.name, tag: org.tag, divisionId: org.divisionId });
 }
 
@@ -853,9 +996,12 @@ export async function saveOrg(org: Org): Promise<void> {
  * org enrolls that identity into the current season instead of forcing admins
  * to duplicate it, and a selected captain becomes the season-scoped captain.
  */
-export async function saveOrgForCurrentSeason(org: Org): Promise<void> {
-  await saveOrg(org);
-  const seasonId = await getCurrentSeasonId();
+export async function saveOrgForCurrentSeason(
+  org: Org,
+  options?: CaptainReassignmentOptions,
+): Promise<void> {
+  const { seasonId, audit } = await preflightOrgCaptainReassignment(org, options);
+  await saveOrg(org, { preserveSeasonScopedFields: true });
   if (!seasonId) return;
 
   if (org.captainId) {
@@ -918,6 +1064,8 @@ export async function saveOrgForCurrentSeason(org: Org): Promise<void> {
       if (playerError) throw playerError;
     }
   }
+
+  await writeCaptainReassignmentAudit(audit);
 }
 
 // ─── Archive / soft-delete ──────────────────────────────────────────────────────────────────
@@ -973,20 +1121,42 @@ async function assertNoSeasonParticipationBeforeArchive(
   }
 }
 
+/** A scheduled deletion is a superadmin-only workflow. */
+async function updateArchiveState(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  table: SoftDeleteTable,
+  id: string,
+  archivedAt: string | null,
+): Promise<void> {
+  // The deletion predicate belongs on the mutation rather than a preceding
+  // read: a scheduled delete that races with this request must make the write
+  // affect zero rows, not revive a pending hard-delete record.
+  const { data, error } = await supabase
+    .from(table)
+    .update({ archived_at: archivedAt })
+    .eq("id", id)
+    .is("deletion_scheduled_at", null)
+    .select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error(
+      "Record is scheduled for deletion, missing, or changed concurrently. Cancel the scheduled deletion through the superadmin pending-delete flow before changing its archive state.",
+    );
+  }
+}
+
 export async function archiveRecord(table: SoftDeleteTable, id: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
   await assertNoSeasonParticipationBeforeArchive(supabase, table, id);
-  const { error } = await supabase.from(table).update({ archived_at: new Date().toISOString() }).eq("id", id);
-  if (error) throw error;
+  await updateArchiveState(supabase, table, id, new Date().toISOString());
   await writeAuditLog("archive", table.slice(0, -1), id, {});
 }
 
 export async function unarchiveRecord(table: SoftDeleteTable, id: string): Promise<void> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
-  const { error } = await supabase.from(table).update({ archived_at: null }).eq("id", id);
-  if (error) throw error;
+  await updateArchiveState(supabase, table, id, null);
   await writeAuditLog("unarchive", table.slice(0, -1), id, {});
 }
 
@@ -1118,7 +1288,10 @@ export interface AuditLogEntry {
 export async function writeAuditLog(action: string, entityType: string | null, entityId: string | null, payload: unknown) {
   const supabase = getSupabaseServerClient();
   if (!supabase) return;
-  await supabase.from("admin_audit_log").insert({ action, entity_type: entityType, entity_id: entityId, payload: toDatabaseJson(payload) });
+  const { error } = await supabase
+    .from("admin_audit_log")
+    .insert({ action, entity_type: entityType, entity_id: entityId, payload: toDatabaseJson(payload) });
+  if (error) throw error;
 }
 
 export async function getAuditLog(limit = 50): Promise<AuditLogEntry[]> {
@@ -1146,8 +1319,28 @@ export async function getAuditLog(limit = 50): Promise<AuditLogEntry[]> {
 export async function saveMatch(match: Match) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
-  const { error } = await supabase.from("matches").upsert(toDbMatch(match));
-  if (error) throw error;
+  const row = toDbMatch(match);
+  const { data: existing, error: existingError } = await supabase
+    .from("matches")
+    .select("deletion_scheduled_at")
+    .eq("id", match.id)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  if (existing) {
+    if (existing.deletion_scheduled_at) throw pendingDeleteRoutineMutationError();
+    const { data: updated, error } = await supabase
+      .from("matches")
+      .update(row)
+      .eq("id", match.id)
+      .is("deletion_scheduled_at", null)
+      .select("id");
+    if (error) throw error;
+    if (!updated || updated.length === 0) throw pendingDeleteRoutineMutationError();
+  } else {
+    const { error } = await supabase.from("matches").insert(row);
+    if (error) throw error;
+  }
   await Promise.all([
     recalculateAndPersistStandings(),
     writeAuditLog("save_match", "match", match.id, match),
@@ -1157,9 +1350,76 @@ export async function saveMatch(match: Match) {
 export async function savePlayer(player: LeaguePlayer) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase env is missing.");
-  const { error } = await supabase.from("players").upsert(toDbPlayer(player));
-  if (error) throw error;
+  const row = toDbPlayer(player);
+  const { data: existing, error: existingError } = await supabase
+    .from("players")
+    .select("deletion_scheduled_at")
+    .eq("id", player.id)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  if (existing) {
+    if (existing.deletion_scheduled_at) throw pendingDeleteRoutineMutationError();
+    const { data: updated, error } = await supabase
+      .from("players")
+      .update(row)
+      .eq("id", player.id)
+      .is("deletion_scheduled_at", null)
+      .select("id");
+    if (error) throw error;
+    if (!updated || updated.length === 0) throw pendingDeleteRoutineMutationError();
+  } else {
+    const { error } = await supabase.from("players").insert(row);
+    if (error) throw error;
+  }
   await writeAuditLog("save_player", "player", player.id, { ign: player.ign, orgId: player.orgId, status: player.status });
+}
+
+async function preflightPlayerCaptainReassignment(
+  player: LeaguePlayer,
+  options: CaptainReassignmentOptions | undefined,
+): Promise<{ seasonId: string | null; audit: CaptainReassignmentAudit | null }> {
+  if (player.orgId && !player.divisionId) throw new Error("A team assignment requires a division.");
+
+  const seasonId = await getCurrentSeasonId();
+  if (!seasonId) return { seasonId: null, audit: null };
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+  const { data: existing, error } = await supabase
+    .from("season_rosters")
+    .select("org_id, division_id, is_captain")
+    .eq("season_id", seasonId)
+    .eq("player_id", player.id)
+    .maybeSingle();
+  if (error) throw error;
+
+  const from = {
+    orgId: existing?.org_id ?? null,
+    divisionId: existing?.division_id ?? null,
+    isCaptain: existing?.is_captain === true,
+  };
+  const to = {
+    orgId: player.orgId ?? null,
+    divisionId: player.divisionId ?? null,
+    isCaptain: player.isCaptain,
+  };
+  const changesCaptainAssignment = from.isCaptain !== to.isCaptain
+    || ((from.isCaptain || to.isCaptain) && (from.orgId !== to.orgId || from.divisionId !== to.divisionId));
+  if (!changesCaptainAssignment) return { seasonId, audit: null };
+
+  const actorDiscordId = requireCaptainReassignmentConfirmation(options);
+  return {
+    seasonId,
+    audit: {
+      seasonId,
+      entityType: "player",
+      entityId: player.id,
+      actorDiscordId,
+      from,
+      to,
+    },
+  };
 }
 
 /**
@@ -1167,14 +1427,18 @@ export async function savePlayer(player: LeaguePlayer) {
  * its assignment fields into the current season so a successful captain/team
  * save is immediately visible on season-scoped public and admin reads.
  */
-export async function savePlayerForCurrentSeason(player: LeaguePlayer): Promise<void> {
+export async function savePlayerForCurrentSeason(
+  player: LeaguePlayer,
+  options?: CaptainReassignmentOptions,
+): Promise<void> {
+  const { seasonId, audit } = await preflightPlayerCaptainReassignment(player, options);
   await savePlayer(player);
-  const seasonId = await getCurrentSeasonId();
   if (!seasonId) return;
 
   if (player.orgId) {
-    if (!player.divisionId) throw new Error("A team assignment requires a division.");
-    await saveSeasonOrgAssignment(seasonId, player.orgId, player.divisionId);
+    const divisionId = player.divisionId;
+    if (!divisionId) throw new Error("A team assignment requires a division.");
+    await saveSeasonOrgAssignment(seasonId, player.orgId, divisionId);
   }
 
   await saveSeasonRosterAssignment({
@@ -1185,6 +1449,7 @@ export async function savePlayerForCurrentSeason(player: LeaguePlayer): Promise<
     isCaptain: player.isCaptain,
     legacyStatus: player.status,
   });
+  await writeCaptainReassignmentAudit(audit);
 }
 
 /**

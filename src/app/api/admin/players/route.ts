@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
-import { isSuperAdminRequest } from "@/lib/admin-auth";
-import { savePlayerForCurrentSeason } from "@/lib/league-data";
+import { getAdminRequestSession } from "@/lib/admin-auth";
+import { CaptainReassignmentConfirmationError, savePlayerForCurrentSeason } from "@/lib/league-data";
 import { errorMessage } from "@/lib/error-monitor";
 
 const playerSchema = z.object({
@@ -19,10 +19,12 @@ const playerSchema = z.object({
   isStarter: z.boolean().optional().default(false),
   isCaptain: z.boolean().optional().default(false),
   stats: z.unknown().optional(),
+  confirmCaptainReassignment: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest) {
-  if (!isSuperAdminRequest(request)) return NextResponse.json({ error: "Unauthorized. Superadmin required." }, { status: 403 });
+  const session = getAdminRequestSession(request);
+  if (!session) return NextResponse.json({ error: "Unauthorized. Admin required." }, { status: 403 });
 
   const body = await request.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
@@ -34,10 +36,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await savePlayerForCurrentSeason(result.data as Parameters<typeof savePlayerForCurrentSeason>[0]);
+    const { confirmCaptainReassignment, ...player } = result.data;
+    await savePlayerForCurrentSeason(player as Parameters<typeof savePlayerForCurrentSeason>[0], {
+      confirmCaptainReassignment,
+      actorDiscordId: session.discordId,
+    });
     revalidateTag("league-data", {});
     return NextResponse.json({ ok: true });
   } catch (err) {
+    if (err instanceof CaptainReassignmentConfirmationError) {
+      return NextResponse.json({ error: err.message, confirmationRequired: true }, { status: 409 });
+    }
     const message = errorMessage(err, "Unknown error saving player.");
     console.error("POST /api/admin/players error:", err);
     return NextResponse.json({ error: message }, { status: 500 });

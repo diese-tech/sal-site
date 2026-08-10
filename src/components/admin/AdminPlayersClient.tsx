@@ -12,6 +12,23 @@ const roles: PlayerRole[] = ["Solo", "Jungle", "Mid", "Carry", "Support", "Flex"
 
 type Notice = { tone: "success" | "error"; text: string } | null;
 
+export function requiresPlayerCaptainReassignment(
+  existing: LeaguePlayer | undefined,
+  next: LeaguePlayer,
+): boolean {
+  if (!existing) return next.isCaptain;
+  if (existing.isCaptain !== next.isCaptain) return true;
+  return (existing.isCaptain || next.isCaptain)
+    && (existing.orgId !== next.orgId || existing.divisionId !== next.divisionId);
+}
+
+export function withCaptainReassignmentConfirmation<T extends object>(
+  payload: T,
+  accepted: boolean,
+): T & { confirmCaptainReassignment?: true } {
+  return accepted ? { ...payload, confirmCaptainReassignment: true } : payload;
+}
+
 const mergeCountLabels: Record<string, string> = {
   players: "Player identities",
   seasonRosters: "Roster assignments",
@@ -174,6 +191,7 @@ export function AdminPlayersClient({
   const [isNew, setIsNew] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [saving, setSaving] = useState(false);
+  const [awaitingCaptainConfirmation, setAwaitingCaptainConfirmation] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [confirmScheduleId, setConfirmScheduleId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -223,16 +241,19 @@ export function AdminPlayersClient({
   function openEdit(player: LeaguePlayer) {
     setEditing({ ...player });
     setIsNew(false);
+    setAwaitingCaptainConfirmation(false);
     setNotice(null);
   }
 
   function openNew() {
     setEditing(emptyPlayer());
     setIsNew(true);
+    setAwaitingCaptainConfirmation(false);
     setNotice(null);
   }
 
   function openMerge(player: LeaguePlayer) {
+    if (!isSuperAdmin) return;
     setMergeSourceId(player.id);
     setMergeTargetId("");
     setMergePreview(null);
@@ -327,7 +348,7 @@ export function AdminPlayersClient({
     }
   }
 
-  async function save() {
+  async function save(confirmCaptainReassignment = false) {
     if (!editing) return;
     setSaving(true);
     setNotice(null);
@@ -341,12 +362,22 @@ export function AdminPlayersClient({
       divisionId: editing.orgId ? (editing.divisionId ?? "solar") : editing.divisionId,
       status,
     };
+    const existing = isNew ? undefined : data.players.find((player) => player.id === payload.id);
+    const needsCaptainConfirmation = requiresPlayerCaptainReassignment(existing, payload);
+    if (needsCaptainConfirmation && !confirmCaptainReassignment) {
+      setSaving(false);
+      setAwaitingCaptainConfirmation(true);
+      return;
+    }
     const wasNew = isNew;
     const playerName = payload.ign || "player";
     const res = await fetch("/api/admin/players", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(withCaptainReassignmentConfirmation(
+        payload,
+        needsCaptainConfirmation && confirmCaptainReassignment,
+      )),
     });
     setSaving(false);
     if (!res.ok) {
@@ -355,6 +386,7 @@ export function AdminPlayersClient({
       return;
     }
     setEditing(null);
+    setAwaitingCaptainConfirmation(false);
     setNotice({ tone: "success", text: wasNew ? `Created ${playerName}.` : `Saved ${playerName}.` });
     router.refresh();
   }
@@ -396,22 +428,27 @@ export function AdminPlayersClient({
 
   function renderPlayerCard(player: LeaguePlayer, archived = false) {
     const isScheduled = !!player.deletionScheduledAt;
+    const showScheduled = isSuperAdmin && isScheduled;
     return (
       <div
         key={player.id}
         className={cn(
           "rounded-2xl border bg-slate-950/70 p-4",
-          isScheduled ? "border-red-400/25 bg-red-950/10" : archived ? "border-white/5" : "border-white/8",
+          showScheduled ? "border-red-400/25 bg-red-950/10" : archived ? "border-white/5" : "border-white/8",
         )}
       >
         <div className="flex items-start justify-between gap-3">
-          <button onClick={() => openEdit(player)} className="min-w-0 flex-1 text-left hover:opacity-80">
+          <button
+            onClick={() => openEdit(player)}
+            disabled={isScheduled}
+            className="min-w-0 flex-1 text-left enabled:hover:opacity-80 disabled:cursor-default"
+          >
             <div className="flex items-center gap-2">
               <p className="truncate font-black text-white">{player.ign}</p>
               {archived && (
                 <span className="rounded border border-slate-500/40 bg-slate-500/10 px-1.5 py-0.5 text-[0.55rem] font-black uppercase text-slate-400">Archived</span>
               )}
-              {isScheduled && (
+              {showScheduled && (
                 <span className="rounded border border-red-400/40 bg-red-400/10 px-1.5 py-0.5 text-[0.55rem] font-black uppercase text-red-400">Pending Delete</span>
               )}
             </div>
@@ -425,17 +462,22 @@ export function AdminPlayersClient({
           </span>
         </div>
 
-        {/* Superadmin actions */}
-        {isSuperAdmin && (
+        {!isScheduled && (
           <div className="mt-3 flex flex-wrap gap-1.5 border-t border-white/5 pt-3">
-            {!archived && !isScheduled && (
-              <button
-                onClick={() => openMerge(player)}
-                className="rounded-lg border border-violet-300/25 px-2.5 py-1 text-[0.65rem] font-black uppercase text-violet-200 transition hover:border-violet-300/50"
-              >
-                Merge Duplicate
-              </button>
-            )}
+          <button
+            onClick={() => openEdit(player)}
+            className="rounded-lg border border-cyan-300/25 px-2.5 py-1 text-[0.65rem] font-black uppercase text-cyan-200 transition hover:border-cyan-300/50"
+          >
+            Edit
+          </button>
+          {isSuperAdmin && !archived && !isScheduled && (
+            <button
+              onClick={() => openMerge(player)}
+              className="rounded-lg border border-violet-300/25 px-2.5 py-1 text-[0.65rem] font-black uppercase text-violet-200 transition hover:border-violet-300/50"
+            >
+              Merge Duplicate
+            </button>
+          )}
             {!archived ? (
               <button
                 onClick={() => void doArchive(player)}
@@ -453,7 +495,7 @@ export function AdminPlayersClient({
                 {actionLoadingId === player.id ? "…" : "Unarchive"}
               </button>
             )}
-            {!isScheduled ? (
+            {isSuperAdmin && !isScheduled ? (
               confirmScheduleId === player.id ? (
                 <div className="flex gap-1">
                   <button
@@ -511,11 +553,9 @@ export function AdminPlayersClient({
             </p>
           )}
         </div>
-        {isSuperAdmin && (
-          <button onClick={openNew} className="rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-4 py-2 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20">
-            + New Player
-          </button>
-        )}
+        <button onClick={openNew} className="rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-4 py-2 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20">
+          + New Player
+        </button>
       </div>
 
       {/* Search + filters */}
@@ -540,7 +580,7 @@ export function AdminPlayersClient({
         ))}
       </div>
 
-      {mergeSource && (
+      {isSuperAdmin && mergeSource && (
         <div className="rounded-2xl border border-violet-300/25 bg-slate-950/84 p-4 shadow-xl shadow-violet-950/20">
           <p className="text-xs font-black uppercase text-violet-200">Merge duplicate player</p>
           <h2 className="mt-1 text-lg font-black text-white">Move {mergeSource.ign} into a canonical player identity</h2>
@@ -667,11 +707,24 @@ export function AdminPlayersClient({
             </label>
           </div>
           <div className="mt-4 flex gap-2">
-            <button onClick={() => void save()} disabled={saving} className="rounded-xl border border-emerald-300/35 bg-emerald-300/15 px-4 py-2 text-sm font-black uppercase text-emerald-100 disabled:opacity-60">
+            <button onClick={() => void save()} disabled={saving || awaitingCaptainConfirmation} className="rounded-xl border border-emerald-300/35 bg-emerald-300/15 px-4 py-2 text-sm font-black uppercase text-emerald-100 disabled:opacity-60">
               {saving ? "Saving..." : isNew ? "Create Player" : "Save Player"}
             </button>
             <button onClick={() => setEditing(null)} className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black uppercase text-slate-300">Cancel</button>
           </div>
+          {awaitingCaptainConfirmation && (
+            <div role="alert" className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-sm font-semibold text-amber-100">
+              <p>This changes a captain assignment. Confirm before saving this player.</p>
+              <div className="mt-3 flex gap-2">
+                <button onClick={() => void save(true)} disabled={saving} className="rounded-lg border border-amber-300/40 bg-amber-300/15 px-3 py-1.5 text-xs font-black uppercase text-amber-50 disabled:opacity-50">
+                  Confirm Captain Reassignment
+                </button>
+                <button onClick={() => setAwaitingCaptainConfirmation(false)} disabled={saving} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-black uppercase text-slate-300 disabled:opacity-50">
+                  Continue Editing
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
