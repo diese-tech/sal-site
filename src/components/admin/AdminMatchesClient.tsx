@@ -240,22 +240,25 @@ export function AdminMatchesClient({
           <p className="px-4 py-6 text-center text-sm font-semibold text-slate-500">No matches match the current filters.</p>
         )}
         {sorted.map((match) => (
-          <div key={match.id} className={cn("border-b border-white/5 last:border-0", match.deletionScheduledAt ? "bg-red-950/10" : "")}>
+          <div key={match.id} className={cn("border-b border-white/5 last:border-0", isSuperAdmin && match.deletionScheduledAt ? "bg-red-950/10" : "")}>
             <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-              <button
-                onClick={() => { setEditing(match); setMessage(""); setConfirming(false); }}
-                className="grid flex-1 gap-3 text-left sm:grid-cols-[7rem_1fr_7rem_5rem] sm:items-center"
-              >
+              <div className="grid flex-1 gap-3 text-left sm:grid-cols-[7rem_1fr_7rem_5rem] sm:items-center">
                 <span className={cn("w-fit rounded-full border px-2 py-0.5 text-[0.65rem] font-black uppercase", match.status === "live" ? "border-orange-300/40 bg-orange-300/15 text-orange-100" : "border-cyan-300/20 bg-cyan-300/10 text-cyan-100")}>{match.status}</span>
                 <span className="min-w-0 font-black text-white">
                   {getOrg(match.homeOrgId)?.name ?? match.homeOrgId} <span className="text-slate-500">vs</span> {getOrg(match.awayOrgId)?.name ?? match.awayOrgId}
-                  {match.deletionScheduledAt && <span className="ml-2 rounded border border-red-400/40 bg-red-400/10 px-1.5 py-0.5 text-[0.55rem] font-black uppercase text-red-400">Pending Delete</span>}
+                  {isSuperAdmin && match.deletionScheduledAt && <span className="ml-2 rounded border border-red-400/40 bg-red-400/10 px-1.5 py-0.5 text-[0.55rem] font-black uppercase text-red-400">Pending Delete</span>}
                 </span>
                 <span className="text-xs font-semibold text-slate-400">{match.scheduledDate} {match.scheduledTime} EST</span>
                 <span className="text-xs font-black uppercase text-slate-500">Wk {match.week}</span>
-              </button>
-              {isSuperAdmin && (
+              </div>
+              {!match.deletionScheduledAt && (
                 <div className="flex shrink-0 gap-1">
+                  <button
+                    onClick={() => { setEditing(match); setMessage(""); setConfirming(false); }}
+                    className="rounded-lg border border-cyan-300/25 px-2.5 py-1 text-[0.65rem] font-black uppercase text-cyan-200 transition hover:border-cyan-300/50"
+                  >
+                    Edit
+                  </button>
                   <button
                     onClick={() => void doArchive(match)}
                     disabled={actionLoadingId === match.id}
@@ -263,7 +266,7 @@ export function AdminMatchesClient({
                   >
                     {actionLoadingId === match.id ? "…" : "Archive"}
                   </button>
-                  {!match.deletionScheduledAt ? (
+                  {isSuperAdmin && !match.deletionScheduledAt ? (
                     confirmScheduleId === match.id ? (
                       <div className="flex gap-1">
                         <button
@@ -309,14 +312,14 @@ export function AdminMatchesClient({
           {showArchived && (
             <div className="overflow-hidden rounded-2xl border border-white/5 bg-slate-950/50">
               {archivedMatches.map((match) => (
-                <div key={match.id} className={cn("flex flex-wrap items-center gap-2 border-b border-white/5 px-4 py-3 last:border-0", match.deletionScheduledAt ? "bg-red-950/10" : "")}>
+                <div key={match.id} className={cn("flex flex-wrap items-center gap-2 border-b border-white/5 px-4 py-3 last:border-0", isSuperAdmin && match.deletionScheduledAt ? "bg-red-950/10" : "")}>
                   <div className="flex flex-1 flex-wrap items-center gap-3 text-sm">
                     <span className="rounded border border-slate-500/30 bg-slate-500/10 px-1.5 py-0.5 text-[0.55rem] font-black uppercase text-slate-400">Archived</span>
-                    {match.deletionScheduledAt && <span className="rounded border border-red-400/40 bg-red-400/10 px-1.5 py-0.5 text-[0.55rem] font-black uppercase text-red-400">Pending Delete</span>}
+                    {isSuperAdmin && match.deletionScheduledAt && <span className="rounded border border-red-400/40 bg-red-400/10 px-1.5 py-0.5 text-[0.55rem] font-black uppercase text-red-400">Pending Delete</span>}
                     <span className="font-black text-white/70">{getOrg(match.homeOrgId)?.name ?? match.homeOrgId} vs {getOrg(match.awayOrgId)?.name ?? match.awayOrgId}</span>
                     <span className="text-xs text-slate-500">{match.scheduledDate}</span>
                   </div>
-                  {isSuperAdmin && (
+                  {!match.deletionScheduledAt && (
                     <button
                       onClick={() => void doArchive(match, true)}
                       disabled={actionLoadingId === match.id}

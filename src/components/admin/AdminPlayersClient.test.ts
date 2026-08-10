@@ -17,6 +17,8 @@ import {
   getPlayerMergeTargets,
   PlayerMergePreviewSummary,
   playerMergeSuccessMessage,
+  requiresPlayerCaptainReassignment,
+  withCaptainReassignmentConfirmation,
 } from "@/components/admin/AdminPlayersClient";
 
 function player(overrides: Partial<LeaguePlayer> = {}): LeaguePlayer {
@@ -97,8 +99,23 @@ describe("AdminPlayersClient season-roster callout", () => {
     const data = { players: [player()] };
 
     expect(renderPlayers(true, data)).toContain("Merge Duplicate");
-    expect(renderPlayers(false, data)).not.toContain("Merge Duplicate");
-    expect(renderPlayers(false, data, "player-source")).not.toContain("Merge duplicate player");
+    const regularAdminHtml = renderPlayers(false, data, "player-source");
+
+    expect(regularAdminHtml).toContain("+ New Player");
+    expect(regularAdminHtml).toContain(">Edit<");
+    expect(regularAdminHtml).toContain("Archive");
+    expect(regularAdminHtml).not.toContain("Merge Duplicate");
+    expect(regularAdminHtml).not.toContain("Merge duplicate player");
+    expect(regularAdminHtml).not.toContain("Schedule Delete");
+    expect(regularAdminHtml).not.toContain("Pending Delete");
+
+    const pendingDeleteHtml = renderPlayers(false, {
+      players: [player({ deletionScheduledAt: "2026-08-09T00:00:00Z" })],
+    });
+    expect(pendingDeleteHtml).not.toContain(">Edit<");
+    expect(pendingDeleteHtml).not.toContain("Archive");
+    expect(pendingDeleteHtml).not.toContain("Unarchive");
+    expect(pendingDeleteHtml).not.toContain("Pending Delete");
   });
 
   it("opens a deep-linked merge with active, available canonical choices", () => {
@@ -217,5 +234,39 @@ describe("player merge safeguards", () => {
     )).toBe(
       "Duplicate was already merged into Canonical. Players were merged, but league data could not be refreshed.",
     );
+  });
+});
+
+describe("player captain reassignment confirmation", () => {
+  it("requires confirmation only when captain responsibility changes", () => {
+    const existingCaptain = player({
+      isCaptain: true,
+      orgId: "org-spicy",
+      divisionId: "terra",
+    });
+
+    expect(requiresPlayerCaptainReassignment(existingCaptain, {
+      ...existingCaptain,
+      ign: "Renamed Captain",
+    })).toBe(false);
+    expect(requiresPlayerCaptainReassignment(existingCaptain, {
+      ...existingCaptain,
+      divisionId: "solar",
+    })).toBe(true);
+    expect(requiresPlayerCaptainReassignment(existingCaptain, {
+      ...existingCaptain,
+      isCaptain: false,
+    })).toBe(true);
+    expect(requiresPlayerCaptainReassignment(undefined, player({ isCaptain: true }))).toBe(true);
+  });
+
+  it("adds the server confirmation field only after acceptance", () => {
+    const payload = { id: "player-source", ign: "Pringle Imperialist" };
+
+    expect(withCaptainReassignmentConfirmation(payload, false)).toEqual(payload);
+    expect(withCaptainReassignmentConfirmation(payload, true)).toEqual({
+      ...payload,
+      confirmCaptainReassignment: true,
+    });
   });
 });

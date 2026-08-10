@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
 import { z } from "zod";
-import { isSuperAdminRequest } from "@/lib/admin-auth";
+import { getAdminRequestSession } from "@/lib/admin-auth";
 import { advanceWeek, getAllSeasons, saveSeason, setCurrentSeason } from "@/lib/league-data";
 import { errorMessage } from "@/lib/error-monitor";
 
@@ -12,11 +12,12 @@ const patchSchema = z.object({
   name: z.string().min(1).max(64).optional(),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-});
+}).strict();
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!isSuperAdminRequest(request)) {
-    return NextResponse.json({ error: "Unauthorized. Superadmin required." }, { status: 403 });
+  const session = getAdminRequestSession(request);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   const { id } = await params;
@@ -30,6 +31,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   const patch = result.data;
+  const isOperationalAdvance = patch.action === "advanceWeek" && Object.keys(patch).length === 1;
+  if (session.role !== "super_admin" && !isOperationalAdvance) {
+    return NextResponse.json(
+      { error: "Forbidden. Structural season changes require superadmin access." },
+      { status: 403 },
+    );
+  }
 
   try {
     if (patch.action === "advanceWeek") {

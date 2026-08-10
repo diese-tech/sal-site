@@ -331,11 +331,15 @@ test("admin roster save posts player mutation payload", async ({ page }) => {
   await page.getByLabel("Division").selectOption("lunar");
   await page.getByLabel("Starter").uncheck();
   await page.getByRole("button", { name: "Save Player" }).click();
+  await expect(page.getByRole("button", { name: "Confirm Captain Reassignment" })).toBeVisible();
+  expect(payload).toBeUndefined();
+  await page.getByRole("button", { name: "Confirm Captain Reassignment" }).click();
   await expect.poll(() => payload?.ign).toBe("TestIGN");
   expect(payload?.primaryRole).toBe("Support");
   expect(payload?.orgId).toBe("midnight-pact");
   expect(payload?.divisionId).toBe("lunar");
   expect(payload?.isStarter).toBe(false);
+  expect(payload?.confirmCaptainReassignment).toBe(true);
 });
 
 test("standings admin includes standings table and match editor", async ({ page }) => {

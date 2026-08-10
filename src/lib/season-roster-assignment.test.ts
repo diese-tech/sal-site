@@ -336,9 +336,12 @@ describe("legacy admin forms synchronize the current season", () => {
     client = makeClient(defaultHandler({}, "preseason-s2"));
     const { savePlayerForCurrentSeason } = await import("./league-data");
 
-    await savePlayerForCurrentSeason(player);
+    await savePlayerForCurrentSeason(player, {
+      confirmCaptainReassignment: true,
+      actorDiscordId: "test-admin",
+    });
 
-    expect(executed.find((q) => q.table === "players" && q.op === "upsert")?.payload)
+    expect(executed.find((q) => q.table === "players" && q.op === "update")?.payload)
       .toMatchObject({ id: "player-captain", org_id: "org-returning", is_captain: true });
     expect(executed.find((q) => q.table === "season_orgs" && q.op === "upsert")?.payload)
       .toMatchObject({ season_id: "preseason-s2", org_id: "org-returning", division_id: "terra" });
@@ -355,10 +358,15 @@ describe("legacy admin forms synchronize the current season", () => {
     client = makeClient(defaultHandler({}, "preseason-s2"));
     const { saveOrgForCurrentSeason } = await import("./league-data");
 
-    await saveOrgForCurrentSeason(org);
+    await saveOrgForCurrentSeason(org, {
+      confirmCaptainReassignment: true,
+      actorDiscordId: "test-admin",
+    });
 
-    expect(executed.find((q) => q.table === "orgs" && q.op === "upsert")?.payload)
-      .toMatchObject({ id: "org-returning", captain_id: "player-captain" });
+    const orgUpdate = executed.find((q) => q.table === "orgs" && q.op === "update")?.payload;
+    expect(orgUpdate).toMatchObject({ id: "org-returning" });
+    expect(orgUpdate).not.toHaveProperty("captain_id");
+    expect(orgUpdate).not.toHaveProperty("division_id");
     expect(executed.find((q) => q.table === "season_orgs" && q.op === "upsert")?.payload)
       .toMatchObject({ season_id: "preseason-s2", org_id: "org-returning", division_id: "terra" });
     expect(executed.find((q) => q.table === "season_rosters" && q.op === "upsert")?.payload)
@@ -392,7 +400,10 @@ describe("legacy admin forms synchronize the current season", () => {
       : fallback(query)));
     const { saveOrgForCurrentSeason } = await import("./league-data");
 
-    await saveOrgForCurrentSeason(org);
+    await saveOrgForCurrentSeason(org, {
+      confirmCaptainReassignment: true,
+      actorDiscordId: "test-admin",
+    });
 
     expect(executed.find((q) => q.table === "season_rosters" && q.op === "upsert")?.payload)
       .toMatchObject({ player_id: "player-captain", org_id: "org-returning", is_captain: true });
@@ -405,7 +416,10 @@ describe("legacy admin forms synchronize the current season", () => {
       : fallback(query));
     const { saveOrgForCurrentSeason } = await import("./league-data");
 
-    await saveOrgForCurrentSeason({ ...org, captainId: undefined });
+    await saveOrgForCurrentSeason({ ...org, captainId: undefined }, {
+      confirmCaptainReassignment: true,
+      actorDiscordId: "test-admin",
+    });
 
     expect(executed.some((q) => q.table === "season_orgs" && q.op === "upsert")).toBe(false);
 
@@ -456,9 +470,12 @@ describe("legacy admin forms synchronize the current season", () => {
     client = makeClient(defaultHandler({}, null));
     const { savePlayerForCurrentSeason } = await import("./league-data");
 
-    await savePlayerForCurrentSeason(player);
+    await savePlayerForCurrentSeason(player, {
+      confirmCaptainReassignment: true,
+      actorDiscordId: "test-admin",
+    });
 
-    expect(executed.some((q) => q.table === "players" && q.op === "upsert")).toBe(true);
+    expect(executed.some((q) => q.table === "players" && q.op === "update")).toBe(true);
     expect(executed.some((q) => q.table === "season_orgs" && q.op === "upsert")).toBe(false);
     expect(executed.some((q) => q.table === "season_rosters" && q.op === "upsert")).toBe(false);
   });

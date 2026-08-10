@@ -39,7 +39,7 @@ function emptySeasonForm(nextId: string): Omit<Season, "id"> & { id: string } {
   };
 }
 
-export function AdminSeasonsClient({ seasons }: { seasons: Season[] }) {
+export function AdminSeasonsClient({ seasons, isSuperAdmin = false }: { seasons: Season[]; isSuperAdmin?: boolean }) {
   const router = useRouter();
   const [editing, setEditing] = useState<Season | null>(null);
   const [isNew, setIsNew] = useState(false);
@@ -140,16 +140,18 @@ export function AdminSeasonsClient({ seasons }: { seasons: Season[] }) {
           <p className="text-sm font-semibold text-slate-400">{seasons.length} season{seasons.length !== 1 ? "s" : ""} on record.</p>
           {message && <p className="mt-1 text-sm font-semibold text-orange-200">{message}</p>}
         </div>
-        <button
-          onClick={openNew}
-          className="rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-4 py-2 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20"
-        >
-          + New Season
-        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={openNew}
+            className="rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-4 py-2 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20"
+          >
+            + New Season
+          </button>
+        )}
       </div>
 
       {/* Edit / New panel */}
-      {editing && (
+      {isSuperAdmin && editing && (
         <div className="rounded-2xl border border-emerald-300/20 bg-slate-950/84 p-4 shadow-xl shadow-emerald-950/20">
           <p className="mb-3 text-xs font-black uppercase text-slate-400">{isNew ? "New Season" : `Editing: ${editing.name || "…"}`}</p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -220,7 +222,7 @@ export function AdminSeasonsClient({ seasons }: { seasons: Season[] }) {
                 >
                   Manage Roster
                 </Link>
-                {!season.isCurrent && (
+                {isSuperAdmin && !season.isCurrent && (
                   <button
                     onClick={() => void makeCurrent(season)}
                     disabled={settingCurrentId === season.id}
@@ -230,15 +232,15 @@ export function AdminSeasonsClient({ seasons }: { seasons: Season[] }) {
                   </button>
                 )}
                 {/* Status quick-toggle */}
-                {STATUS_OPTIONS.filter((s) => s !== season.status).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => void changeStatus(season, s)}
-                    className="rounded-lg border border-white/10 px-2.5 py-1 text-[0.65rem] font-black uppercase text-slate-400 transition hover:border-white/20 hover:text-slate-200"
-                  >
-                    → {s}
-                  </button>
-                ))}
+                {isSuperAdmin && STATUS_OPTIONS.filter((s) => s !== season.status).map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => void changeStatus(season, s)}
+                      className="rounded-lg border border-white/10 px-2.5 py-1 text-[0.65rem] font-black uppercase text-slate-400 transition hover:border-white/20 hover:text-slate-200"
+                    >
+                      → {s}
+                    </button>
+                  ))}
                 <button
                   onClick={() => void advanceWeek(season)}
                   disabled={advancingId === season.id}
@@ -246,14 +248,16 @@ export function AdminSeasonsClient({ seasons }: { seasons: Season[] }) {
                 >
                   {advancingId === season.id ? "…" : "Advance Week ▶"}
                 </button>
-                <button
-                  onClick={() => openEdit(season)}
-                  className="rounded-lg border border-white/10 px-2.5 py-1 text-[0.65rem] font-black uppercase text-slate-400 transition hover:border-cyan-300/30 hover:text-cyan-200"
-                >
-                  Edit
-                </button>
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => openEdit(season)}
+                    className="rounded-lg border border-white/10 px-2.5 py-1 text-[0.65rem] font-black uppercase text-slate-400 transition hover:border-cyan-300/30 hover:text-cyan-200"
+                  >
+                    Edit
+                  </button>
+                )}
               </div>
-              <AdminPreseasonIngestPanel targetSeasonId={season.id} seasons={seasons} />
+              {isSuperAdmin && <AdminPreseasonIngestPanel targetSeasonId={season.id} seasons={seasons} />}
             </div>
           </div>
         ))}

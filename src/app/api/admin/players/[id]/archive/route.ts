@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidateTag } from "next/cache";
-import { isSuperAdminRequest } from "@/lib/admin-auth";
+import { isAdminRequest } from "@/lib/admin-auth";
 import { archiveRecord, unarchiveRecord } from "@/lib/league-data";
 import { errorMessage } from "@/lib/error-monitor";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!isSuperAdminRequest(request)) {
-    return NextResponse.json({ error: "Unauthorized. Superadmin required." }, { status: 403 });
+  if (!isAdminRequest(request)) {
+    return NextResponse.json({ error: "Unauthorized. Admin required." }, { status: 403 });
   }
 
   const { id } = await params;
