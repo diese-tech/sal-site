@@ -1,5 +1,7 @@
-import { createHash, randomBytes } from "crypto";
+import { createHash } from "crypto";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { isAccessCode, normalizeAccessCode } from "@/lib/draft-access-code";
+import { generateAccessCode } from "@/lib/draft-access-code-server";
 import { getCurrentSeasonId, saveSeasonRosterAssignment } from "@/lib/league-data";
 import { buildPickSequence, type DraftPick, type DraftRoom, type DraftState } from "@/types/draft";
 import type { DivisionId } from "@/types/league";
@@ -305,55 +307,116 @@ export async function recordPick(draftRoomId: string, pickNumber: number, orgId:
   return fromDbPick(data as DbDraftPick);
 }
 
-// ---- Captain tokens ------------------------------------------------------
+// ---- Team access codes ---------------------------------------------------
+//
+// Backed by the existing `captain_tokens` table, whose
+// `unique (draft_room_id, org_id)` constraint already models exactly one live
+// credential per team seat. Rows now hold a short human-typeable code instead
+// of a one-time URL token, and redemption no longer deletes the row, so a
+// captain can join from a second device or after clearing cookies.
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-export async function generateCaptainToken(draftRoomId: string, orgId: string): Promise<string> {
-  const supabase = getSupabaseServerClient();
-  if (!supabase) throw new Error("Supabase env is missing.");
-  const token = randomBytes(24).toString("base64url");
-  const tokenHash = hashToken(token);
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
-  const { error } = await supabase
-    .from("captain_tokens")
-    .insert({ id: token, draft_room_id: draftRoomId, org_id: orgId, token_hash: tokenHash, expires_at: expiresAt });
-  if (error) throw error;
-  return token;
+/** How long an issued code stays valid. */
+const ACCESS_CODE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+export interface TeamAccessCode {
+  orgId: string;
+  /** Plaintext code, safe to re-display to admins for the life of the draft. */
+  code: string;
+  expiresAt: string;
+  /** True for a pre-existing one-time link token rather than a short code. */
+  isLegacyLink: boolean;
 }
 
-export async function verifyCaptainToken(token: string): Promise<{ draftRoomId: string; orgId: string } | null> {
+/**
+ * Issue (or rotate) the access code for one team's seat.
+ *
+ * Delete-then-insert rather than upsert: it collapses any duplicate legacy
+ * rows for the seat and does not depend on the unique constraint being present
+ * in the shared database, while still guaranteeing one live code per seat.
+ * Rotation is admin-only and rare, so the momentary gap is not a concern.
+ */
+export async function issueTeamAccessCode(draftRoomId: string, orgId: string): Promise<string> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase env is missing.");
+
+  const code = generateAccessCode();
+  const expiresAt = new Date(Date.now() + ACCESS_CODE_TTL_MS).toISOString();
+
+  const { error: deleteError } = await supabase
+    .from("captain_tokens")
+    .delete()
+    .eq("draft_room_id", draftRoomId)
+    .eq("org_id", orgId);
+  if (deleteError) throw deleteError;
+
+  const { error } = await supabase
+    .from("captain_tokens")
+    .insert({ id: code, draft_room_id: draftRoomId, org_id: orgId, token_hash: hashToken(code), expires_at: expiresAt });
+  if (error) throw error;
+  return code;
+}
+
+/**
+ * Every live access code in a room, for the admin panel.
+ *
+ * Codes are returned in plaintext deliberately: an admin running a draft needs
+ * to re-read a team's code when a captain drops out of the call, and the
+ * previous show-once behaviour is what forced link regeneration mid-draft.
+ * Callers must be admin-gated.
+ */
+export async function listTeamAccessCodes(draftRoomId: string): Promise<TeamAccessCode[]> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("captain_tokens")
+    .select("id, org_id, expires_at")
+    .eq("draft_room_id", draftRoomId)
+    .gt("expires_at", new Date().toISOString());
+  if (error || !data) return [];
+
+  return (data as Array<{ id: string; org_id: string; expires_at: string }>).map((row) => ({
+    orgId: row.org_id,
+    code: row.id,
+    expiresAt: row.expires_at,
+    isLegacyLink: !isAccessCode(row.id),
+  }));
+}
+
+/**
+ * Resolve a code (or a legacy one-time link token) to the seat it grants.
+ *
+ * Non-destructive by design — the row survives redemption so the same code
+ * works on a phone and a laptop, and a captain who loses their session can
+ * simply re-enter it. Returns null for unknown or expired input.
+ */
+export async function redeemDraftAccess(input: string): Promise<{ draftRoomId: string; orgId: string } | null> {
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;
-  const tokenHash = hashToken(token);
+
+  const raw = input.trim();
+  if (!raw) return null;
+
+  // Hash both the raw string (legacy base64url link tokens are case-sensitive
+  // and contain characters the code alphabet drops) and the normalized code.
+  const normalized = normalizeAccessCode(raw);
+  const hashes = [...new Set([hashToken(raw), ...(normalized ? [hashToken(normalized)] : [])])];
+
   const { data, error } = await supabase
     .from("captain_tokens")
     .select("draft_room_id, org_id, expires_at")
-    .eq("token_hash", tokenHash)
-    .maybeSingle();
-  if (error || !data) return null;
-  if (new Date(data.expires_at as string) < new Date()) return null;
-  return { draftRoomId: data.draft_room_id as string, orgId: data.org_id as string };
-}
-
-/** Verify a captain token AND delete it. Returns null if invalid/expired. */
-export async function consumeCaptainToken(token: string): Promise<{ draftRoomId: string; orgId: string } | null> {
-  const supabase = getSupabaseServerClient();
-  if (!supabase) return null;
-
-  const tokenHash = hashToken(token);
-  const { data, error } = await supabase
-    .from("captain_tokens")
-    .delete()
-    .eq("token_hash", tokenHash)
+    .in("token_hash", hashes)
     .gt("expires_at", new Date().toISOString())
-    .select("draft_room_id, org_id")
-    .maybeSingle();
-
+    .limit(1);
   if (error || !data) return null;
-  return { draftRoomId: data.draft_room_id as string, orgId: data.org_id as string };
+
+  const row = (data as Array<{ draft_room_id: string; org_id: string }>)[0];
+  if (!row) return null;
+  return { draftRoomId: row.draft_room_id, orgId: row.org_id };
 }
 
 // ---- Shortlist -----------------------------------------------------------
