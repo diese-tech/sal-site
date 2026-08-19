@@ -240,6 +240,19 @@ describe("normalizeRegistration", () => {
 });
 
 describe("normalizeMatchReport", () => {
+  it("surfaces a host-submitted report as high-priority admin review work", () => {
+    const t = normalizeMatchReport(matchReportRow({ status: "host_review" }));
+
+    expect(t.status).toBe("open");
+    expect(t.priority).toBe("high");
+    expect(t.summary).toContain("Host corrections submitted");
+    expect(t.workflow).toEqual({
+      kind: "site",
+      href: "/admin/match-report",
+      label: "Review and approve match stats",
+    });
+  });
+
   it("normalizes a report awaiting admin review", () => {
     const t = normalizeMatchReport(matchReportRow());
     expect(t.category).toBe("match_report");
@@ -266,6 +279,12 @@ describe("normalizeMatchReport", () => {
     expect(t.status).toBe("resolved");
     expect(t.priority).toBe("normal");
     expect(t.updatedAt).toBe("2026-07-06T09:00:00Z");
+  });
+
+  it("keeps a cancelled report terminal and out of the resolvable queue", () => {
+    const t = normalizeMatchReport(matchReportRow({ status: "cancelled" }));
+    expect(t.status).toBe("cancelled");
+    expect(t.priority).toBe("normal");
   });
 
   it("caps screenshot links at five and drops unsafe URLs", () => {

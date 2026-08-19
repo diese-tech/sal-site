@@ -36,6 +36,8 @@ npm run dev
 | `ADMIN_SESSION_SECRET` | Yes | Long random string used to sign admin session cookies |
 | `ADMIN_PASSWORD` | Optional | Password-based admin login fallback (used when Discord OAuth is not configured) |
 | `CAPTAIN_SESSION_SECRET` | Recommended | Separate signing key for captain session cookies; falls back to `ADMIN_SESSION_SECRET` |
+| `MATCH_REPORT_HOST_SESSION_SECRET` | Required for match capture | Dedicated signing key for private host match-review cookies; no admin-key fallback |
+| `SAL_SITE_INTERNAL_TOKEN` | Required for match capture | Shared bearer secret used by lab-salbot to mint host review links; `INTERNAL_SERVICE_TOKEN` is accepted as a compatibility alias |
 | `DISCORD_ADMIN_CLIENT_ID` | Optional | Discord OAuth app client ID for admin login |
 | `DISCORD_ADMIN_CLIENT_SECRET` | Optional | Discord OAuth app client secret |
 | `DISCORD_ADMIN_REDIRECT_URI` | Optional | Discord OAuth redirect URI |

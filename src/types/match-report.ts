@@ -1,6 +1,6 @@
 import type { DivisionId } from "@/types/league";
 
-export type MatchReportStatus = "pending" | "extracting" | "review" | "done";
+export type MatchReportStatus = "pending" | "extracting" | "review" | "host_review" | "done" | "cancelled";
 
 export interface MatchReport {
   id: string;
@@ -17,6 +17,8 @@ export interface MatchReport {
   createdAt: string;
   reviewedAt?: string;
   reviewedBy?: string;
+  revision?: number;
+  hostSubmittedAt?: string;
 }
 
 export interface PlayerMatchStat {
@@ -57,6 +59,7 @@ export interface ExtractedPlayer {
   damageDealt?: number;
   damageMitigated?: number;
   forfeit?: boolean;
+  playerId?: string;
 }
 
 // Used in MatchReportClient — enriched with match metadata for display

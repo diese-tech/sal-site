@@ -75,6 +75,27 @@ describe("buildMatchReportActionContext", () => {
     expect(serialized).not.toContain("reviewed_by");
   });
 
+  it("keeps a host-submitted report resolvable for final admin approval", () => {
+    const context = buildMatchReportActionContext(
+      {
+        id: "report-1",
+        match_id: "match-1",
+        status: "host_review",
+        screenshot_urls: [],
+        extracted_data: [extractedGame()],
+      },
+      league,
+    );
+
+    expect(context.kind).toBe("resolvable");
+    if (context.kind !== "resolvable") throw new Error("Expected host review to be resolvable");
+    expect(context.games[0]?.players[0]).toMatchObject({
+      playerIgn: "HomeIGN1",
+      playerId: "player-home-1",
+    });
+    expect(JSON.stringify(context.games)).not.toContain('"ign"');
+  });
+
   it("keeps a report read-only when the extracted stats are not safe to submit", () => {
     for (const extracted_data of [
       null,

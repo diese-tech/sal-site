@@ -173,7 +173,7 @@ export function MatchReportClient({
       return;
     }
 
-    if (report.status === "review") {
+    if (report.status === "review" || report.status === "host_review") {
       const restoredGames = report.extractedData?.length
         ? toReviewGames(report.extractedData)
         : initBlankGamesValue();

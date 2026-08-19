@@ -11,7 +11,9 @@ const STATUS_BADGE: Record<string, string> = {
   pending: "border-slate-500/40 bg-slate-500/10 text-slate-400",
   extracting: "border-amber-400/40 bg-amber-400/10 text-amber-300",
   review: "border-amber-400/40 bg-amber-400/10 text-amber-300",
+  host_review: "border-cyan-300/40 bg-cyan-300/10 text-cyan-200",
   done: "border-emerald-400/40 bg-emerald-400/10 text-emerald-300",
+  cancelled: "border-slate-500/40 bg-slate-500/10 text-slate-500",
 };
 
 export function MatchReportCard({
@@ -47,7 +49,7 @@ export function MatchReportCard({
           </div>
         </div>
         <span className={cn("shrink-0 rounded border px-1.5 py-0.5 text-[0.55rem] font-black uppercase", STATUS_BADGE[report.status])}>
-          {report.status === "extracting" ? "AI..." : report.status}
+          {report.status === "extracting" ? "AI..." : report.status === "host_review" ? "Admin review" : report.status}
         </span>
       </div>
       {report.status === "done" && report.homeScore !== undefined && report.awayScore !== undefined && (

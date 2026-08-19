@@ -3,53 +3,8 @@ import { isAdminRequest } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { toDatabaseJson } from "@/lib/database-json";
 import { getAdminLeagueData, LeagueDataUnavailableError } from "@/lib/league-data";
-import type { ExtractedGame } from "@/types/match-report";
 import { errorMessage } from "@/lib/error-monitor";
-import { callOpenRouterVision } from "@/lib/openrouter-vision";
-
-const SMITE_ROLES = ["Solo", "Jungle", "Mid", "Carry", "Support"] as const;
-
-const EXTRACTION_PROMPT = (
-  homeOrgName: string,
-  homeIgns: string[],
-  awayOrgName: string,
-  awayIgns: string[],
-) => `
-You are analyzing a SMITE 2 end-of-match DETAILS tab screenshot. Extract the scoreboard data.
-
-Home team: ${homeOrgName}
-Known home players: ${homeIgns.length > 0 ? homeIgns.join(", ") : "(unknown roster)"}
-
-Away team: ${awayOrgName}
-Known away players: ${awayIgns.length > 0 ? awayIgns.join(", ") : "(unknown roster)"}
-
-Return ONLY valid JSON in this exact format, no other text:
-{
-  "winner": "home" | "away" | "unknown",
-  "players": [
-    {
-      "ign": "string",
-      "side": "home" | "away",
-      "god": "string or null",
-      "role": "Solo" | "Jungle" | "Mid" | "Carry" | "Support" | null,
-      "kills": number,
-      "deaths": number,
-      "assists": number,
-      "damageDealt": number or null,
-      "damageMitigated": number or null
-    }
-  ]
-}
-
-Instructions:
-- Match each player to home or away using the known rosters above
-- If a player is not in either roster, assign based on which column they appear in (left vs right)
-- Extract kills, deaths, assists exactly as shown (integers)
-- Extract damage numbers without commas (integers)
-- "winner" is "home" if the home team won, "away" if away team won
-- Look for VICTORY/DEFEAT text or trophy icons to determine winner
-- Include all 10 players (5 per side) if visible
-`.trim();
+import { extractMatchReportGames } from "@/lib/match-report-extraction";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!isAdminRequest(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
@@ -87,83 +42,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const homePlayers = leagueData.players.filter((p) => p.orgId === match?.homeOrgId).map((p) => p.ign);
     const awayPlayers = leagueData.players.filter((p) => p.orgId === match?.awayOrgId).map((p) => p.ign);
 
-    const games: ExtractedGame[] = [];
-
-    for (let i = 0; i < r.screenshot_urls.length; i++) {
-      const url = r.screenshot_urls[i];
-
-      // Fetch screenshot and convert to base64 data URL
-      let dataUrl: string;
-      try {
-        const imgRes = await fetch(url);
-        if (!imgRes.ok) throw new Error(`HTTP ${imgRes.status}`);
-        const buffer = await imgRes.arrayBuffer();
-        const base64 = Buffer.from(buffer).toString("base64");
-        const ct = imgRes.headers.get("content-type") ?? "image/jpeg";
-        const mimeType = ct.includes("png") ? "image/png" : ct.includes("webp") ? "image/webp" : "image/jpeg";
-        dataUrl = `data:${mimeType};base64,${base64}`;
-      } catch (err) {
-        console.error(`Failed to fetch screenshot ${i + 1}:`, err);
-        games.push({ gameNumber: i + 1, winningSide: "unknown", players: [] });
-        continue;
-      }
-
-      try {
-        const text = await callOpenRouterVision([
-          {
-            role: "user",
-            content: [
-              { type: "image_url", image_url: { url: dataUrl } },
-              {
-                type: "text",
-                text: EXTRACTION_PROMPT(
-                  homeOrg?.name ?? "Home Team",
-                  homePlayers,
-                  awayOrg?.name ?? "Away Team",
-                  awayPlayers,
-                ),
-              },
-            ],
-          },
-        ], { maxTokens: 2048, title: "SAL Match Report" });
-
-        // Strip markdown code fences if present
-        const jsonText = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim();
-        const parsed = JSON.parse(jsonText) as {
-          winner?: string;
-          players?: Array<{
-            ign?: string;
-            side?: string;
-            god?: string | null;
-            role?: string | null;
-            kills?: number;
-            deaths?: number;
-            assists?: number;
-            damageDealt?: number | null;
-            damageMitigated?: number | null;
-          }>;
-        };
-
-        games.push({
-          gameNumber: i + 1,
-          winningSide: parsed.winner === "home" ? "home" : parsed.winner === "away" ? "away" : "unknown",
-          players: (parsed.players ?? []).map((p) => ({
-            ign: p.ign ?? "",
-            side: p.side === "away" ? "away" : "home",
-            god: p.god ?? undefined,
-            role: SMITE_ROLES.includes(p.role as (typeof SMITE_ROLES)[number]) ? (p.role as string) : undefined,
-            kills: Number(p.kills ?? 0),
-            deaths: Number(p.deaths ?? 0),
-            assists: Number(p.assists ?? 0),
-            damageDealt: p.damageDealt != null ? Number(p.damageDealt) : undefined,
-            damageMitigated: p.damageMitigated != null ? Number(p.damageMitigated) : undefined,
-          })),
-        });
-      } catch (err) {
-        console.error(`AI extraction failed for game ${i + 1}:`, err);
-        games.push({ gameNumber: i + 1, winningSide: "unknown", players: [] });
-      }
-    }
+    const games = await extractMatchReportGames({
+      screenshotUrls: r.screenshot_urls,
+      homeOrgName: homeOrg?.name ?? "Home Team",
+      homeIgns: homePlayers,
+      awayOrgName: awayOrg?.name ?? "Away Team",
+      awayIgns: awayPlayers,
+    });
 
     // Store extracted data and mark as review
     await supabase
