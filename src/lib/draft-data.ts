@@ -334,10 +334,12 @@ export interface TeamAccessCode {
 /**
  * Issue (or rotate) the access code for one team's seat.
  *
- * Delete-then-insert rather than upsert: it collapses any duplicate legacy
- * rows for the seat and does not depend on the unique constraint being present
- * in the shared database, while still guaranteeing one live code per seat.
- * Rotation is admin-only and rare, so the momentary gap is not a concern.
+ * A single upsert on the seat's `unique (draft_room_id, org_id)` constraint,
+ * so the replacement is atomic. Delete-then-insert would be worse than the bug
+ * this feature exists to fix: if the delete landed and the insert then failed,
+ * the seat would be left with no credential at all and the captain locked out
+ * mid-draft. With an upsert a failure leaves the previous code untouched and
+ * still usable, and the admin can simply retry.
  */
 export async function issueTeamAccessCode(draftRoomId: string, orgId: string): Promise<string> {
   const supabase = getSupabaseServerClient();
@@ -346,16 +348,12 @@ export async function issueTeamAccessCode(draftRoomId: string, orgId: string): P
   const code = generateAccessCode();
   const expiresAt = new Date(Date.now() + ACCESS_CODE_TTL_MS).toISOString();
 
-  const { error: deleteError } = await supabase
-    .from("captain_tokens")
-    .delete()
-    .eq("draft_room_id", draftRoomId)
-    .eq("org_id", orgId);
-  if (deleteError) throw deleteError;
-
   const { error } = await supabase
     .from("captain_tokens")
-    .insert({ id: code, draft_room_id: draftRoomId, org_id: orgId, token_hash: hashToken(code), expires_at: expiresAt });
+    .upsert(
+      { id: code, draft_room_id: draftRoomId, org_id: orgId, token_hash: hashToken(code), expires_at: expiresAt },
+      { onConflict: "draft_room_id,org_id" },
+    );
   if (error) throw error;
   return code;
 }

@@ -267,7 +267,7 @@ describe("getTopShortlistPick excludes season-wide drafted players (#206)", () =
 });
 
 describe("issueTeamAccessCode persistence", () => {
-  it("clears any existing credential for the seat before inserting the new code", async () => {
+  it("replaces the seat credential atomically in one upsert", async () => {
     client = makeClient(handlerFor({ captain_tokens: { data: null, error: null } }));
 
     const code = await issueTeamAccessCode("room-1", "org-a");
@@ -275,15 +275,9 @@ describe("issueTeamAccessCode persistence", () => {
     expect(isAccessCode(code)).toBe(true);
 
     const captainQueries = executed.filter((entry) => entry.table === "captain_tokens");
-    // Delete-then-insert guarantees exactly one live code per seat, so a
-    // rotation can never collide with unique (draft_room_id, org_id).
-    expect(captainQueries[0]?.op).toBe("delete");
-    expect(captainQueries[0]?.eqs).toEqual([
-      ["draft_room_id", "room-1"],
-      ["org_id", "org-a"],
-    ]);
-    expect(captainQueries[1]?.op).toBe("insert");
-    expect(captainQueries[1]?.insert).toMatchObject({
+    expect(captainQueries).toHaveLength(1);
+    expect(captainQueries[0]?.op).toBe("upsert");
+    expect(captainQueries[0]?.insert).toMatchObject({
       id: code,
       draft_room_id: "room-1",
       org_id: "org-a",
@@ -292,30 +286,18 @@ describe("issueTeamAccessCode persistence", () => {
     });
   });
 
-  it("does not return an unpersisted code when the database rejects the insert", async () => {
-    let call = 0;
-    client = makeClient((query) => {
-      if (query.table !== "captain_tokens") return { data: null, error: null };
-      call += 1;
-      // First call is the delete, second is the insert.
-      return call === 1 ? { data: null, error: null } : { data: null, error: { message: "captain token insert failed" } };
-    });
-
-    await expect(issueTeamAccessCode("room-1", "org-a")).rejects.toMatchObject({
-      message: "captain token insert failed",
-    });
-  });
-
-  it("does not issue a code when the seat could not be cleared", async () => {
+  it("never deletes the old credential first, so a failed rotation leaves the seat usable", async () => {
     client = makeClient(handlerFor({
-      captain_tokens: { data: null, error: { message: "delete failed" } },
+      captain_tokens: { data: null, error: { message: "captain token upsert failed" } },
     }));
 
     await expect(issueTeamAccessCode("room-1", "org-a")).rejects.toMatchObject({
-      message: "delete failed",
+      message: "captain token upsert failed",
     });
-    // The stale code must stay live rather than being silently replaced.
-    expect(executed.filter((e) => e.table === "captain_tokens" && e.op === "insert")).toHaveLength(0);
+
+    // The previous code must survive a failed rotation — a seat left with no
+    // credential is the mid-draft lockout this feature exists to prevent.
+    expect(executed.filter((e) => e.table === "captain_tokens" && e.op === "delete")).toHaveLength(0);
   });
 });
 

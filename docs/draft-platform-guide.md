@@ -101,14 +101,21 @@ password. It is mitigated by:
 
 - redemption attempts being rate-limited per client, and every failure written
   to the audit log;
-- **Rotate code**, which invalidates the previous code for that seat instantly —
-  the revocation path the one-time links never actually had;
+- **Rotate code**, which stops the previous code being redeemed again;
 - codes being scoped to a single organization in a single room; and
 - **Leave** in the draft room header, which releases a seat from a shared or
   borrowed device.
 
 Rotate a seat's code if you suspect it has been shared beyond the intended
 captain and backup owner.
+
+**Rotation does not sign out a session that already redeemed the old code.**
+Sessions are validated by signature alone and are not re-checked against the
+current credential, so anyone who joined before the rotation keeps their seat
+for the life of the cookie. If you believe someone is actually sitting in a
+seat they should not have, rotating the code is not sufficient — pause the room
+and have an admin make that team's picks, or void and replace the room. Adding
+true session revocation is tracked as follow-up work.
 
 Links already handed out before this change remain redeemable until they
 expire, and are no longer consumed on first use.
