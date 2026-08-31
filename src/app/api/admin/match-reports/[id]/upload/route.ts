@@ -12,10 +12,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Verify report exists
   const { data: report, error: reportErr } = await supabase
     .from("match_reports")
-    .select("id, screenshot_urls")
+    .select("id, screenshot_urls, status")
     .eq("id", id)
     .single();
   if (reportErr || !report) return NextResponse.json({ error: "Report not found." }, { status: 404 });
+
+  // This route resets status to "pending" below, so an unguarded upload would
+  // revive a report that has already reached a terminal state — resurrecting a
+  // cancelled report, or reopening one whose stats are already published.
+  const reportStatus = (report as { status: string }).status;
+  if (reportStatus === "cancelled" || reportStatus === "done") {
+    return NextResponse.json(
+      { error: `This report is ${reportStatus} and can no longer accept screenshots.` },
+      { status: 409 },
+    );
+  }
 
   const formData = await request.formData().catch(() => null);
   if (!formData) return NextResponse.json({ error: "Invalid form data." }, { status: 400 });

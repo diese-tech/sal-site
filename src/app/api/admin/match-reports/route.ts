@@ -36,13 +36,6 @@ export async function GET(request: NextRequest) {
   const matchMap = new Map(leagueData.matches.map((m) => [m.id, m]));
 
   const reports: MatchReportWithMatch[] = (data ?? []).map((row) => {
-    // Host-review columns land with db-v1.18.0. Keep the draft site branch
-    // type-safe against the currently released v1.17.0 generated contract;
-    // the contract pin follows only after the protected DB release exists.
-    const hostReviewRow = row as typeof row & {
-      revision?: number;
-      host_submitted_at?: string | null;
-    };
     const match = matchMap.get(row.match_id as string);
     const homeOrg = orgMap.get(match?.homeOrgId ?? "");
     const awayOrg = orgMap.get(match?.awayOrgId ?? "");
@@ -61,8 +54,8 @@ export async function GET(request: NextRequest) {
       createdAt: row.created_at as string,
       reviewedAt: row.reviewed_at as string | undefined,
       reviewedBy: row.reviewed_by as string | undefined,
-      revision: hostReviewRow.revision ?? 1,
-      hostSubmittedAt: hostReviewRow.host_submitted_at ?? undefined,
+      revision: row.revision ?? 1,
+      hostSubmittedAt: row.host_submitted_at ?? undefined,
       homeOrgId: match?.homeOrgId ?? "",
       homeOrgName: homeOrg?.name ?? match?.homeOrgId ?? "",
       homeOrgTag: homeOrg?.tag ?? "",
