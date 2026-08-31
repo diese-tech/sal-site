@@ -221,7 +221,9 @@ const MATCH_REPORT_STATUS: Record<string, TicketStatus> = {
   pending: "open",
   extracting: "claimed",
   review: "open",
+  host_review: "open",
   done: "resolved",
+  cancelled: "cancelled",
 };
 
 const BUG_REPORT_STATUS: Record<string, TicketStatus> = {
@@ -450,8 +452,8 @@ export function normalizeMatchReport(row: MatchReportSourceRow): AdminTicket {
     category: "match_report",
     status,
     sourceStatus: row.status,
-    // A report sitting in "review" is waiting on an admin decision.
-    priority: row.status === "review" ? "high" : "normal",
+    // A report in either review state is waiting on an admin decision.
+    priority: row.status === "review" || row.status === "host_review" ? "high" : "normal",
     createdAt: row.created_at,
     updatedAt,
     slaDeadline: slaDeadlineFor("match_report", row.created_at, status),
@@ -460,16 +462,22 @@ export function normalizeMatchReport(row: MatchReportSourceRow): AdminTicket {
     matchId: row.match_id,
     claimedBy: row.status === "extracting" ? "Automated extraction" : undefined,
     title: matchRef ? `Match report for match ${matchRef}` : "Match report",
-    summary: hasScore
-      ? `Reported score ${row.home_score} to ${row.away_score}${row.total_games ? ` over ${row.total_games} games` : ""}.`
-      : "Match screenshots submitted, awaiting extraction and review.",
+    summary: row.status === "host_review"
+      ? "Host corrections submitted, awaiting admin review and publication."
+      : hasScore
+        ? `Reported score ${row.home_score} to ${row.away_score}${row.total_games ? ` over ${row.total_games} games` : ""}.`
+        : "Match screenshots submitted, awaiting extraction and review.",
     privacy: "identity_restricted",
     links,
     timeline: timeline([
       { at: row.created_at, label: "Report submitted" },
       row.reviewed_at ? { at: row.reviewed_at, label: "Reviewed" } : null,
     ]),
-    workflow: { kind: "site", href: "/admin/match-report", label: "Handle in Match Report" },
+    workflow: {
+      kind: "site",
+      href: "/admin/match-report",
+      label: row.status === "host_review" ? "Review and approve match stats" : "Handle in Match Report",
+    },
   };
 }
 

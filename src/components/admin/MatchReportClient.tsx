@@ -155,6 +155,12 @@ export function MatchReportClient({
       gameNumber: g.gameNumber,
       winningSide: g.winningSide === "away" ? "away" : "home",
       players: g.players.map((p) => {
+        // A host_review report already carries roster identities the host
+        // validated on the review page. Keep those: re-resolving by IGN can
+        // drop the id (name changed since submission) or bind the row to a
+        // different player who now holds that IGN. IGN lookup is only the
+        // fallback for extractions that were never host-validated.
+        if (p.playerId) return { ...p };
         const matched = data.players.find((pl) => pl.ign.toLowerCase() === p.ign.toLowerCase());
         return { ...p, playerId: matched?.id };
       }),
@@ -162,6 +168,12 @@ export function MatchReportClient({
   }
 
   function openExistingReport(report: MatchReportWithMatch) {
+    // cancelled is terminal. Without this guard it falls through to the
+    // upload step, and uploading there would flip the report back to pending.
+    if (report.status === "cancelled") {
+      setMessage("This match report was cancelled and is read-only. Start a new report for this match instead.");
+      return;
+    }
     setActiveReportId(report.id);
     const match = data.matches.find((m) => m.id === report.matchId) ?? null;
     setSelectedMatch(match);
@@ -173,7 +185,7 @@ export function MatchReportClient({
       return;
     }
 
-    if (report.status === "review") {
+    if (report.status === "review" || report.status === "host_review") {
       const restoredGames = report.extractedData?.length
         ? toReviewGames(report.extractedData)
         : initBlankGamesValue();

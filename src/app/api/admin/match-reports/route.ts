@@ -54,6 +54,8 @@ export async function GET(request: NextRequest) {
       createdAt: row.created_at as string,
       reviewedAt: row.reviewed_at as string | undefined,
       reviewedBy: row.reviewed_by as string | undefined,
+      revision: row.revision ?? 1,
+      hostSubmittedAt: row.host_submitted_at ?? undefined,
       homeOrgId: match?.homeOrgId ?? "",
       homeOrgName: homeOrg?.name ?? match?.homeOrgId ?? "",
       homeOrgTag: homeOrg?.tag ?? "",

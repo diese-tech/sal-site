@@ -16,11 +16,13 @@ export function StatInput({
   onChange,
   wide,
   label,
+  disabled,
 }: {
   value: number | undefined;
   onChange: (v: number) => void;
   wide?: boolean;
   label?: string;
+  disabled?: boolean;
 }) {
   return (
     <input
@@ -28,6 +30,7 @@ export function StatInput({
       min={0}
       value={value ?? ""}
       aria-label={label}
+      disabled={disabled}
       onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
       className={cn(
         "rounded border border-white/10 bg-black/30 px-1 py-0.5 text-center text-xs font-semibold tabular-nums text-white focus:border-cyan-300/40 focus:outline-none",

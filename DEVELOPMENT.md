@@ -33,6 +33,8 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # Admin panel
 ADMIN_SESSION_SECRET=a-long-random-string-min-32-chars
+MATCH_REPORT_HOST_SESSION_SECRET=a-separate-long-random-string
+SAL_SITE_INTERNAL_TOKEN=a-shared-random-bearer-secret
 ADMIN_PASSWORD=your-admin-password
 
 # Twitch (optional — /watch page works without this, shows offline state)
@@ -44,6 +46,8 @@ TWITCH_CLIENT_SECRET=
 **Where to find these:**
 - `NEXT_PUBLIC_SUPABASE_URL` and keys: Supabase dashboard → Settings → API
 - `ADMIN_SESSION_SECRET`: generate with `openssl rand -hex 32`
+- `MATCH_REPORT_HOST_SESSION_SECRET`: generate separately; signs only private host match-review sessions
+- `SAL_SITE_INTERNAL_TOKEN`: use the same value in lab-salbot so it can mint one-time host review links
 - Twitch credentials: Twitch Developer Console → your application
 
 > Local development and E2E runs can use mock data without Supabase configured.

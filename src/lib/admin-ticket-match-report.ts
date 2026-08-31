@@ -139,7 +139,7 @@ export function buildMatchReportActionContext(
   if (
     typeof source.id !== "string" ||
     typeof source.match_id !== "string" ||
-    source.status !== "review"
+    !["review", "host_review"].includes(String(source.status))
   ) {
     return READ_ONLY_CONTEXT;
   }
