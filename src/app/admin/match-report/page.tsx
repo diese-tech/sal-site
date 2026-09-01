@@ -55,11 +55,10 @@ export default async function MatchReportPage() {
   const [data, reports] = await Promise.all([getAdminLeagueData(), getReports()]);
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <div className="mb-6">
-        <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">Admin</p>
+    <main className="mx-auto max-w-[1680px] px-4 py-6 sm:px-6">
+      <div className="mb-5">
         <h1 className="text-2xl font-black text-white">Match Report</h1>
-        <p className="mt-1 text-sm font-semibold text-slate-400">
+        <p className="mt-0.5 text-xs font-semibold text-slate-500">
           Upload SMITE DETAILS screenshots → AI extracts stats → review → submit result
         </p>
       </div>

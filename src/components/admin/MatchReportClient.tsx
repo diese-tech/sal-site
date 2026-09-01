@@ -6,7 +6,7 @@ import type { LeagueData, Match } from "@/types/league";
 import type { ExtractedGame, ExtractedPlayer, MatchReportWithMatch } from "@/types/match-report";
 import { MatchReportCard } from "@/components/admin/MatchReportCard";
 import { ReviewScreenshotPane } from "@/components/admin/ReviewScreenshotPane";
-import { IgnInput, StatInput } from "@/components/admin/stat-inputs";
+import { TeamStatEditor } from "@/components/admin/TeamStatEditor";
 import { cn } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -116,6 +116,9 @@ export function MatchReportClient({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  // The report list is navigation, not part of the task. Once a report is
+  // open it competes with the editor for width, so it can be folded away.
+  const [listOpen, setListOpen] = useState(true);
 
   const activeReport = reports.find((r) => r.id === activeReportId) ?? null;
   const orgMap = new Map(data.orgs.map((o) => [o.id, o]));
@@ -457,8 +460,6 @@ export function MatchReportClient({
   );
 
   const currentGame = games[activeGameIdx];
-  const homePlayers = currentGame?.players.filter((p) => p.side === "home") ?? [];
-  const awayPlayers = currentGame?.players.filter((p) => p.side === "away") ?? [];
 
   // Uploaded URLs survive a reopened report; object URLs cover the not-yet-
   // uploaded case (manual entry, or review before "Extract with AI").
@@ -487,26 +488,46 @@ export function MatchReportClient({
   return (
     <div className="flex gap-5 lg:items-start">
       {/* ── Left sidebar ─────────────────────────────────────────────────── */}
-      <aside className="hidden w-72 shrink-0 space-y-3 lg:block">
-        <button
-          onClick={resetToNew}
-          className="w-full rounded-xl border border-cyan-300/35 bg-cyan-300/15 py-2 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20"
-        >
-          + New Match Report
-        </button>
+      {listOpen ? (
+        <aside className="hidden w-72 shrink-0 space-y-3 lg:block">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={resetToNew}
+              className="flex-1 rounded-xl border border-cyan-300/35 bg-cyan-300/15 py-2 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20"
+            >
+              + New Match Report
+            </button>
+            <button
+              onClick={() => setListOpen(false)}
+              aria-label="Hide report list"
+              title="Hide report list"
+              className="rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-2 text-sm font-black text-slate-500 transition hover:text-slate-200"
+            >
+              ‹
+            </button>
+          </div>
 
-        {reports.length === 0 && (
-          <p className="py-4 text-center text-xs font-semibold text-slate-600">No reports yet.</p>
-        )}
-        {reports.map((r) => (
-          <MatchReportCard
-            key={r.id}
-            report={r}
-            active={r.id === activeReportId}
-            onClick={() => openExistingReport(r)}
-          />
-        ))}
-      </aside>
+          {reports.length === 0 && (
+            <p className="py-4 text-center text-xs font-semibold text-slate-600">No reports yet.</p>
+          )}
+          {reports.map((r) => (
+            <MatchReportCard
+              key={r.id}
+              report={r}
+              active={r.id === activeReportId}
+              onClick={() => openExistingReport(r)}
+            />
+          ))}
+        </aside>
+      ) : (
+        <button
+          onClick={() => setListOpen(true)}
+          title="Show report list"
+          className="hidden shrink-0 self-stretch rounded-xl border border-white/10 bg-white/[0.03] px-2 py-3 text-[0.6rem] font-black uppercase tracking-widest text-slate-500 transition hover:text-slate-200 lg:block [writing-mode:vertical-rl]"
+        >
+          › Reports ({reports.length})
+        </button>
+      )}
 
       {/* ── Main panel ───────────────────────────────────────────────────── */}
       <div className="min-w-0 flex-1">
@@ -528,7 +549,7 @@ export function MatchReportClient({
 
         {/* ── Step: Select match ───────────────────────────────────────── */}
         {step === "select" && (
-          <div className="rounded-2xl border border-white/8 bg-slate-950/60 p-5">
+          <div className="max-w-3xl rounded-2xl border border-white/8 bg-slate-950/60 p-5">
             <SectionHeader>Select a match to report</SectionHeader>
             <input
               value={matchSearch}
@@ -581,7 +602,7 @@ export function MatchReportClient({
 
         {/* ── Step: Upload ─────────────────────────────────────────────── */}
         {step === "upload" && selectedMatch && (
-          <div className="space-y-4">
+          <div className="max-w-3xl space-y-4">
             {/* Match header */}
             <div className="rounded-xl border border-white/8 bg-slate-950/60 px-4 py-3">
               <div className="flex items-center justify-between gap-2">
@@ -709,81 +730,68 @@ export function MatchReportClient({
         {/* ── Step: Review ─────────────────────────────────────────────── */}
         {(step === "review" || step === "confirming") && currentGame && (
           <div className="space-y-4">
-            {/* Series score bar */}
-            <div className="flex items-center justify-between rounded-xl border border-white/8 bg-slate-950/60 px-4 py-3">
-              <span className="text-sm font-black text-white">{homeOrg?.tag ?? "Home"}</span>
-              <span className="text-xl font-black text-white">
-                {seriesScore.home} – {seriesScore.away}
-              </span>
-              <span className="text-sm font-black text-white">{awayOrg?.tag ?? "Away"}</span>
-            </div>
+            {/* One control bar. The score, the game tabs and the winner
+                picker used to be three stacked rows that repeated both team
+                names; the winner now lives on the team card it applies to. */}
+            <div className="rounded-2xl border border-white/8 bg-slate-950/80 px-4 py-3 backdrop-blur lg:sticky lg:top-0 lg:z-30">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <div className="flex items-baseline gap-3">
+                  <span className="text-sm font-black text-white">{homeOrg?.tag ?? "Home"}</span>
+                  <span className="text-2xl font-black tabular-nums text-white">
+                    {seriesScore.home}<span className="mx-1 text-slate-600">–</span>{seriesScore.away}
+                  </span>
+                  <span className="text-sm font-black text-white">{awayOrg?.tag ?? "Away"}</span>
+                </div>
 
-            {/* Game tabs */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              {games.map((g, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setActiveGameIdx(idx)}
-                  className={cn(
-                    "rounded-lg border px-3 py-1.5 text-xs font-black uppercase transition",
-                    activeGameIdx === idx
-                      ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100"
-                      : "border-white/10 bg-white/[0.04] text-slate-400 hover:text-slate-200",
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {games.map((g, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveGameIdx(idx)}
+                      aria-current={activeGameIdx === idx || undefined}
+                      className={cn(
+                        "rounded-lg border px-3 py-1.5 text-xs font-black uppercase transition",
+                        activeGameIdx === idx
+                          ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100"
+                          : "border-white/10 bg-white/[0.04] text-slate-400 hover:text-slate-200",
+                      )}
+                    >
+                      G{g.gameNumber}
+                      <span className={cn(
+                        "ml-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle",
+                        g.winningSide === "home" ? "bg-cyan-400/70" : "bg-orange-400/70",
+                      )} />
+                    </button>
+                  ))}
+                  {games.length < 5 && (
+                    <button
+                      onClick={addGame}
+                      className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs font-black uppercase text-slate-500 transition hover:text-slate-200"
+                    >
+                      + Game
+                    </button>
                   )}
-                >
-                  Game {g.gameNumber}
-                </button>
-              ))}
-              {games.length < 5 && (
-                <button
-                  onClick={addGame}
-                  className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-black uppercase text-slate-500 transition hover:text-slate-200"
-                >
-                  + Game
-                </button>
-              )}
-              {games.length > 1 && (
-                <button
-                  onClick={removeLastGame}
-                  className="rounded-lg border border-red-400/20 px-3 py-1.5 text-xs font-black uppercase text-red-400/60 transition hover:text-red-300"
-                >
-                  Remove Last
-                </button>
-              )}
+                  {games.length > 1 && (
+                    <button
+                      onClick={removeLastGame}
+                      aria-label={`Remove game ${games.length}`}
+                      title={`Remove game ${games.length}`}
+                      className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs font-black uppercase text-slate-600 transition hover:border-red-400/30 hover:text-red-300"
+                    >
+                      −
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {/* Winner toggle */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black uppercase text-slate-500">Winner:</span>
-              <button
-                onClick={() => setWinner(activeGameIdx, "home")}
-                className={cn(
-                  "rounded-lg border px-3 py-1 text-xs font-black uppercase transition",
-                  currentGame.winningSide === "home"
-                    ? "border-emerald-400/50 bg-emerald-400/15 text-emerald-200"
-                    : "border-white/10 bg-white/[0.04] text-slate-400 hover:text-slate-200",
-                )}
-              >
-                {homeOrg?.name ?? "Home"}
-              </button>
-              <button
-                onClick={() => setWinner(activeGameIdx, "away")}
-                className={cn(
-                  "rounded-lg border px-3 py-1 text-xs font-black uppercase transition",
-                  currentGame.winningSide === "away"
-                    ? "border-emerald-400/50 bg-emerald-400/15 text-emerald-200"
-                    : "border-white/10 bg-white/[0.04] text-slate-400 hover:text-slate-200",
-                )}
-              >
-                {awayOrg?.name ?? "Away"}
-              </button>
-            </div>
-
-            {/* Evidence + stat tables. The screenshot sticks to the viewport on
+            {/* Evidence + stat cards. The screenshot sticks to the viewport on
                 wide screens so the scoreboard stays readable while editing; on
-                narrow screens it sits above the tables and can be collapsed. */}
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(19rem,26rem)]">
-              <aside className="min-w-0 xl:order-last xl:sticky xl:top-4 xl:self-start">
+                narrower screens it sits above the cards and can be collapsed.
+                The two team cards stack instead of splitting the column in
+                half — halving it was what forced them to scroll sideways. */}
+            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(17rem,22rem)]">
+              <aside className="min-w-0 2xl:order-last 2xl:sticky 2xl:top-24 2xl:self-start">
                 <ReviewScreenshotPane
                   urls={reviewScreenshots}
                   activeIndex={activeGameIdx}
@@ -791,104 +799,30 @@ export function MatchReportClient({
                 />
               </aside>
 
-              <div className="grid min-w-0 gap-4 2xl:grid-cols-2">
-              {(["home", "away"] as const).map((side) => {
-                const sideOrg = side === "home" ? homeOrg : awayOrg;
-                const sideRoster = side === "home" ? homeRoster : awayRoster;
-                const sidePlayers = currentGame.players
-                  .map((p, globalIdx) => ({ p, globalIdx }))
-                  .filter(({ p }) => p.side === side);
-                const isWinner = currentGame.winningSide === side;
+              <div className="grid min-w-0 gap-4">
+                {(["home", "away"] as const).map((side) => {
+                  const sideOrg = side === "home" ? homeOrg : awayOrg;
+                  const sideRoster = side === "home" ? homeRoster : awayRoster;
+                  const rows = currentGame.players
+                    .map((player, globalIdx) => ({ player, globalIdx }))
+                    .filter(({ player }) => player.side === side);
 
-                return (
-                  <div key={side} className={cn(
-                    "overflow-hidden rounded-2xl border",
-                    isWinner ? "border-emerald-400/25" : "border-white/8",
-                  )}>
-                    <div className={cn(
-                      "flex items-center justify-between px-3 py-2",
-                      isWinner ? "bg-emerald-400/8" : "bg-white/[0.03]",
-                    )}>
-                      <p className="text-xs font-black uppercase text-white">{sideOrg?.name ?? side}</p>
-                      {isWinner && <span className="text-[0.6rem] font-black uppercase text-emerald-400">Victory</span>}
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full min-w-[480px] text-xs">
-                        <thead>
-                          <tr className="border-b border-white/8 text-left text-[0.6rem] font-black uppercase text-slate-500">
-                            <th className="px-2 py-1.5">IGN</th>
-                            <th className="px-1 py-1.5">Role</th>
-                            <th className="px-1 py-1.5">God</th>
-                            <th className="px-1 py-1.5">K</th>
-                            <th className="px-1 py-1.5">D</th>
-                            <th className="px-1 py-1.5">A</th>
-                            <th className="px-1 py-1.5">DMG</th>
-                            <th className="px-1 py-1.5">MIT</th>
-                            <th className="px-1 py-1.5" />
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {sidePlayers.map(({ p, globalIdx }) => {
-                            const isUnmatched = p.ign && !p.playerId;
-                            return (
-                              <tr key={globalIdx} className={cn("border-b border-white/5 last:border-0", isUnmatched && "bg-amber-400/5")}>
-                                <td className="px-2 py-1">
-                                  <IgnInput
-                                    value={p.ign}
-                                    onChange={(v) => updatePlayer(activeGameIdx, globalIdx, { ign: v })}
-                                    roster={sideRoster.map((pl) => ({ id: pl.id, ign: pl.ign }))}
-                                    onPlayerMatch={(id) => updatePlayer(activeGameIdx, globalIdx, { playerId: id })}
-                                    unmatched={!!isUnmatched}
-                                  />
-                                </td>
-                                <td className="px-1 py-1">
-                                  <select
-                                    value={p.role ?? ""}
-                                    onChange={(e) => updatePlayer(activeGameIdx, globalIdx, { role: e.target.value || undefined })}
-                                    className="w-20 rounded border border-white/10 bg-black/30 px-1 py-0.5 text-xs text-white focus:outline-none"
-                                  >
-                                    <option value="">—</option>
-                                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                                  </select>
-                                </td>
-                                <td className="px-1 py-1">
-                                  <input
-                                    value={p.god ?? ""}
-                                    onChange={(e) => updatePlayer(activeGameIdx, globalIdx, { god: e.target.value || undefined })}
-                                    placeholder="God"
-                                    className="w-20 rounded border border-white/10 bg-black/30 px-1 py-0.5 text-xs text-white focus:outline-none"
-                                  />
-                                </td>
-                                <td className="px-1 py-1"><StatInput value={p.kills} onChange={(v) => updatePlayer(activeGameIdx, globalIdx, { kills: v })} /></td>
-                                <td className="px-1 py-1"><StatInput value={p.deaths} onChange={(v) => updatePlayer(activeGameIdx, globalIdx, { deaths: v })} /></td>
-                                <td className="px-1 py-1"><StatInput value={p.assists} onChange={(v) => updatePlayer(activeGameIdx, globalIdx, { assists: v })} /></td>
-                                <td className="px-1 py-1"><StatInput value={p.damageDealt} onChange={(v) => updatePlayer(activeGameIdx, globalIdx, { damageDealt: v })} wide /></td>
-                                <td className="px-1 py-1"><StatInput value={p.damageMitigated} onChange={(v) => updatePlayer(activeGameIdx, globalIdx, { damageMitigated: v })} wide /></td>
-                                <td className="px-1 py-1">
-                                  <button
-                                    onClick={() => removePlayer(activeGameIdx, globalIdx)}
-                                    className="text-slate-600 hover:text-red-400"
-                                    title="Remove row"
-                                  >×</button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="border-t border-white/5 px-3 py-1.5">
-                      <button
-                        onClick={() => addPlayerToSide(activeGameIdx, side)}
-                        className="text-[0.65rem] font-black uppercase text-slate-600 hover:text-slate-300"
-                      >
-                        + Add row
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                  return (
+                    <TeamStatEditor
+                      key={side}
+                      side={side}
+                      teamName={sideOrg?.name ?? side}
+                      rows={rows}
+                      roster={sideRoster.map((pl) => ({ id: pl.id, ign: pl.ign }))}
+                      roles={ROLES}
+                      isWinner={currentGame.winningSide === side}
+                      onSetWinner={() => setWinner(activeGameIdx, side)}
+                      onChange={(globalIdx, patch) => updatePlayer(activeGameIdx, globalIdx, patch)}
+                      onRemove={(globalIdx) => removePlayer(activeGameIdx, globalIdx)}
+                      onAdd={() => addPlayerToSide(activeGameIdx, side)}
+                    />
+                  );
+                })}
               </div>
             </div>
 
@@ -933,7 +867,7 @@ export function MatchReportClient({
 
         {/* ── Step: Done ───────────────────────────────────────────────── */}
         {step === "done" && activeReport && (
-          <div className="rounded-2xl border border-emerald-300/20 bg-slate-950/60 p-8 text-center">
+          <div className="max-w-3xl rounded-2xl border border-emerald-300/20 bg-slate-950/60 p-8 text-center">
             <p className="text-2xl font-black text-emerald-300">Result Submitted</p>
             {activeReport.homeScore !== undefined && activeReport.awayScore !== undefined && (
               <p className="mt-2 text-3xl font-black text-white">
