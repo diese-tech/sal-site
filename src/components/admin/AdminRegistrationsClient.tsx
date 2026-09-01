@@ -65,7 +65,7 @@ export function AdminRegistrationsClient({
   return (
     <div>
       {/* Tabs */}
-      <div className="mb-4 flex gap-1">
+      <div className="mb-4 flex flex-wrap items-center gap-1">
         {TABS.map(({ id, label }) => (
           <button
             key={id}

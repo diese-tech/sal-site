@@ -215,7 +215,7 @@ export function AdminSeasonsClient({ seasons, isSuperAdmin = false }: { seasons:
                 </p>
                 <p className="mt-1 text-[0.6rem] font-black uppercase text-slate-600">ID: {season.id}</p>
               </div>
-              <div className="flex shrink-0 flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
                 <Link
                   href={`/admin/seasons/${encodeURIComponent(season.id)}/roster`}
                   className="rounded-lg border border-cyan-300/35 bg-cyan-300/10 px-2.5 py-1 text-[0.65rem] font-black uppercase text-cyan-200 transition hover:bg-cyan-300/20"
