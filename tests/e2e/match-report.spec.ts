@@ -94,20 +94,82 @@ for (const viewport of viewports) {
   });
 }
 
-test("no element inside the match report page scrolls sideways", async ({ page }) => {
+/**
+ * Drives the client into the review step, where the stat editors actually
+ * render. Creating a report is the one Supabase write on the path, so it is
+ * stubbed; everything after it — building the blank roster rows, the game
+ * tabs, the stat grid — is real client code running against the mock league
+ * data the server already serves. Without this the overflow scan below would
+ * only ever see the selection step and would pass through the regression it
+ * claims to guard.
+ */
+async function openReviewStep(page: Page) {
+  await page.route("**/api/admin/match-reports", async (route) => {
+    if (route.request().method() === "POST") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ id: "11111111-1111-4111-8111-111111111111" }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto("/admin/match-report");
+  await page.getByRole("button", { name: /\bvs\b/ }).first().click();
+  await page.getByRole("button", { name: /Skip.*Manual Entry/i }).click();
+  await expect(page.getByRole("button", { name: /^G1/ })).toBeVisible();
+}
+
+test("manual entry reaches the review step and renders both team stat editors", async ({ page }) => {
+  await adminLogin(page);
+  await openReviewStep(page);
+
+  // Ten roster rows: five a side, each with its stat fields.
+  await expect(page.locator('input[aria-label$="IGN"]')).toHaveCount(10);
+  await expect(page.locator('input[aria-label$="kills"]')).toHaveCount(10);
+  await expect(page.getByRole("button", { name: /Mark winner|✓ Winner/ })).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "Submit Result" })).toBeVisible();
+});
+
+test("review step stat fields are real form controls, not micro-inputs", async ({ page }) => {
+  await adminLogin(page);
+  await openReviewStep(page);
+
+  // The regression: 0.75rem text in boxes ~40px wide and ~20px tall.
+  const box = await page.locator('input[aria-label$="kills"]').first().boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.height).toBeGreaterThanOrEqual(32);
+  expect(box!.width).toBeGreaterThanOrEqual(36);
+});
+
+for (const viewport of viewports) {
+  test(`no element in the review step scrolls sideways at ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await adminLogin(page);
+    await openReviewStep(page);
+
+    // The regression this guards: two stat tables rendered narrower than their
+    // own min-width, each scrolling independently inside the page.
+    const overflowing = await page.evaluate(() =>
+      [...document.querySelectorAll("main *")]
+        .filter((element) => element.scrollWidth > element.clientWidth + 1)
+        .map((element) => element.className?.toString?.().slice(0, 80) ?? ""),
+    );
+    expect(overflowing).toEqual([]);
+    await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
+  });
+}
+
+test("review step adds and removes games without breaking the layout", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await adminLogin(page);
-  await page.goto("/admin/match-report");
-  await expect(page.getByRole("heading", { name: "Match Report" })).toBeVisible();
+  await openReviewStep(page);
 
-  // The regression this guards: stat tables rendered narrower than their own
-  // minimum width, so each one scrolled independently inside the page.
-  const overflowing = await page.evaluate(() =>
-    [...document.querySelectorAll("main *")]
-      .filter((element) => element.scrollWidth > element.clientWidth + 1)
-      .map((element) => element.className?.toString?.().slice(0, 80) ?? ""),
-  );
-  expect(overflowing).toEqual([]);
+  await page.getByRole("button", { name: "+ Game" }).click();
+  await expect(page.getByRole("button", { name: /^G2/ })).toBeVisible();
+  await expect.poll(() => hasHorizontalOverflow(page)).toBe(false);
 });
 
 test("match report page renders no console errors", async ({ page }) => {
