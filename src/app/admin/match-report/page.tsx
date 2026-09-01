@@ -3,6 +3,7 @@ import { getAdminLeagueData } from "@/lib/league-data";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { MatchReportClient } from "@/components/admin/MatchReportClient";
 import type { ExtractedGame, MatchReportWithMatch } from "@/types/match-report";
+import { groupPublishedStats, groupRowsByReport, type PublishedStatRow } from "@/lib/match-report-published";
 import type { DivisionId } from "@/types/league";
 
 export const metadata = { title: "Match Report - SAL Admin" };
@@ -18,6 +19,20 @@ async function getReports(): Promise<MatchReportWithMatch[]> {
 
   const orgMap = new Map(leagueData.orgs.map((o) => [o.id, o]));
   const matchMap = new Map(leagueData.matches.map((m) => [m.id, m]));
+
+  // Completed reports are displayed from their published stat rows, so the
+  // admin can see what is actually on record rather than a bare score.
+  const doneIds = (rows ?? []).filter((r) => r.status === "done").map((r) => r.id as string);
+  const { data: statRows } = doneIds.length > 0
+    ? await supabase
+      .from("player_match_stats")
+      .select(
+        "match_report_id, game_number, player_ign, player_id, org_id, won, kills, deaths, assists, god_played, role, damage_dealt, damage_mitigated",
+      )
+      .in("match_report_id", doneIds)
+      .order("game_number", { ascending: true })
+    : { data: [] };
+  const statsByReport = groupRowsByReport((statRows ?? []) as unknown as PublishedStatRow[]);
 
   return (rows ?? []).map((row) => {
     const match = matchMap.get(row.match_id as string);
@@ -35,6 +50,9 @@ async function getReports(): Promise<MatchReportWithMatch[]> {
       totalGames: row.total_games as number | undefined,
       screenshotUrls: (row.screenshot_urls as string[]) ?? [],
       extractedData: (row.extracted_data as ExtractedGame[] | null) ?? undefined,
+      publishedGames: statsByReport.has(row.id as string)
+        ? groupPublishedStats(statsByReport.get(row.id as string)!, match?.homeOrgId ?? "")
+        : undefined,
       createdAt: row.created_at as string,
       reviewedAt: row.reviewed_at as string | undefined,
       reviewedBy: row.reviewed_by as string | undefined,
@@ -55,11 +73,10 @@ export default async function MatchReportPage() {
   const [data, reports] = await Promise.all([getAdminLeagueData(), getReports()]);
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <div className="mb-6">
-        <p className="mb-1 text-[0.65rem] font-black uppercase tracking-widest text-cyan-300/70">Admin</p>
+    <main className="mx-auto max-w-[1680px] px-4 py-6 sm:px-6">
+      <div className="mb-5">
         <h1 className="text-2xl font-black text-white">Match Report</h1>
-        <p className="mt-1 text-sm font-semibold text-slate-400">
+        <p className="mt-0.5 text-xs font-semibold text-slate-500">
           Upload SMITE DETAILS screenshots → AI extracts stats → review → submit result
         </p>
       </div>

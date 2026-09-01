@@ -69,6 +69,8 @@ describe("POST /api/admin/match-reports/[id]/submit", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       ok: true,
+      applied: true,
+      code: "applied",
       homeScore: 1,
       awayScore: 0,
       totalGames: 1,
@@ -80,6 +82,34 @@ describe("POST /api/admin/match-reports/[id]/submit", () => {
       games,
     });
     expect(revalidateLeagueData).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports an already-published report as not applied", async () => {
+    // The database returns the ORIGINAL scores here and writes nothing, so a
+    // plain success would tell the admin their corrections were saved.
+    const handler = createMatchReportReviewHandler({
+      getSession: () => ({ discordId: "admin-1" }),
+      resolveMatchReport: vi.fn().mockResolvedValue({
+        code: "already_processed",
+        reportId: "01a122ab-0304-4506-8708-091011121314",
+        matchId: "match-1",
+        finalStatus: "done",
+        applied: false,
+        homeScore: 2,
+        awayScore: 1,
+        totalGames: 3,
+        outboxIds: [],
+      }),
+      revalidateLeagueData: vi.fn(),
+    });
+
+    const response = await handler(request({ games }), routeContext);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      applied: false,
+      code: "already_processed",
+    });
   });
 
   it("does not revalidate when the database transaction fails", async () => {

@@ -93,9 +93,16 @@ export function createMatchReportReviewHandler(dependencies: MatchReportReviewDe
         );
       }
 
+      // resolve_match_report_review is idempotent: a report that is already
+      // "done" comes back as already_processed with applied=false and the
+      // ORIGINAL scores, having written nothing. Reporting that as a plain
+      // success told the admin their corrections were saved when they were
+      // discarded, so the outcome is passed through instead.
       dependencies.revalidateLeagueData();
       return NextResponse.json({
         ok: true,
+        applied: result.data.applied,
+        code: result.data.code,
         homeScore: result.data.homeScore,
         awayScore: result.data.awayScore,
         totalGames: result.data.totalGames,
