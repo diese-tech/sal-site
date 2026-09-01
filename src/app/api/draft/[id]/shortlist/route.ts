@@ -17,16 +17,16 @@ function unauthorized() {
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = getCaptainSessionFromRequest(request);
-  if (!session || session.draftRoomId !== id) return unauthorized();
+  const session = getCaptainSessionFromRequest(request, id);
+  if (!session) return unauthorized();
   const shortlist = await getShortlist(id, session.orgId);
   return NextResponse.json({ shortlist });
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = getCaptainSessionFromRequest(request);
-  if (!session || session.draftRoomId !== id) return unauthorized();
+  const session = getCaptainSessionFromRequest(request, id);
+  if (!session) return unauthorized();
 
   const body = await request.json().catch(() => null);
   const result = z.object({ playerId: z.string().min(1) }).safeParse(body);
@@ -59,8 +59,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = getCaptainSessionFromRequest(request);
-  if (!session || session.draftRoomId !== id) return unauthorized();
+  const session = getCaptainSessionFromRequest(request, id);
+  if (!session) return unauthorized();
 
   const body = await request.json().catch(() => null);
   const result = z.object({ playerId: z.string().min(1) }).safeParse(body);
@@ -72,8 +72,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const session = getCaptainSessionFromRequest(request);
-  if (!session || session.draftRoomId !== id) return unauthorized();
+  const session = getCaptainSessionFromRequest(request, id);
+  if (!session) return unauthorized();
 
   const body = await request.json().catch(() => null);
   const result = z.object({ order: z.array(z.string()).min(1) }).safeParse(body);

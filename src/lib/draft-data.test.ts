@@ -3,15 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/league-data", () => ({ saveSeasonRosterAssignment: vi.fn(), getCurrentSeasonId: vi.fn() }));
 
 import { getCurrentSeasonId, saveSeasonRosterAssignment } from "@/lib/league-data";
-import { finalizeDraftRosters, generateCaptainToken, getTopShortlistPick } from "./draft-data";
+import { finalizeDraftRosters, issueTeamAccessCode, listTeamAccessCodes, redeemDraftAccess, getTopShortlistPick } from "./draft-data";
+import { isAccessCode } from "./draft-access-code";
 
 type QueryState = {
   table: string;
-  op: "select" | "update" | "insert" | "upsert";
+  op: "select" | "update" | "insert" | "upsert" | "delete";
   update?: Record<string, unknown>;
   insert?: Record<string, unknown>;
   eqs: Array<[string, unknown]>;
   neqs: Array<[string, unknown]>;
+  gts: Array<[string, unknown]>;
   ins: Array<[string, unknown[]]>;
 };
 
@@ -22,7 +24,7 @@ class FakeQuery {
   private state: QueryState;
 
   constructor(table: string, private readonly handler: QueryHandler, private readonly executed: QueryState[]) {
-    this.state = { table, op: "select", eqs: [], neqs: [], ins: [] };
+    this.state = { table, op: "select", eqs: [], neqs: [], gts: [], ins: [] };
   }
 
   select() {
@@ -55,6 +57,24 @@ class FakeQuery {
     this.state.op = "upsert";
     this.state.insert = values;
     return this;
+  }
+
+  delete() {
+    this.state.op = "delete";
+    return this;
+  }
+
+  gt(column: string, value: unknown) {
+    this.state.gts.push([column, value]);
+    return this;
+  }
+
+  limit() {
+    return this;
+  }
+
+  single() {
+    return this.execute();
   }
 
   in(column: string, values: unknown[]) {
@@ -246,17 +266,19 @@ describe("getTopShortlistPick excludes season-wide drafted players (#206)", () =
   });
 });
 
-describe("generateCaptainToken persistence", () => {
-  it("inserts a separate token row before returning the plaintext token", async () => {
+describe("issueTeamAccessCode persistence", () => {
+  it("replaces the seat credential atomically in one upsert", async () => {
     client = makeClient(handlerFor({ captain_tokens: { data: null, error: null } }));
 
-    const token = await generateCaptainToken("room-1", "org-a");
+    const code = await issueTeamAccessCode("room-1", "org-a");
 
-    expect(token).toMatch(/^[A-Za-z0-9_-]{32}$/);
-    const query = executed.find((entry) => entry.table === "captain_tokens");
-    expect(query?.op).toBe("insert");
-    expect(query?.insert).toMatchObject({
-      id: token,
+    expect(isAccessCode(code)).toBe(true);
+
+    const captainQueries = executed.filter((entry) => entry.table === "captain_tokens");
+    expect(captainQueries).toHaveLength(1);
+    expect(captainQueries[0]?.op).toBe("upsert");
+    expect(captainQueries[0]?.insert).toMatchObject({
+      id: code,
       draft_room_id: "room-1",
       org_id: "org-a",
       token_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
@@ -264,13 +286,109 @@ describe("generateCaptainToken persistence", () => {
     });
   });
 
-  it("does not return an unpersisted token when the database rejects the insert", async () => {
+  it("never deletes the old credential first, so a failed rotation leaves the seat usable", async () => {
     client = makeClient(handlerFor({
-      captain_tokens: { data: null, error: { message: "captain token insert failed" } },
+      captain_tokens: { data: null, error: { message: "captain token upsert failed" } },
     }));
 
-    await expect(generateCaptainToken("room-1", "org-a")).rejects.toMatchObject({
-      message: "captain token insert failed",
+    await expect(issueTeamAccessCode("room-1", "org-a")).rejects.toMatchObject({
+      message: "captain token upsert failed",
     });
+
+    // The previous code must survive a failed rotation — a seat left with no
+    // credential is the mid-draft lockout this feature exists to prevent.
+    expect(executed.filter((e) => e.table === "captain_tokens" && e.op === "delete")).toHaveLength(0);
+  });
+});
+
+describe("redeemDraftAccess", () => {
+  it("resolves a seat without deleting the row, so the code stays reusable", async () => {
+    client = makeClient(handlerFor({
+      captain_tokens: { data: [{ draft_room_id: "room-1", org_id: "org-a" }], error: null },
+    }));
+
+    await expect(redeemDraftAccess("H7K2QM4X")).resolves.toEqual({
+      draftRoomId: "room-1",
+      orgId: "org-a",
+    });
+
+    const ops = executed.filter((e) => e.table === "captain_tokens").map((e) => e.op);
+    expect(ops).not.toContain("delete");
+  });
+
+  it("accepts the formatted and lowercase forms a captain actually types", async () => {
+    client = makeClient(handlerFor({
+      captain_tokens: { data: [{ draft_room_id: "room-1", org_id: "org-a" }], error: null },
+    }));
+
+    await expect(redeemDraftAccess("  h7k2-qm4x ")).resolves.toEqual({
+      draftRoomId: "room-1",
+      orgId: "org-a",
+    });
+
+    // Both the raw string and the normalized code are looked up, so legacy
+    // link tokens keep working alongside short codes.
+    const query = executed.find((e) => e.table === "captain_tokens");
+    expect(query?.ins[0]?.[0]).toBe("token_hash");
+    expect(query?.ins[0]?.[1]).toHaveLength(2);
+  });
+
+  it("filters out expired credentials in the query", async () => {
+    client = makeClient(handlerFor({ captain_tokens: { data: [], error: null } }));
+
+    await expect(redeemDraftAccess("H7K2QM4X")).resolves.toBeNull();
+
+    const query = executed.find((e) => e.table === "captain_tokens");
+    expect(query?.gts[0]?.[0]).toBe("expires_at");
+  });
+
+  it("returns null for blank input without querying", async () => {
+    client = makeClient(handlerFor({}));
+
+    await expect(redeemDraftAccess("   ")).resolves.toBeNull();
+    expect(executed.filter((e) => e.table === "captain_tokens")).toHaveLength(0);
+  });
+
+  it("returns null when the lookup errors", async () => {
+    client = makeClient(handlerFor({
+      captain_tokens: { data: null, error: { message: "boom" } },
+    }));
+
+    await expect(redeemDraftAccess("H7K2QM4X")).resolves.toBeNull();
+  });
+});
+
+describe("listTeamAccessCodes", () => {
+  it("returns plaintext codes so an admin can re-read them mid-draft", async () => {
+    client = makeClient(handlerFor({
+      captain_tokens: {
+        data: [{ id: "H7K2QM4X", org_id: "org-a", expires_at: "2026-09-01T00:00:00Z" }],
+        error: null,
+      },
+    }));
+
+    await expect(listTeamAccessCodes("room-1")).resolves.toEqual([
+      { orgId: "org-a", code: "H7K2QM4X", expiresAt: "2026-09-01T00:00:00Z", isLegacyLink: false },
+    ]);
+  });
+
+  it("flags pre-existing one-time link tokens so they can be replaced", async () => {
+    client = makeClient(handlerFor({
+      captain_tokens: {
+        data: [{ id: "aVeryLongLegacyLinkToken_123456", org_id: "org-b", expires_at: "2026-09-01T00:00:00Z" }],
+        error: null,
+      },
+    }));
+
+    const codes = await listTeamAccessCodes("room-1");
+    expect(codes[0]?.isLegacyLink).toBe(true);
+  });
+
+  it("returns an empty list when the lookup errors", async () => {
+    client = makeClient(handlerFor({
+      captain_tokens: { data: null, error: { message: "boom" } },
+    }));
+
+    await expect(listTeamAccessCodes("room-1")).resolves.toEqual([]);
   });
 });

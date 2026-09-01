@@ -5,6 +5,7 @@ import type { DraftState } from "@/types/draft";
 import type { LeaguePlayer, Org } from "@/types/league";
 import type { ShortlistEntry } from "@/lib/draft-data";
 import { formatDraftTeamLabel } from "@/lib/draft-team";
+import { JoinSeatPanel } from "@/components/draft/JoinSeatPanel";
 import { cn } from "@/lib/utils";
 
 const POLL_INTERVAL_MS = 3000;
@@ -61,7 +62,7 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
       body: JSON.stringify({ token: tokenToExchange }),
     }).then(async (res) => {
       if (!res.ok) {
-        setTokenExchangeMessage("This captain link is invalid or expired. Request a new link from an admin.");
+        setTokenExchangeMessage("This captain link is invalid or expired. Enter your team code below instead.");
         return;
       }
 
@@ -74,7 +75,7 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
         window.history.replaceState({}, "", url.toString());
       }
     }).catch(() => {
-      setTokenExchangeMessage("Unable to verify this captain link. Check your connection or request a new link from an admin.");
+      setTokenExchangeMessage("Unable to verify this captain link. Enter your team code below instead.");
     });
   }, [tokenToExchange, captainOrgId, draftId]);
 
@@ -97,6 +98,19 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
     pollRef.current = setInterval(poll, POLL_INTERVAL_MS);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [poll]);
+
+  function handleJoined(orgId: string) {
+    setCaptainOrgId(orgId);
+    setTokenExchangeMessage("Joined as captain. You can make picks for your team when you are on the clock.");
+    void poll();
+  }
+
+  async function leaveSeat() {
+    await fetch(`/api/draft/${draftId}/join`, { method: "DELETE" }).catch(() => null);
+    setCaptainOrgId(null);
+    setShortlist([]);
+    setTokenExchangeMessage("");
+  }
 
   async function makePick(playerId: string) {
     setPicking(true);
@@ -203,7 +217,16 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
           <div className="flex items-center gap-3">
             {!connected && <span className="text-xs font-semibold text-orange-300">Reconnecting…</span>}
             {captainOrgId ? (
-              <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-3 py-1 text-xs font-black text-emerald-100">Captain: {getTeamLabel(captainOrgId)}</span>
+              <span className="flex items-center gap-2 rounded-full border border-emerald-300/40 bg-emerald-300/10 py-1 pl-3 pr-1 text-xs font-black text-emerald-100">
+                Captain: {getTeamLabel(captainOrgId)}
+                <button
+                  onClick={leaveSeat}
+                  title="Release this seat on this device"
+                  className="rounded-full border border-white/15 px-2 py-0.5 text-[0.6rem] font-black uppercase text-slate-300 transition hover:border-white/30 hover:text-white"
+                >
+                  Leave
+                </button>
+              </span>
             ) : (
               <span className="rounded-full border border-slate-600/60 bg-white/[0.03] px-3 py-1 text-xs font-black text-slate-300">Spectator mode</span>
             )}
@@ -220,6 +243,10 @@ export function DraftBoardClient({ initialState, orgs, players, captainOrgId: in
           )}>
             {tokenExchangeMessage}
           </div>
+        )}
+
+        {!captainOrgId && room.status !== "complete" && room.status !== "voided" && (
+          <JoinSeatPanel draftId={draftId} onJoined={handleJoined} />
         )}
 
         {/* On-the-clock banner */}

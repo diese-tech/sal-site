@@ -14,8 +14,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
 
   // Verify captain session
-  const session = getCaptainSessionFromRequest(request);
-  if (!session || session.draftRoomId !== id) {
+  const session = getCaptainSessionFromRequest(request, id);
+  if (!session) {
     return NextResponse.json({ error: "Captain session required for this draft." }, { status: 401 });
   }
 
