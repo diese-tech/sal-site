@@ -191,7 +191,23 @@ for (const path of ["/teams/helix-reign", "/teams/midnight-pact", "/teams/root-w
   });
 }
 
-for (const path of ["/admin", "/admin/matches", "/admin/players", "/admin/standings", "/admin/teams", "/admin/announcements", "/admin/tickets"]) {
+// Every admin route the nav can reach, so a new area cannot ship unguarded.
+for (const path of [
+  "/admin",
+  "/admin/announcements",
+  "/admin/audit",
+  "/admin/draft",
+  "/admin/form-fields",
+  "/admin/import",
+  "/admin/match-report",
+  "/admin/matches",
+  "/admin/players",
+  "/admin/registrations",
+  "/admin/seasons",
+  "/admin/standings",
+  "/admin/teams",
+  "/admin/tickets",
+]) {
   test(`admin route ${path} redirects when logged out`, async ({ page }) => {
     await page.goto(path);
     await expect(page).toHaveURL(/\/admin\/login(\?next=|$)/);
@@ -214,12 +230,15 @@ test("admin login accepts configured password and logout clears session", async 
 
 for (const item of [
   { name: "Overview", url: "/admin" },
+  { name: "Standings", url: "/admin/standings" },
+  { name: "Tickets", url: "/admin/tickets" },
+  { name: "Match Report", url: "/admin/match-report" },
+  { name: "Schedule", url: "/admin/matches" },
+  { name: "Draft", url: "/admin/draft" },
   { name: "Teams", url: "/admin/teams" },
   { name: "Roster", url: "/admin/players" },
-  { name: "Schedule", url: "/admin/matches" },
-  { name: "Standings", url: "/admin/standings" },
   { name: "Announcements", url: "/admin/announcements" },
-  { name: "Tickets", url: "/admin/tickets" },
+  { name: "Audit Log", url: "/admin/audit" },
 ]) {
   test(`admin nav opens ${item.name}`, async ({ page }) => {
     await adminLogin(page);
