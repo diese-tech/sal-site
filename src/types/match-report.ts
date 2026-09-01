@@ -64,6 +64,10 @@ export interface ExtractedPlayer {
 
 // Used in MatchReportClient — enriched with match metadata for display
 export interface MatchReportWithMatch extends MatchReport {
+  // Present on completed reports: the stat rows that were actually published,
+  // rebuilt from player_match_stats. extractedData holds the AI/host
+  // extraction and does not carry the admin's review corrections.
+  publishedGames?: ExtractedGame[];
   homeOrgId: string;
   homeOrgName: string;
   homeOrgTag: string;

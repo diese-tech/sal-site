@@ -184,6 +184,8 @@ export function MatchReportClient({
     setMessage("");
 
     if (report.status === "done") {
+      setGames(report.publishedGames?.length ? toReviewGames(report.publishedGames) : []);
+      setActiveGameIdx(0);
       setStep("done");
       return;
     }
@@ -428,8 +430,22 @@ export function MatchReportClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const json = await res.json() as { ok?: boolean; error?: string; homeScore?: number; awayScore?: number };
+      const json = await res.json() as {
+        ok?: boolean; error?: string; applied?: boolean; code?: string;
+        homeScore?: number; awayScore?: number;
+      };
       if (!res.ok) { setMessage(json.error ?? "Submit failed."); setBusy(false); return; }
+      if (json.applied === false) {
+        // The report was already published, so the database kept the original
+        // result and wrote nothing. Saying "submitted" here would be a lie.
+        setMessage(
+          "This report was already published, so nothing was changed — the recorded result stands. " +
+          "Published stats cannot be edited from this screen.",
+        );
+        setStep("review");
+        setBusy(false);
+        return;
+      }
       setStep("done");
       refreshReports();
       router.refresh();
@@ -460,6 +476,7 @@ export function MatchReportClient({
   );
 
   const currentGame = games[activeGameIdx];
+  const doneGames = step === "done" ? games : [];
 
   // Uploaded URLs survive a reopened report; object URLs cover the not-yet-
   // uploaded case (manual entry, or review before "Extract with AI").
@@ -867,22 +884,106 @@ export function MatchReportClient({
 
         {/* ── Step: Done ───────────────────────────────────────────────── */}
         {step === "done" && activeReport && (
-          <div className="max-w-3xl rounded-2xl border border-emerald-300/20 bg-slate-950/60 p-8 text-center">
-            <p className="text-2xl font-black text-emerald-300">Result Submitted</p>
-            {activeReport.homeScore !== undefined && activeReport.awayScore !== undefined && (
-              <p className="mt-2 text-3xl font-black text-white">
-                {activeReport.homeOrgTag} {activeReport.homeScore} – {activeReport.awayScore} {activeReport.awayOrgTag}
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-emerald-300/20 bg-slate-950/60 px-5 py-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+                <div>
+                  <p className="text-[0.65rem] font-black uppercase tracking-widest text-emerald-300/80">Published</p>
+                  {activeReport.homeScore !== undefined && activeReport.awayScore !== undefined && (
+                    <p className="mt-1 text-2xl font-black text-white">
+                      {activeReport.homeOrgTag} {activeReport.homeScore}
+                      <span className="mx-1.5 text-slate-600">–</span>
+                      {activeReport.awayScore} {activeReport.awayOrgTag}
+                    </p>
+                  )}
+                  <p className="mt-0.5 text-xs font-semibold text-slate-500">
+                    Match completed · standings updated · {activeReport.totalGames} game{activeReport.totalGames !== 1 ? "s" : ""} recorded
+                  </p>
+                </div>
+                <button
+                  onClick={resetToNew}
+                  className="rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-4 py-2 text-sm font-black uppercase text-cyan-100 transition hover:bg-cyan-300/20"
+                >
+                  Report Another Match
+                </button>
+              </div>
+            </div>
+
+            {/* Opening a completed report used to show only this score card,
+                with no way to see what was actually recorded. The published
+                rows are shown read-only instead. */}
+            <div className="rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
+              <p className="text-xs font-semibold text-slate-400">
+                These stats are published and cannot be edited here — the database keeps a completed
+                report as the record of the result. To correct them, cancel this report and file a new
+                one for the match.
+              </p>
+            </div>
+
+            {doneGames.length > 0 ? (
+              <>
+                {doneGames.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {doneGames.map((g, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setActiveGameIdx(idx)}
+                        aria-current={activeGameIdx === idx || undefined}
+                        className={cn(
+                          "rounded-lg border px-3 py-1.5 text-xs font-black uppercase transition",
+                          activeGameIdx === idx
+                            ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100"
+                            : "border-white/10 bg-white/[0.04] text-slate-400 hover:text-slate-200",
+                        )}
+                      >
+                        Game {g.gameNumber}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(17rem,22rem)]">
+                  {uploadedUrls.length > 0 && (
+                    <aside className="min-w-0 2xl:order-last 2xl:sticky 2xl:top-4 2xl:self-start">
+                      <ReviewScreenshotPane
+                        urls={uploadedUrls}
+                        activeIndex={activeGameIdx}
+                        onSelect={setActiveGameIdx}
+                      />
+                    </aside>
+                  )}
+                  <div className="grid min-w-0 gap-4">
+                    {(["home", "away"] as const).map((side) => {
+                      const sideOrg = side === "home" ? homeOrg : awayOrg;
+                      const rows = (doneGames[activeGameIdx]?.players ?? [])
+                        .map((player, globalIdx) => ({ player, globalIdx }))
+                        .filter(({ player }) => player.side === side);
+
+                      return (
+                        <TeamStatEditor
+                          key={side}
+                          readOnly
+                          side={side}
+                          teamName={sideOrg?.name ?? side}
+                          rows={rows}
+                          roster={[]}
+                          roles={ROLES}
+                          isWinner={doneGames[activeGameIdx]?.winningSide === side}
+                          onSetWinner={() => {}}
+                          onChange={() => {}}
+                          onRemove={() => {}}
+                          onAdd={() => {}}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="rounded-xl border border-white/8 bg-slate-950/60 px-4 py-6 text-center text-sm font-semibold text-slate-500">
+                No published stat rows found for this report.
               </p>
             )}
-            <p className="mt-1 text-sm text-slate-400">
-              Match marked completed · Standings updated · {activeReport.totalGames} game{activeReport.totalGames !== 1 ? "s" : ""} recorded
-            </p>
-            <button
-              onClick={resetToNew}
-              className="mt-6 rounded-xl border border-cyan-300/35 bg-cyan-300/15 px-5 py-2.5 text-sm font-black uppercase text-cyan-100"
-            >
-              Report Another Match
-            </button>
           </div>
         )}
       </div>

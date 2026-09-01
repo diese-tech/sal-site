@@ -57,6 +57,7 @@ export function TeamStatEditor({
   onChange,
   onRemove,
   onAdd,
+  readOnly = false,
 }: {
   teamName: string;
   side: "home" | "away";
@@ -68,6 +69,8 @@ export function TeamStatEditor({
   onChange: (globalIdx: number, patch: Partial<TeamStatPlayer>) => void;
   onRemove: (globalIdx: number) => void;
   onAdd: () => void;
+  /** Published reports are shown through the same grid, but not editable. */
+  readOnly?: boolean;
 }) {
   const unmatchedCount = rows.filter(({ player }) => player.ign.trim() && !player.playerId).length;
 
@@ -86,7 +89,7 @@ export function TeamStatEditor({
       >
         <div className="flex min-w-0 items-center gap-2">
           <h3 className="truncate text-sm font-black uppercase text-white">{teamName}</h3>
-          {unmatchedCount > 0 && (
+          {!readOnly && unmatchedCount > 0 && (
             <span className="rounded border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-[0.55rem] font-black uppercase text-amber-300">
               {unmatchedCount} unlinked
             </span>
@@ -94,19 +97,27 @@ export function TeamStatEditor({
         </div>
         {/* The winner is set from the team card itself — a separate "Winner:"
             toggle bar duplicated these two team names a third time on screen. */}
-        <button
-          type="button"
-          onClick={onSetWinner}
-          aria-pressed={isWinner}
-          className={cn(
-            "rounded-lg border px-2.5 py-1 text-[0.65rem] font-black uppercase transition",
-            isWinner
-              ? "border-emerald-400/50 bg-emerald-400/20 text-emerald-200"
-              : "border-white/10 bg-white/[0.04] text-slate-500 hover:border-white/25 hover:text-slate-200",
-          )}
-        >
-          {isWinner ? "✓ Winner" : "Mark winner"}
-        </button>
+        {readOnly ? (
+          isWinner && (
+            <span className="rounded-lg border border-emerald-400/50 bg-emerald-400/20 px-2.5 py-1 text-[0.65rem] font-black uppercase text-emerald-200">
+              ✓ Winner
+            </span>
+          )
+        ) : (
+          <button
+            type="button"
+            onClick={onSetWinner}
+            aria-pressed={isWinner}
+            className={cn(
+              "rounded-lg border px-2.5 py-1 text-[0.65rem] font-black uppercase transition",
+              isWinner
+                ? "border-emerald-400/50 bg-emerald-400/20 text-emerald-200"
+                : "border-white/10 bg-white/[0.04] text-slate-500 hover:border-white/25 hover:text-slate-200",
+            )}
+          >
+            {isWinner ? "✓ Winner" : "Mark winner"}
+          </button>
+        )}
       </header>
 
       {/* Column headings only make sense once every field is on one line. */}
@@ -134,6 +145,7 @@ export function TeamStatEditor({
               <Cell span="col-span-12 @xl:col-span-5" label="IGN">
                 <IgnInput
                   value={player.ign}
+                  disabled={readOnly}
                   label={`${who} IGN`}
                   onChange={(v) => onChange(globalIdx, { ign: v })}
                   roster={roster}
@@ -146,6 +158,7 @@ export function TeamStatEditor({
               <Cell span="col-span-5 @xl:col-span-3" label="Role">
                 <select
                   value={player.role ?? ""}
+                  disabled={readOnly}
                   aria-label={`${who} role`}
                   onChange={(e) => onChange(globalIdx, { role: e.target.value || undefined })}
                   className={SELECTLIKE}
@@ -158,6 +171,7 @@ export function TeamStatEditor({
               <Cell span="col-span-7 @xl:col-span-4" label="God">
                 <input
                   value={player.god ?? ""}
+                  disabled={readOnly}
                   aria-label={`${who} god`}
                   onChange={(e) => onChange(globalIdx, { god: e.target.value || undefined })}
                   placeholder="God"
@@ -168,24 +182,24 @@ export function TeamStatEditor({
               </Cell>
 
               <Cell span="col-span-2" label="K">
-                <StatInput className="w-full" label={`${who} kills`} value={player.kills} onChange={(v) => onChange(globalIdx, { kills: v })} />
+                <StatInput disabled={readOnly} className="w-full" label={`${who} kills`} value={player.kills} onChange={(v) => onChange(globalIdx, { kills: v })} />
               </Cell>
               <Cell span="col-span-2" label="D">
-                <StatInput className="w-full" label={`${who} deaths`} value={player.deaths} onChange={(v) => onChange(globalIdx, { deaths: v })} />
+                <StatInput disabled={readOnly} className="w-full" label={`${who} deaths`} value={player.deaths} onChange={(v) => onChange(globalIdx, { deaths: v })} />
               </Cell>
               <Cell span="col-span-2" label="A">
-                <StatInput className="w-full" label={`${who} assists`} value={player.assists} onChange={(v) => onChange(globalIdx, { assists: v })} />
+                <StatInput disabled={readOnly} className="w-full" label={`${who} assists`} value={player.assists} onChange={(v) => onChange(globalIdx, { assists: v })} />
               </Cell>
               <Cell span="col-span-3" label="DMG">
-                <StatInput className="w-full" label={`${who} damage dealt`} value={player.damageDealt} onChange={(v) => onChange(globalIdx, { damageDealt: v })} />
+                <StatInput disabled={readOnly} className="w-full" label={`${who} damage dealt`} value={player.damageDealt} onChange={(v) => onChange(globalIdx, { damageDealt: v })} />
               </Cell>
               <Cell span="col-span-3" label="MIT">
-                <StatInput className="w-full" label={`${who} damage mitigated`} value={player.damageMitigated} onChange={(v) => onChange(globalIdx, { damageMitigated: v })} />
+                <StatInput disabled={readOnly} className="w-full" label={`${who} damage mitigated`} value={player.damageMitigated} onChange={(v) => onChange(globalIdx, { damageMitigated: v })} />
               </Cell>
 
               {/* Out of flow while wrapped (it would otherwise cost a whole
                   line); a normal grid cell once the row is on one line. */}
-              <button
+              {!readOnly && <button
                 type="button"
                 onClick={() => onRemove(globalIdx)}
                 aria-label={`Remove ${who}`}
@@ -196,13 +210,13 @@ export function TeamStatEditor({
                 )}
               >
                 ×
-              </button>
+              </button>}
             </div>
           );
         })}
       </div>
 
-      <div className="border-t border-white/5 px-4 py-2">
+      {!readOnly && <div className="border-t border-white/5 px-4 py-2">
         <button
           type="button"
           onClick={onAdd}
@@ -210,7 +224,7 @@ export function TeamStatEditor({
         >
           + Add player row
         </button>
-      </div>
+      </div>}
     </section>
   );
 }

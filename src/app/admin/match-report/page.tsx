@@ -3,6 +3,7 @@ import { getAdminLeagueData } from "@/lib/league-data";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { MatchReportClient } from "@/components/admin/MatchReportClient";
 import type { ExtractedGame, MatchReportWithMatch } from "@/types/match-report";
+import { groupPublishedStats, groupRowsByReport, type PublishedStatRow } from "@/lib/match-report-published";
 import type { DivisionId } from "@/types/league";
 
 export const metadata = { title: "Match Report - SAL Admin" };
@@ -18,6 +19,20 @@ async function getReports(): Promise<MatchReportWithMatch[]> {
 
   const orgMap = new Map(leagueData.orgs.map((o) => [o.id, o]));
   const matchMap = new Map(leagueData.matches.map((m) => [m.id, m]));
+
+  // Completed reports are displayed from their published stat rows, so the
+  // admin can see what is actually on record rather than a bare score.
+  const doneIds = (rows ?? []).filter((r) => r.status === "done").map((r) => r.id as string);
+  const { data: statRows } = doneIds.length > 0
+    ? await supabase
+      .from("player_match_stats")
+      .select(
+        "match_report_id, game_number, player_ign, player_id, org_id, won, kills, deaths, assists, god_played, role, damage_dealt, damage_mitigated",
+      )
+      .in("match_report_id", doneIds)
+      .order("game_number", { ascending: true })
+    : { data: [] };
+  const statsByReport = groupRowsByReport((statRows ?? []) as unknown as PublishedStatRow[]);
 
   return (rows ?? []).map((row) => {
     const match = matchMap.get(row.match_id as string);
@@ -35,6 +50,9 @@ async function getReports(): Promise<MatchReportWithMatch[]> {
       totalGames: row.total_games as number | undefined,
       screenshotUrls: (row.screenshot_urls as string[]) ?? [],
       extractedData: (row.extracted_data as ExtractedGame[] | null) ?? undefined,
+      publishedGames: statsByReport.has(row.id as string)
+        ? groupPublishedStats(statsByReport.get(row.id as string)!, match?.homeOrgId ?? "")
+        : undefined,
       createdAt: row.created_at as string,
       reviewedAt: row.reviewed_at as string | undefined,
       reviewedBy: row.reviewed_by as string | undefined,

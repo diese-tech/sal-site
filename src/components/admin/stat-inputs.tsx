@@ -60,6 +60,7 @@ export function IgnInput({
   unmatched,
   label,
   className,
+  disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -68,6 +69,7 @@ export function IgnInput({
   unmatched?: boolean;
   label?: string;
   className?: string;
+  disabled?: boolean;
 }) {
   const listId = useId();
   return (
@@ -77,6 +79,7 @@ export function IgnInput({
         value={value}
         list={listId}
         aria-label={label}
+        disabled={disabled}
         // An unmatched IGN cannot publish to official stats, so flag it here
         // rather than letting it fail at approval time.
         aria-invalid={unmatched || undefined}
