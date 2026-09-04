@@ -490,6 +490,13 @@ export function MatchReportClient({
       );
       return;
     }
+    // Never guess a revision: a default would either sail past the RPC's
+    // stale-revision check on a first-revision report or fail confusingly on
+    // any later one. If it is missing, the list is stale — reload instead.
+    if (typeof activeReport.revision !== "number") {
+      setMessage("This report's version is unknown — reload the page before correcting it.");
+      return;
+    }
 
     setBusy(true);
     setMessage("");
@@ -498,7 +505,7 @@ export function MatchReportClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          expectedRevision: activeReport.revision ?? 1,
+          expectedRevision: activeReport.revision,
           correctionKey,
           reason: correctionReason.trim(),
           games: games.map((g) => ({
