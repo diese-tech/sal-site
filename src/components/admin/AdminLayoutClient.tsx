@@ -52,7 +52,10 @@ const ADMIN_NAV_GROUPS: NavGroup[] = [
   },
   {
     title: "System",
-    items: [{ href: "/admin/audit", label: "Audit Log" }],
+    items: [
+      { href: "/admin/admins", label: "Admins" },
+      { href: "/admin/audit", label: "Audit Log" },
+    ],
   },
 ];
 
