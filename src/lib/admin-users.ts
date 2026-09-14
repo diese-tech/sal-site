@@ -59,6 +59,29 @@ export async function getAdminUsers(): Promise<AdminUserRow[]> {
 }
 
 /**
+ * Looks up one admin's CURRENT row — never the caller's session cookie.
+ * `sal_admin_session` embeds the role at sign-in time and is valid for 8
+ * hours with no server-side check against admin_users in between
+ * (verifyAdminSession only checks the signature and expiry). Every route in
+ * this file re-derives authorization from here instead of trusting
+ * `session.role`, so removing or demoting someone here takes effect on
+ * their very next request to this feature, not up to 8 hours later — and,
+ * critically, a just-demoted super admin can't use their still-valid cookie
+ * to call this same API and grant themselves the role back.
+ */
+export async function getAdminUser(discordId: string): Promise<AdminUserRow | null> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("admin_users")
+    .select("*")
+    .eq("discord_id", discordId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? mapRow(data as AdminUsersRow) : null;
+}
+
+/**
  * Adds a new admin, or updates the role of an existing one (upsert on the
  * `discord_id` primary key) — the one thing this repo's "give someone admin
  * access" process required a migration or a Supabase SQL editor session for.

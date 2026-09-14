@@ -2,15 +2,25 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getAdminRequestSession } from "@/lib/admin-auth";
 import { errorMessage, reportError } from "@/lib/error-monitor";
-import { AdminUsersError, getAdminUsers, removeAdminUser, upsertAdminUser } from "@/lib/admin-users";
+import { AdminUsersError, getAdminUser, getAdminUsers, removeAdminUser, upsertAdminUser } from "@/lib/admin-users";
 
 // Managing this table is managing who can reach every other /admin route, so
 // it's gated to super_admin — a plain admin can't grant themselves or anyone
 // else more access than they already have.
-function requireSuperAdmin(request: NextRequest) {
+//
+// Deliberately re-checks admin_users instead of trusting session.role.
+// sal_admin_session is a signed cookie good for 8 hours with no server-side
+// revocation list; the embedded role is a snapshot from sign-in, not a live
+// fact. If this trusted the cookie, revoking someone here wouldn't take
+// effect until their cookie expired — and worse, a super admin who was just
+// demoted or removed could still use their old cookie to call this same
+// endpoint and grant the role back to themselves.
+async function requireSuperAdmin(request: NextRequest) {
   const session = getAdminRequestSession(request);
-  if (session?.role !== "super_admin") return null;
-  return session;
+  if (!session) return null;
+  const current = await getAdminUser(session.discordId);
+  if (current?.role !== "super_admin") return null;
+  return { discordId: session.discordId };
 }
 
 const upsertSchema = z.object({
@@ -21,7 +31,7 @@ const upsertSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  if (!requireSuperAdmin(request)) {
+  if (!(await requireSuperAdmin(request))) {
     return NextResponse.json({ error: "Unauthorized. Superadmin required." }, { status: 403 });
   }
   const admins = await getAdminUsers();
@@ -29,7 +39,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = requireSuperAdmin(request);
+  const session = await requireSuperAdmin(request);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized. Superadmin required." }, { status: 403 });
   }
@@ -54,7 +64,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const session = requireSuperAdmin(request);
+  const session = await requireSuperAdmin(request);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized. Superadmin required." }, { status: 403 });
   }

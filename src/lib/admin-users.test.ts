@@ -5,7 +5,7 @@ vi.mock("@/lib/league-data", () => ({ writeAuditLog: vi.fn() }));
 
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { writeAuditLog } from "@/lib/league-data";
-import { AdminUsersError, removeAdminUser, upsertAdminUser } from "./admin-users";
+import { AdminUsersError, getAdminUser, removeAdminUser, upsertAdminUser } from "./admin-users";
 
 // Each `.from("admin_users")` call in the code under test gets its own chain
 // object with its own canned result, queued in call order via
@@ -178,5 +178,28 @@ describe("removeAdminUser", () => {
     await removeAdminUser("target-1", "99999999999999999");
 
     expect(deleteChain.delete).toHaveBeenCalled();
+  });
+});
+
+describe("getAdminUser", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  // This is what route.ts's requireSuperAdmin calls on every request instead
+  // of trusting session.role — it must reflect the row as it is right now,
+  // demotions and removals included.
+  it("returns the current row for an existing admin", async () => {
+    mockClient(chain({ data: { ...newRow, role: "super_admin" }, error: null }));
+
+    const result = await getAdminUser(newRow.discord_id);
+
+    expect(result).toMatchObject({ discordId: newRow.discord_id, role: "super_admin" });
+  });
+
+  it("returns null once the admin has been removed", async () => {
+    mockClient(chain({ data: null, error: null }));
+
+    const result = await getAdminUser("99999999999999999");
+
+    expect(result).toBeNull();
   });
 });
