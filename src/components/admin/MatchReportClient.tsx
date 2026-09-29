@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LeagueData, Match } from "@/types/league";
 import type { ExtractedGame, ExtractedPlayer, MatchReportWithMatch } from "@/types/match-report";
@@ -106,6 +106,13 @@ export function MatchReportClient({
 
   const [reports, setReports] = useState<MatchReportWithMatch[]>(initialReports);
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
+  // The report the admin is looking at right now. Async continuations compare
+  // against it so a slow response cannot pull them back to a report they have
+  // since navigated away from.
+  const currentReportIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    currentReportIdRef.current = activeReportId;
+  }, [activeReportId]);
   const [step, setStep] = useState<Step>("select");
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [matchSearch, setMatchSearch] = useState("");
@@ -503,9 +510,14 @@ export function MatchReportClient({
   // version cannot be loaded, leave the report rather than present old values.
   async function cancelCorrection() {
     if (!activeReportId) return;
+    const reportId = activeReportId;
     setBusy(true);
     const fresh = await refreshReports();
-    const updated = fresh?.find((r) => r.id === activeReportId);
+    if (currentReportIdRef.current !== reportId) {
+      setBusy(false);
+      return;
+    }
+    const updated = fresh?.find((r) => r.id === reportId);
     if (updated) {
       openExistingReport(updated);
     } else {
@@ -571,8 +583,16 @@ export function MatchReportClient({
         ok?: boolean; error?: string; applied?: boolean; code?: string;
       };
       if (!res.ok) { setMessage(json.error ?? "Correction failed."); setBusy(false); return; }
+      const reportId = activeReportId;
       const fresh = await refreshReports();
-      const updated = fresh?.find((r) => r.id === activeReportId);
+      if (currentReportIdRef.current !== reportId) {
+        // The admin moved to another screen while this was in flight; the
+        // correction is recorded, so just refresh server data and stay put.
+        router.refresh();
+        setBusy(false);
+        return;
+      }
+      const updated = fresh?.find((r) => r.id === reportId);
       // Show what is now on record, not the locally edited copy, so the
       // read-only view can never present unpublished values as official.
       if (!updated) {
