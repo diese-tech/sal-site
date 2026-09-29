@@ -13,11 +13,30 @@ export type MatchReportRow = Record<string, unknown>;
 const PUBLISHED_STAT_COLUMNS =
   "match_report_id, game_number, player_ign, player_id, org_id, won, kills, deaths, assists, god_played, role, damage_dealt, damage_mitigated";
 
-// Requested page size. PostgREST silently truncates any response at its
-// `max_rows` cap (1000 by default) without an error, so a single query cannot be
-// trusted to return every row. We never assume a page is the last one because it
-// was short: the cap may be lower than this, so paging stops only on an empty page.
-const STATS_PAGE_SIZE = 1000;
+// Reports fetched per query. A report holds at most a few dozen stat rows, so a
+// chunk sits far below PostgREST's `max_rows` cap (1000); the truncation check
+// below is what actually guarantees completeness rather than this arithmetic.
+const REPORTS_PER_QUERY = 10;
+
+/**
+ * One atomic read of the published stat rows for `reportIds`, or `null` when the
+ * server truncated it. PostgREST cuts a response at `max_rows` without an error,
+ * but `count: "exact"` reports the true total, so a shortfall is detectable.
+ */
+async function readStatsChunk(
+  supabase: SupabaseClient<Database>,
+  reportIds: string[],
+): Promise<PublishedStatRow[] | null> {
+  const { data, count, error } = await supabase
+    .from("player_match_stats")
+    .select(PUBLISHED_STAT_COLUMNS, { count: "exact" })
+    .in("match_report_id", reportIds)
+    .order("game_number", { ascending: true });
+
+  if (error) throw new Error(`Unable to load published match stats: ${error.message}`);
+  const rows = (data ?? []) as PublishedStatRow[];
+  return count === null || rows.length >= count ? rows : null;
+}
 
 /**
  * Completed reports are displayed from their published stat rows, so the admin
@@ -25,9 +44,12 @@ const STATS_PAGE_SIZE = 1000;
  * `extracted_data` never receives corrections, so it must not be the source.
  *
  * The rows must be complete: a correction submits exactly what the editor holds
- * as the full result, so a silently truncated set would make a correction delete
- * the omitted official stats. Rows are therefore paged in a total order until
- * exhausted, and any query error throws rather than yielding a partial set.
+ * as the full result, so a missing row would make it delete that official stat.
+ * Each read is a single query over a small set of reports, so it is one
+ * consistent snapshot. Offset paging over every report is deliberately avoided:
+ * a concurrent correction elsewhere shifts the offsets and silently skips or
+ * duplicates rows. A truncated read is retried per report, and a report whose own
+ * rows cannot be read completely fails loudly instead of yielding a partial set.
  */
 export async function fetchPublishedStatsByReport(
   supabase: SupabaseClient<Database>,
@@ -36,25 +58,21 @@ export async function fetchPublishedStatsByReport(
   const doneIds = rows.filter((r) => r.status === "done").map((r) => r.id as string);
   if (doneIds.length === 0) return new Map();
 
-  const collected: PublishedStatRow[] = [];
-  for (let from = 0; ; ) {
-    const { data, error } = await supabase
-      .from("player_match_stats")
-      .select(PUBLISHED_STAT_COLUMNS)
-      .in("match_report_id", doneIds)
-      .order("match_report_id", { ascending: true })
-      .order("game_number", { ascending: true })
-      .order("player_id", { ascending: true })
-      .order("player_ign", { ascending: true })
-      .range(from, from + STATS_PAGE_SIZE - 1);
-
-    if (error) throw new Error(`Unable to load published match stats: ${error.message}`);
-    if (!data || data.length === 0) break;
-
-    collected.push(...(data as PublishedStatRow[]));
-    from += data.length;
+  const chunks: string[][] = [];
+  for (let i = 0; i < doneIds.length; i += REPORTS_PER_QUERY) {
+    chunks.push(doneIds.slice(i, i + REPORTS_PER_QUERY));
   }
 
+  const readComplete = async (ids: string[]): Promise<PublishedStatRow[]> => {
+    const chunk = await readStatsChunk(supabase, ids);
+    if (chunk) return chunk;
+    if (ids.length === 1) {
+      throw new Error(`Published stats for report ${ids[0]} exceed the API row limit and cannot be loaded completely`);
+    }
+    return (await Promise.all(ids.map((id) => readComplete([id])))).flat();
+  };
+
+  const collected = (await Promise.all(chunks.map(readComplete))).flat();
   return groupRowsByReport(collected);
 }
 

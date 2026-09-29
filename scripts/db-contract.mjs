@@ -97,11 +97,15 @@ if (
 ) {
   throw new Error('Pinned commit contract does not match db-contract.lock.json');
 }
-if (releaseContractText === null || releaseTypes === null) {
+if (releaseContractText === null && releaseTypes === null) {
   console.warn(
     `::warning::Release tag ${lock.release} is not published in ${lock.repository}; ` +
       `verified against pinned commit ${lock.commit} only.`,
   );
+} else if (releaseContractText === null || releaseTypes === null) {
+  // One artifact resolves and the other 404s: a malformed or half-published tag,
+  // not an absent one, so it must not be waved through.
+  throw new Error(`Database release tag ${lock.release} is only partially published`);
 } else if (
   JSON.stringify(JSON.parse(releaseContractText)) !== JSON.stringify(contract) ||
   releaseTypes !== commitTypes

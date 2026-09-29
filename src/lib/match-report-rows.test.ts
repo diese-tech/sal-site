@@ -129,63 +129,83 @@ describe("mapMatchReportRow", () => {
 });
 
 /**
- * Stands in for PostgREST: honours `.range()` but, like the real server, silently
- * truncates every response at `maxRows`.
+ * Stands in for PostgREST: filters by `.in()` and, like the real server, silently
+ * truncates every response at `maxRows` while still reporting the true total in
+ * `count`. Records the report ids each query asked for.
  */
 function fakeStatsClient(dataset: PublishedStatRow[], maxRows: number, error?: { message: string }) {
-  const ranges: Array<[number, number]> = [];
+  const queries: string[][] = [];
   const client = {
     from: () => {
-      let window: [number, number] = [0, Number.MAX_SAFE_INTEGER];
+      let ids: string[] = [];
       const builder = {
         select: () => builder,
-        in: () => builder,
         order: () => builder,
-        range: (from: number, to: number) => {
-          window = [from, to];
-          ranges.push(window);
+        in: (_column: string, values: string[]) => {
+          ids = values;
+          queries.push(values);
           return builder;
         },
         then: (resolve: (value: unknown) => unknown) => {
-          const slice = dataset.slice(window[0], window[1] + 1).slice(0, maxRows);
-          return Promise.resolve(error ? { data: null, error } : { data: slice, error: null }).then(resolve);
+          const matching = dataset.filter((r) => ids.includes(r.match_report_id));
+          return Promise.resolve(
+            error
+              ? { data: null, count: null, error }
+              : { data: matching.slice(0, maxRows), count: matching.length, error: null },
+          ).then(resolve);
         },
       };
       return builder;
     },
   };
-  return { supabase: client as unknown as SupabaseClient<Database>, ranges };
+  return { supabase: client as unknown as SupabaseClient<Database>, queries };
 }
 
 describe("fetchPublishedStatsByReport", () => {
-  const doneRows = [row({ status: "done" })];
-  const manyStats = (count: number) =>
-    Array.from({ length: count }, (_, i) => statRow({ game_number: 1 + Math.floor(i / 10), player_ign: `P${i}` }));
+  const reportRows = (n: number) => Array.from({ length: n }, (_, i) => row({ id: `report-${i}`, status: "done" }));
+  const statsFor = (reportId: string, count: number) =>
+    Array.from({ length: count }, (_, i) =>
+      statRow({ match_report_id: reportId, game_number: 1 + Math.floor(i / 10), player_ign: `${reportId}-P${i}` }),
+    );
 
-  it("returns every row when the server caps responses below the total", async () => {
-    const { supabase, ranges } = fakeStatsClient(manyStats(45), 10);
-    const stats = await fetchPublishedStatsByReport(supabase, doneRows);
+  it("returns every report's rows across several chunked queries", async () => {
+    const reports = reportRows(25);
+    const dataset = reports.flatMap((r) => statsFor(r.id as string, 20));
+    const { supabase, queries } = fakeStatsClient(dataset, 1000);
+    const stats = await fetchPublishedStatsByReport(supabase, reports);
 
-    expect(stats.get(REPORT_ID)).toHaveLength(45);
-    expect(ranges.length).toBeGreaterThan(1);
+    expect(stats.size).toBe(25);
+    expect([...stats.values()].every((rowsForReport) => rowsForReport.length === 20)).toBe(true);
+    expect(queries.length).toBe(3);
   });
 
-  it("does not stop at a short page, since the server cap may be lower than the page size", async () => {
-    // The cap (10) is far below the requested page size, so every page is "short".
-    const { supabase } = fakeStatsClient(manyStats(25), 10);
-    expect((await fetchPublishedStatsByReport(supabase, doneRows)).get(REPORT_ID)).toHaveLength(25);
+  it("re-reads a truncated chunk report by report rather than accepting a partial set", async () => {
+    const reports = reportRows(3);
+    const dataset = reports.flatMap((r) => statsFor(r.id as string, 20));
+    // The cap (25) cuts any multi-report chunk short but fits a single report.
+    const { supabase, queries } = fakeStatsClient(dataset, 25);
+    const stats = await fetchPublishedStatsByReport(supabase, reports);
+
+    expect([...stats.values()].map((v) => v.length)).toEqual([20, 20, 20]);
+    expect(queries.some((ids) => ids.length === 1)).toBe(true);
+  });
+
+  it("throws when a single report cannot be read completely", async () => {
+    const reports = reportRows(1);
+    const { supabase } = fakeStatsClient(statsFor("report-0", 30), 10);
+    await expect(fetchPublishedStatsByReport(supabase, reports)).rejects.toThrow(/cannot be loaded completely/);
   });
 
   it("skips the query entirely when nothing is completed", async () => {
-    const { supabase, ranges } = fakeStatsClient(manyStats(5), 10);
+    const { supabase, queries } = fakeStatsClient(statsFor("report-0", 5), 1000);
     const stats = await fetchPublishedStatsByReport(supabase, [row({ status: "review" })]);
 
     expect(stats.size).toBe(0);
-    expect(ranges).toHaveLength(0);
+    expect(queries).toHaveLength(0);
   });
 
   it("throws instead of returning a partial set when a query fails", async () => {
-    const { supabase } = fakeStatsClient(manyStats(5), 10, { message: "boom" });
-    await expect(fetchPublishedStatsByReport(supabase, doneRows)).rejects.toThrow(/boom/);
+    const { supabase } = fakeStatsClient(statsFor("report-0", 5), 1000, { message: "boom" });
+    await expect(fetchPublishedStatsByReport(supabase, reportRows(1))).rejects.toThrow(/boom/);
   });
 });
