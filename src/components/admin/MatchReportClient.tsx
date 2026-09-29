@@ -1066,7 +1066,7 @@ export function MatchReportClient({
 
             {doneGames.length > 0 ? (
               <>
-                {doneGames.length > 1 && (
+                {(doneGames.length > 1 || correcting) && (
                   <div className="flex flex-wrap items-center gap-1.5">
                     {doneGames.map((g, idx) => (
                       <button
@@ -1083,6 +1083,28 @@ export function MatchReportClient({
                         Game {g.gameNumber}
                       </button>
                     ))}
+                    {/* A correction can also fix the number of games, since the
+                        endpoint rewrites the whole series (1-5 games). */}
+                    {correcting && doneGames.length < 5 && (
+                      <button
+                        onClick={addGame}
+                        disabled={busy}
+                        className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs font-black uppercase text-slate-500 transition hover:text-slate-200 disabled:opacity-50"
+                      >
+                        + Game
+                      </button>
+                    )}
+                    {correcting && doneGames.length > 1 && (
+                      <button
+                        onClick={removeLastGame}
+                        disabled={busy}
+                        aria-label={`Remove game ${doneGames.length}`}
+                        title={`Remove game ${doneGames.length}`}
+                        className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs font-black uppercase text-slate-600 transition hover:border-red-400/30 hover:text-red-300 disabled:opacity-50"
+                      >
+                        −
+                      </button>
+                    )}
                   </div>
                 )}
 

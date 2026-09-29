@@ -34,8 +34,11 @@ async function readStatsChunk(
     .order("game_number", { ascending: true });
 
   if (error) throw new Error(`Unable to load published match stats: ${error.message}`);
+  // The exact count is the only completeness check, so a response without one
+  // (no usable Content-Range) fails closed instead of being trusted as complete.
+  if (count === null) throw new Error("Unable to verify that published match stats were loaded completely");
   const rows = (data ?? []) as PublishedStatRow[];
-  return count === null || rows.length >= count ? rows : null;
+  return rows.length >= count ? rows : null;
 }
 
 /**

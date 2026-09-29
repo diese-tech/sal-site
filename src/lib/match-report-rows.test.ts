@@ -133,7 +133,12 @@ describe("mapMatchReportRow", () => {
  * truncates every response at `maxRows` while still reporting the true total in
  * `count`. Records the report ids each query asked for.
  */
-function fakeStatsClient(dataset: PublishedStatRow[], maxRows: number, error?: { message: string }) {
+function fakeStatsClient(
+  dataset: PublishedStatRow[],
+  maxRows: number,
+  error?: { message: string },
+  options: { omitCount?: boolean } = {},
+) {
   const queries: string[][] = [];
   const client = {
     from: () => {
@@ -151,7 +156,7 @@ function fakeStatsClient(dataset: PublishedStatRow[], maxRows: number, error?: {
           return Promise.resolve(
             error
               ? { data: null, count: null, error }
-              : { data: matching.slice(0, maxRows), count: matching.length, error: null },
+              : { data: matching.slice(0, maxRows), count: options.omitCount ? null : matching.length, error: null },
           ).then(resolve);
         },
       };
@@ -194,6 +199,12 @@ describe("fetchPublishedStatsByReport", () => {
     const reports = reportRows(1);
     const { supabase } = fakeStatsClient(statsFor("report-0", 30), 10);
     await expect(fetchPublishedStatsByReport(supabase, reports)).rejects.toThrow(/cannot be loaded completely/);
+  });
+
+  it("fails closed when the response carries no exact count", async () => {
+    const reports = reportRows(1);
+    const { supabase } = fakeStatsClient(statsFor("report-0", 5), 1000, undefined, { omitCount: true });
+    await expect(fetchPublishedStatsByReport(supabase, reports)).rejects.toThrow(/verify/);
   });
 
   it("skips the query entirely when nothing is completed", async () => {
