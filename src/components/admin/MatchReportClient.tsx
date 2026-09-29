@@ -497,6 +497,24 @@ export function MatchReportClient({
     setBusy(false);
   }
 
+  // Cancelling must show what is on record now, not the snapshot this screen
+  // loaded: after a stale-revision conflict, or a request that committed but
+  // whose response was lost, that snapshot is out of date. If the current
+  // version cannot be loaded, leave the report rather than present old values.
+  async function cancelCorrection() {
+    if (!activeReportId) return;
+    setBusy(true);
+    const fresh = await refreshReports();
+    const updated = fresh?.find((r) => r.id === activeReportId);
+    if (updated) {
+      openExistingReport(updated);
+    } else {
+      resetToNew();
+      setMessage("The current version of that report could not be loaded. Reload the page and open it again.");
+    }
+    setBusy(false);
+  }
+
   async function handleCorrection() {
     if (!activeReportId || !activeReport) return;
     if (!correctionReason.trim()) {
@@ -1069,11 +1087,7 @@ export function MatchReportClient({
                     {busy ? "Publishing…" : "Publish Correction"}
                   </button>
                   <button
-                    onClick={() => {
-                      exitCorrection();
-                      // Drop the edits and show what is actually on record again.
-                      openExistingReport(activeReport);
-                    }}
+                    onClick={() => void cancelCorrection()}
                     disabled={busy}
                     className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black uppercase text-slate-300 transition hover:text-white disabled:opacity-50"
                   >
