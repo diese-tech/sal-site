@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LeagueData, Match } from "@/types/league";
 import type { ExtractedGame, ExtractedPlayer, MatchReportWithMatch } from "@/types/match-report";
@@ -106,6 +106,13 @@ export function MatchReportClient({
 
   const [reports, setReports] = useState<MatchReportWithMatch[]>(initialReports);
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
+  // The report the admin is looking at right now. Async continuations compare
+  // against it so a slow response cannot pull them back to a report they have
+  // since navigated away from.
+  const currentReportIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    currentReportIdRef.current = activeReportId;
+  }, [activeReportId]);
   const [step, setStep] = useState<Step>("select");
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [matchSearch, setMatchSearch] = useState("");
@@ -119,6 +126,11 @@ export function MatchReportClient({
   // The report list is navigation, not part of the task. Once a report is
   // open it competes with the editor for width, so it can be folded away.
   const [listOpen, setListOpen] = useState(true);
+  // Correcting a published report is a separate, deliberate mode: it needs a
+  // reason, carries the revision the admin loaded, and goes to its own RPC.
+  const [correcting, setCorrecting] = useState(false);
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [correctionKey, setCorrectionKey] = useState("");
 
   const activeReport = reports.find((r) => r.id === activeReportId) ?? null;
   const orgMap = new Map(data.orgs.map((o) => [o.id, o]));
@@ -151,9 +163,28 @@ export function MatchReportClient({
     setGames([]);
     setActiveGameIdx(0);
     setMessage("");
+    exitCorrection();
   }
 
-  function toReviewGames(extracted: ExtractedGame[]): ReviewGame[] {
+  function exitCorrection() {
+    setCorrecting(false);
+    setCorrectionReason("");
+    setCorrectionKey("");
+  }
+
+  // One key per correction attempt, so a resend after an uncertain response is
+  // recognised as the same correction rather than applied twice.
+  function beginCorrection() {
+    setCorrectionKey(crypto.randomUUID());
+    setCorrectionReason("");
+    setCorrecting(true);
+    setMessage("");
+  }
+
+  // `inferIdentity` is off for published rows: they carry the identity that was
+  // recorded, and guessing one from today's IGN list could bind official stats
+  // to a different player who now holds that name.
+  function toReviewGames(extracted: ExtractedGame[], inferIdentity = true): ReviewGame[] {
     return extracted.map((g) => ({
       gameNumber: g.gameNumber,
       winningSide: g.winningSide === "away" ? "away" : "home",
@@ -163,7 +194,7 @@ export function MatchReportClient({
         // drop the id (name changed since submission) or bind the row to a
         // different player who now holds that IGN. IGN lookup is only the
         // fallback for extractions that were never host-validated.
-        if (p.playerId) return { ...p };
+        if (p.playerId || !inferIdentity) return { ...p };
         const matched = data.players.find((pl) => pl.ign.toLowerCase() === p.ign.toLowerCase());
         return { ...p, playerId: matched?.id };
       }),
@@ -184,8 +215,9 @@ export function MatchReportClient({
     setMessage("");
 
     if (report.status === "done") {
-      setGames(report.publishedGames?.length ? toReviewGames(report.publishedGames) : []);
+      setGames(report.publishedGames?.length ? toReviewGames(report.publishedGames, false) : []);
       setActiveGameIdx(0);
+      exitCorrection();
       setStep("done");
       return;
     }
@@ -227,12 +259,16 @@ export function MatchReportClient({
     setBusy(false);
   }
 
-  async function refreshReports() {
+  async function refreshReports(): Promise<MatchReportWithMatch[] | null> {
     try {
       const res = await fetch("/api/admin/match-reports");
       const json = await res.json() as { reports?: MatchReportWithMatch[] };
-      if (json.reports) setReports(json.reports);
+      if (json.reports) {
+        setReports(json.reports);
+        return json.reports;
+      }
     } catch { /* silent */ }
+    return null;
   }
 
   // ── Step 2: File handling ───────────────────────────────────────────────────
@@ -380,10 +416,23 @@ export function MatchReportClient({
 
   function addGame() {
     if (!selectedMatch) return;
+    // While correcting a published series, start from the lineup already on
+    // record: the current active roster may no longer match who actually played.
+    const lastLineup = step === "done" ? games[games.length - 1]?.players : undefined;
     const newGame: ReviewGame = {
       gameNumber: games.length + 1,
       winningSide: "home",
-      players: initBlankGamesValue()[0]?.players ?? [],
+      players: lastLineup?.length
+        ? lastLineup.map((p) => ({
+            ign: p.ign,
+            playerId: p.playerId,
+            side: p.side,
+            role: p.role,
+            kills: 0,
+            deaths: 0,
+            assists: 0,
+          }))
+        : initBlankGamesValue()[0]?.players ?? [],
     };
     setGames((prev) => [...prev, newGame]);
     setActiveGameIdx(games.length);
@@ -451,6 +500,128 @@ export function MatchReportClient({
       router.refresh();
     } catch {
       setMessage("Network error.");
+    }
+    setBusy(false);
+  }
+
+  // Cancelling must show what is on record now, not the snapshot this screen
+  // loaded: after a stale-revision conflict, or a request that committed but
+  // whose response was lost, that snapshot is out of date. If the current
+  // version cannot be loaded, leave the report rather than present old values.
+  async function cancelCorrection() {
+    if (!activeReportId) return;
+    const reportId = activeReportId;
+    setBusy(true);
+    const fresh = await refreshReports();
+    if (currentReportIdRef.current !== reportId) {
+      setBusy(false);
+      return;
+    }
+    const updated = fresh?.find((r) => r.id === reportId);
+    if (updated) {
+      openExistingReport(updated);
+    } else {
+      resetToNew();
+      setMessage("The current version of that report could not be loaded. Reload the page and open it again.");
+    }
+    setBusy(false);
+  }
+
+  async function handleCorrection() {
+    if (!activeReportId || !activeReport) return;
+    if (!correctionReason.trim()) {
+      setMessage("Describe why this published result is being corrected.");
+      return;
+    }
+    const unlinked = games.flatMap((g) => g.players).filter((p) => p.ign.trim() && !p.playerId);
+    if (unlinked.length > 0) {
+      setMessage(
+        `Link every player before correcting — unmatched: ${unlinked.map((p) => p.ign).join(", ")}.`,
+      );
+      return;
+    }
+    // Never guess a revision: a default would either sail past the RPC's
+    // stale-revision check on a first-revision report or fail confusingly on
+    // any later one. If it is missing, the list is stale — reload instead.
+    if (typeof activeReport.revision !== "number") {
+      setMessage("This report's version is unknown — reload the page before correcting it.");
+      return;
+    }
+
+    // Every path below runs after an await, so each one checks the admin is
+    // still on this report before touching shared screen state.
+    const reportId = activeReportId;
+    const stillOnReport = () => currentReportIdRef.current === reportId;
+
+    setBusy(true);
+    setMessage("");
+    try {
+      const res = await fetch(`/api/admin/match-reports/${reportId}/correct`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          expectedRevision: activeReport.revision,
+          correctionKey,
+          reason: correctionReason.trim(),
+          games: games.map((g) => ({
+            gameNumber: g.gameNumber,
+            winningSide: g.winningSide,
+            players: g.players
+              .filter((p) => p.ign.trim())
+              .map((p) => ({
+                playerIgn: p.ign,
+                playerId: p.playerId,
+                side: p.side,
+                won: p.side === g.winningSide,
+                kills: p.kills,
+                deaths: p.deaths,
+                assists: p.assists,
+                godPlayed: p.god,
+                role: p.role,
+                damageDealt: p.damageDealt,
+                damageMitigated: p.damageMitigated,
+              })),
+          })),
+        }),
+      });
+      const json = await res.json() as {
+        ok?: boolean; error?: string; applied?: boolean; code?: string;
+      };
+      if (!res.ok) {
+        if (stillOnReport()) setMessage(json.error ?? "Correction failed.");
+        setBusy(false);
+        return;
+      }
+      const fresh = await refreshReports();
+      if (!stillOnReport()) {
+        // The admin moved to another screen while this was in flight; the
+        // correction is recorded, so just refresh server data and stay put.
+        router.refresh();
+        setBusy(false);
+        return;
+      }
+      const updated = fresh?.find((r) => r.id === reportId);
+      // Show what is now on record, not the locally edited copy, so the
+      // read-only view can never present unpublished values as official.
+      if (!updated) {
+        // The correction is recorded but its result could not be loaded. Drop
+        // the local copy rather than leave edited values on screen as if they
+        // were official.
+        resetToNew();
+        setMessage("Correction published, but the updated report could not be loaded. Reload the page to see the recorded stats.");
+        router.refresh();
+        setBusy(false);
+        return;
+      }
+      openExistingReport(updated);
+      setMessage(
+        json.applied === false
+          ? "This correction was already recorded, so nothing changed a second time."
+          : "Correction published. Standings were recalculated.",
+      );
+      router.refresh();
+    } catch {
+      if (stillOnReport()) setMessage("Network error.");
     }
     setBusy(false);
   }
@@ -909,20 +1080,69 @@ export function MatchReportClient({
               </div>
             </div>
 
-            {/* Opening a completed report used to show only this score card,
-                with no way to see what was actually recorded. The published
-                rows are shown read-only instead. */}
-            <div className="rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
-              <p className="text-xs font-semibold text-slate-400">
-                These stats are published and cannot be edited here — the database keeps a completed
-                report as the record of the result. To correct them, cancel this report and file a new
-                one for the match.
-              </p>
-            </div>
+            {/* Approval is terminal, so repairing a published result is its
+                own deliberate mode: it needs a reason, names the revision the
+                admin loaded, and goes to the correction RPC. */}
+            {correcting ? (
+              <div className="space-y-3 rounded-xl border border-amber-300/30 bg-amber-300/[0.06] px-4 py-3">
+                <div>
+                  <p className="text-[0.65rem] font-black uppercase tracking-widest text-amber-200/80">
+                    Correcting a published result
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-slate-300">
+                    Edit the stats below, then publish. Official stats and standings are rewritten
+                    from what you submit, and the change is recorded against your admin identity.
+                  </p>
+                </div>
+                <label className="block">
+                  <span className="mb-1 block text-[0.6rem] font-black uppercase tracking-wider text-slate-400">
+                    Reason for the correction
+                  </span>
+                  <input
+                    value={correctionReason}
+                    onChange={(e) => setCorrectionReason(e.target.value)}
+                    maxLength={1000}
+                    placeholder="e.g. Game 2 kills were misread from the scoreboard"
+                    className="h-9 w-full rounded-lg border border-white/10 bg-black/35 px-2.5 text-sm font-semibold text-white placeholder-slate-600 transition focus:border-amber-300/50 focus:ring-2 focus:ring-amber-300/20 focus:outline-none"
+                  />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => void handleCorrection()}
+                    disabled={busy || !correctionReason.trim()}
+                    className="rounded-xl border border-amber-300/40 bg-amber-300/15 px-4 py-2 text-sm font-black uppercase text-amber-100 transition hover:bg-amber-300/20 disabled:opacity-50"
+                  >
+                    {busy ? "Publishing…" : "Publish Correction"}
+                  </button>
+                  <button
+                    onClick={() => void cancelCorrection()}
+                    disabled={busy}
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-black uppercase text-slate-300 transition hover:text-white disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
+                <p className="text-xs font-semibold text-slate-400">
+                  {selectedMatch
+                    ? "These stats are published. Correcting them rewrites official stats and recalculates standings, and every change is audited."
+                    : "This report's match is not in the loaded season, so its teams cannot be resolved and it cannot be corrected from here."}
+                </p>
+                <button
+                  onClick={beginCorrection}
+                  disabled={doneGames.length === 0 || !selectedMatch}
+                  className="rounded-lg border border-amber-300/35 bg-amber-300/10 px-3 py-1.5 text-[0.65rem] font-black uppercase text-amber-200 transition hover:bg-amber-300/20 disabled:opacity-40"
+                >
+                  Correct Published Stats
+                </button>
+              </div>
+            )}
 
             {doneGames.length > 0 ? (
               <>
-                {doneGames.length > 1 && (
+                {(doneGames.length > 1 || correcting) && (
                   <div className="flex flex-wrap items-center gap-1.5">
                     {doneGames.map((g, idx) => (
                       <button
@@ -939,6 +1159,28 @@ export function MatchReportClient({
                         Game {g.gameNumber}
                       </button>
                     ))}
+                    {/* A correction can also fix the number of games, since the
+                        endpoint rewrites the whole series (1-5 games). */}
+                    {correcting && doneGames.length < 5 && (
+                      <button
+                        onClick={addGame}
+                        disabled={busy}
+                        className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs font-black uppercase text-slate-500 transition hover:text-slate-200 disabled:opacity-50"
+                      >
+                        + Game
+                      </button>
+                    )}
+                    {correcting && doneGames.length > 1 && (
+                      <button
+                        onClick={removeLastGame}
+                        disabled={busy}
+                        aria-label={`Remove game ${doneGames.length}`}
+                        title={`Remove game ${doneGames.length}`}
+                        className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs font-black uppercase text-slate-600 transition hover:border-red-400/30 hover:text-red-300 disabled:opacity-50"
+                      >
+                        −
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -962,17 +1204,20 @@ export function MatchReportClient({
                       return (
                         <TeamStatEditor
                           key={side}
-                          readOnly
+                          readOnly={!correcting || busy}
                           side={side}
                           teamName={sideOrg?.name ?? side}
                           rows={rows}
-                          roster={[]}
+                          roster={(side === "home" ? homeRoster : awayRoster).map((pl) => ({
+                            id: pl.id,
+                            ign: pl.ign,
+                          }))}
                           roles={ROLES}
                           isWinner={doneGames[activeGameIdx]?.winningSide === side}
-                          onSetWinner={() => {}}
-                          onChange={() => {}}
-                          onRemove={() => {}}
-                          onAdd={() => {}}
+                          onSetWinner={() => setWinner(activeGameIdx, side)}
+                          onChange={(globalIdx, patch) => updatePlayer(activeGameIdx, globalIdx, patch)}
+                          onRemove={(globalIdx) => removePlayer(activeGameIdx, globalIdx)}
+                          onAdd={() => addPlayerToSide(activeGameIdx, side)}
                         />
                       );
                     })}

@@ -3,8 +3,8 @@ import { z } from "zod";
 import { isAdminRequest, getAdminRequestSession } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 import { getAdminLeagueData, LeagueDataUnavailableError } from "@/lib/league-data";
-import type { ExtractedGame, MatchReportWithMatch } from "@/types/match-report";
-import type { DivisionId } from "@/types/league";
+import type { MatchReportWithMatch } from "@/types/match-report";
+import { fetchPublishedStatsByReport, mapMatchReportRow } from "@/lib/match-report-rows";
 
 const createSchema = z.object({
   matchId: z.string().min(1),
@@ -35,37 +35,10 @@ export async function GET(request: NextRequest) {
   const orgMap = new Map(leagueData.orgs.map((o) => [o.id, o]));
   const matchMap = new Map(leagueData.matches.map((m) => [m.id, m]));
 
-  const reports: MatchReportWithMatch[] = (data ?? []).map((row) => {
-    const match = matchMap.get(row.match_id as string);
-    const homeOrg = orgMap.get(match?.homeOrgId ?? "");
-    const awayOrg = orgMap.get(match?.awayOrgId ?? "");
-    return {
-      id: row.id as string,
-      matchId: row.match_id as string,
-      seasonId: row.season_id as string,
-      divisionId: row.division_id as DivisionId,
-      status: row.status as MatchReportWithMatch["status"],
-      submittedBy: row.submitted_by as string,
-      homeScore: row.home_score as number | undefined,
-      awayScore: row.away_score as number | undefined,
-      totalGames: row.total_games as number | undefined,
-      screenshotUrls: (row.screenshot_urls as string[]) ?? [],
-      extractedData: (row.extracted_data as ExtractedGame[] | null) ?? undefined,
-      createdAt: row.created_at as string,
-      reviewedAt: row.reviewed_at as string | undefined,
-      reviewedBy: row.reviewed_by as string | undefined,
-      revision: row.revision ?? 1,
-      hostSubmittedAt: row.host_submitted_at ?? undefined,
-      homeOrgId: match?.homeOrgId ?? "",
-      homeOrgName: homeOrg?.name ?? match?.homeOrgId ?? "",
-      homeOrgTag: homeOrg?.tag ?? "",
-      awayOrgId: match?.awayOrgId ?? "",
-      awayOrgName: awayOrg?.name ?? match?.awayOrgId ?? "",
-      awayOrgTag: awayOrg?.tag ?? "",
-      matchDate: match?.scheduledDate ?? "",
-      week: match?.week ?? 0,
-    };
-  });
+  const statsByReport = await fetchPublishedStatsByReport(supabase, data ?? []);
+  const reports: MatchReportWithMatch[] = (data ?? []).map((row) =>
+    mapMatchReportRow(row, { orgMap, matchMap, statsByReport }),
+  );
 
   return NextResponse.json({ reports });
 }

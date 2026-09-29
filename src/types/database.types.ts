@@ -940,6 +940,59 @@ export type Database = {
         }
         Relationships: []
       }
+      match_report_corrections: {
+        Row: {
+          actor_discord_id: string
+          correction_key: string
+          created_at: string
+          expected_revision: number
+          id: string
+          match_report_id: string
+          new_value_json: Json
+          old_value_json: Json
+          reason: string
+          request_json: Json
+          result_json: Json
+          resulting_revision: number
+        }
+        Insert: {
+          actor_discord_id: string
+          correction_key: string
+          created_at?: string
+          expected_revision: number
+          id?: string
+          match_report_id: string
+          new_value_json: Json
+          old_value_json: Json
+          reason: string
+          request_json: Json
+          result_json: Json
+          resulting_revision: number
+        }
+        Update: {
+          actor_discord_id?: string
+          correction_key?: string
+          created_at?: string
+          expected_revision?: number
+          id?: string
+          match_report_id?: string
+          new_value_json?: Json
+          old_value_json?: Json
+          reason?: string
+          request_json?: Json
+          result_json?: Json
+          resulting_revision?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "match_report_corrections_match_report_id_fkey"
+            columns: ["match_report_id"]
+            isOneToOne: false
+            referencedRelation: "match_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       match_report_host_tokens: {
         Row: {
           consumed_at: string | null
@@ -2897,6 +2950,17 @@ export type Database = {
       }
       consume_match_report_host_token: {
         Args: { p_token_hash: string }
+        Returns: Json
+      }
+      correct_match_report_result: {
+        Args: {
+          p_actor_discord_id: string
+          p_correction_key: string
+          p_expected_revision: number
+          p_games: Json
+          p_match_report_id: string
+          p_reason: string
+        }
         Returns: Json
       }
       correct_scouter_game: {
