@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { mapMatchReportRow, type MatchReportRow, type MatchReportRowContext } from "@/lib/match-report-rows";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database.types";
+import {
+  fetchPublishedStatsByReport,
+  mapMatchReportRow,
+  type MatchReportRow,
+  type MatchReportRowContext,
+} from "@/lib/match-report-rows";
 import type { PublishedStatRow } from "@/lib/match-report-published";
 import type { DivisionId, Match, Org } from "@/types/league";
 
@@ -118,5 +125,67 @@ describe("mapMatchReportRow", () => {
     expect(mapped.homeOrgName).toBe("Home Org");
     expect(mapped.awayOrgTag).toBe("AWY");
     expect(mapped.week).toBe(3);
+  });
+});
+
+/**
+ * Stands in for PostgREST: honours `.range()` but, like the real server, silently
+ * truncates every response at `maxRows`.
+ */
+function fakeStatsClient(dataset: PublishedStatRow[], maxRows: number, error?: { message: string }) {
+  const ranges: Array<[number, number]> = [];
+  const client = {
+    from: () => {
+      let window: [number, number] = [0, Number.MAX_SAFE_INTEGER];
+      const builder = {
+        select: () => builder,
+        in: () => builder,
+        order: () => builder,
+        range: (from: number, to: number) => {
+          window = [from, to];
+          ranges.push(window);
+          return builder;
+        },
+        then: (resolve: (value: unknown) => unknown) => {
+          const slice = dataset.slice(window[0], window[1] + 1).slice(0, maxRows);
+          return Promise.resolve(error ? { data: null, error } : { data: slice, error: null }).then(resolve);
+        },
+      };
+      return builder;
+    },
+  };
+  return { supabase: client as unknown as SupabaseClient<Database>, ranges };
+}
+
+describe("fetchPublishedStatsByReport", () => {
+  const doneRows = [row({ status: "done" })];
+  const manyStats = (count: number) =>
+    Array.from({ length: count }, (_, i) => statRow({ game_number: 1 + Math.floor(i / 10), player_ign: `P${i}` }));
+
+  it("returns every row when the server caps responses below the total", async () => {
+    const { supabase, ranges } = fakeStatsClient(manyStats(45), 10);
+    const stats = await fetchPublishedStatsByReport(supabase, doneRows);
+
+    expect(stats.get(REPORT_ID)).toHaveLength(45);
+    expect(ranges.length).toBeGreaterThan(1);
+  });
+
+  it("does not stop at a short page, since the server cap may be lower than the page size", async () => {
+    // The cap (10) is far below the requested page size, so every page is "short".
+    const { supabase } = fakeStatsClient(manyStats(25), 10);
+    expect((await fetchPublishedStatsByReport(supabase, doneRows)).get(REPORT_ID)).toHaveLength(25);
+  });
+
+  it("skips the query entirely when nothing is completed", async () => {
+    const { supabase, ranges } = fakeStatsClient(manyStats(5), 10);
+    const stats = await fetchPublishedStatsByReport(supabase, [row({ status: "review" })]);
+
+    expect(stats.size).toBe(0);
+    expect(ranges).toHaveLength(0);
+  });
+
+  it("throws instead of returning a partial set when a query fails", async () => {
+    const { supabase } = fakeStatsClient(manyStats(5), 10, { message: "boom" });
+    await expect(fetchPublishedStatsByReport(supabase, doneRows)).rejects.toThrow(/boom/);
   });
 });

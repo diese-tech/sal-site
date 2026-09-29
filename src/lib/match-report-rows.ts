@@ -13,10 +13,21 @@ export type MatchReportRow = Record<string, unknown>;
 const PUBLISHED_STAT_COLUMNS =
   "match_report_id, game_number, player_ign, player_id, org_id, won, kills, deaths, assists, god_played, role, damage_dealt, damage_mitigated";
 
+// Requested page size. PostgREST silently truncates any response at its
+// `max_rows` cap (1000 by default) without an error, so a single query cannot be
+// trusted to return every row. We never assume a page is the last one because it
+// was short: the cap may be lower than this, so paging stops only on an empty page.
+const STATS_PAGE_SIZE = 1000;
+
 /**
  * Completed reports are displayed from their published stat rows, so the admin
  * sees what is actually on record rather than the original AI extraction.
  * `extracted_data` never receives corrections, so it must not be the source.
+ *
+ * The rows must be complete: a correction submits exactly what the editor holds
+ * as the full result, so a silently truncated set would make a correction delete
+ * the omitted official stats. Rows are therefore paged in a total order until
+ * exhausted, and any query error throws rather than yielding a partial set.
  */
 export async function fetchPublishedStatsByReport(
   supabase: SupabaseClient<Database>,
@@ -25,13 +36,26 @@ export async function fetchPublishedStatsByReport(
   const doneIds = rows.filter((r) => r.status === "done").map((r) => r.id as string);
   if (doneIds.length === 0) return new Map();
 
-  const { data } = await supabase
-    .from("player_match_stats")
-    .select(PUBLISHED_STAT_COLUMNS)
-    .in("match_report_id", doneIds)
-    .order("game_number", { ascending: true });
+  const collected: PublishedStatRow[] = [];
+  for (let from = 0; ; ) {
+    const { data, error } = await supabase
+      .from("player_match_stats")
+      .select(PUBLISHED_STAT_COLUMNS)
+      .in("match_report_id", doneIds)
+      .order("match_report_id", { ascending: true })
+      .order("game_number", { ascending: true })
+      .order("player_id", { ascending: true })
+      .order("player_ign", { ascending: true })
+      .range(from, from + STATS_PAGE_SIZE - 1);
 
-  return groupRowsByReport((data ?? []) as PublishedStatRow[]);
+    if (error) throw new Error(`Unable to load published match stats: ${error.message}`);
+    if (!data || data.length === 0) break;
+
+    collected.push(...(data as PublishedStatRow[]));
+    from += data.length;
+  }
+
+  return groupRowsByReport(collected);
 }
 
 export interface MatchReportRowContext {
