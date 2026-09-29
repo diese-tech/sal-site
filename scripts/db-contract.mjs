@@ -49,6 +49,7 @@ const fetchText = async (revision, path) => {
       if (response.ok) return response.text();
 
       const error = new Error(`Unable to fetch ${path} at ${revision}: HTTP ${response.status}`);
+      error.status = response.status;
       if (!isRetryableStatus(response.status)) throw error;
       lastError = error;
     } catch (error) {
@@ -66,14 +67,27 @@ const fetchText = async (revision, path) => {
   );
 };
 
+// The pinned commit is the source of truth and must always resolve. The release
+// tag is a convenience label that sal-database publishes only after a production
+// deploy, so it may legitimately lag the commit; treat a missing tag (404) as a
+// warning, but still fail if it exists and points at different artifacts, or if
+// any other error (network, 5xx) stops us from checking it.
+const fetchIfPublished = async (revision, path) => {
+  try {
+    return await fetchText(revision, path);
+  } catch (error) {
+    if (error?.status === 404) return null;
+    throw error;
+  }
+};
+
 const [contractText, commitTypes, releaseContractText, releaseTypes] = await Promise.all([
   fetchText(lock.commit, 'contract.json'),
   fetchText(lock.commit, 'generated/database.types.ts'),
-  fetchText(lock.release, 'contract.json'),
-  fetchText(lock.release, 'generated/database.types.ts'),
+  fetchIfPublished(lock.release, 'contract.json'),
+  fetchIfPublished(lock.release, 'generated/database.types.ts'),
 ]);
 const contract = JSON.parse(contractText);
-const releaseContract = JSON.parse(releaseContractText);
 const typesHash = `sha256:${createHash('sha256').update(commitTypes).digest('hex')}`;
 
 if (
@@ -83,7 +97,15 @@ if (
 ) {
   throw new Error('Pinned commit contract does not match db-contract.lock.json');
 }
-if (JSON.stringify(releaseContract) !== JSON.stringify(contract) || releaseTypes !== commitTypes) {
+if (releaseContractText === null || releaseTypes === null) {
+  console.warn(
+    `::warning::Release tag ${lock.release} is not published in ${lock.repository}; ` +
+      `verified against pinned commit ${lock.commit} only.`,
+  );
+} else if (
+  JSON.stringify(JSON.parse(releaseContractText)) !== JSON.stringify(contract) ||
+  releaseTypes !== commitTypes
+) {
   throw new Error('Database release tag does not resolve to the pinned contract artifacts');
 }
 if (typesHash !== lock.typesSha256) {
