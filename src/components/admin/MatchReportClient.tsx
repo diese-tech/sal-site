@@ -249,12 +249,16 @@ export function MatchReportClient({
     setBusy(false);
   }
 
-  async function refreshReports(): Promise<void> {
+  async function refreshReports(): Promise<MatchReportWithMatch[] | null> {
     try {
       const res = await fetch("/api/admin/match-reports");
       const json = await res.json() as { reports?: MatchReportWithMatch[] };
-      if (json.reports) setReports(json.reports);
+      if (json.reports) {
+        setReports(json.reports);
+        return json.reports;
+      }
     } catch { /* silent */ }
+    return null;
   }
 
   // ── Step 2: File handling ───────────────────────────────────────────────────
@@ -402,10 +406,23 @@ export function MatchReportClient({
 
   function addGame() {
     if (!selectedMatch) return;
+    // While correcting a published series, start from the lineup already on
+    // record: the current active roster may no longer match who actually played.
+    const lastLineup = step === "done" ? games[games.length - 1]?.players : undefined;
     const newGame: ReviewGame = {
       gameNumber: games.length + 1,
       winningSide: "home",
-      players: initBlankGamesValue()[0]?.players ?? [],
+      players: lastLineup?.length
+        ? lastLineup.map((p) => ({
+            ign: p.ign,
+            playerId: p.playerId,
+            side: p.side,
+            role: p.role,
+            kills: 0,
+            deaths: 0,
+            assists: 0,
+          }))
+        : initBlankGamesValue()[0]?.players ?? [],
     };
     setGames((prev) => [...prev, newGame]);
     setActiveGameIdx(games.length);
@@ -533,13 +550,17 @@ export function MatchReportClient({
         ok?: boolean; error?: string; applied?: boolean; code?: string;
       };
       if (!res.ok) { setMessage(json.error ?? "Correction failed."); setBusy(false); return; }
+      const fresh = await refreshReports();
+      const updated = fresh?.find((r) => r.id === activeReportId);
+      // Show what is now on record, not the locally edited copy, so the
+      // read-only view can never present unpublished values as official.
+      if (updated) openExistingReport(updated);
+      else exitCorrection();
       setMessage(
         json.applied === false
           ? "This correction was already recorded, so nothing changed a second time."
           : "Correction published. Standings were recalculated.",
       );
-      exitCorrection();
-      await refreshReports();
       router.refresh();
     } catch {
       setMessage("Network error.");
@@ -1051,12 +1072,13 @@ export function MatchReportClient({
             ) : (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3">
                 <p className="text-xs font-semibold text-slate-400">
-                  These stats are published. Correcting them rewrites official stats and
-                  recalculates standings, and every change is audited.
+                  {selectedMatch
+                    ? "These stats are published. Correcting them rewrites official stats and recalculates standings, and every change is audited."
+                    : "This report's match is not in the loaded season, so its teams cannot be resolved and it cannot be corrected from here."}
                 </p>
                 <button
                   onClick={beginCorrection}
-                  disabled={doneGames.length === 0}
+                  disabled={doneGames.length === 0 || !selectedMatch}
                   className="rounded-lg border border-amber-300/35 bg-amber-300/10 px-3 py-1.5 text-[0.65rem] font-black uppercase text-amber-200 transition hover:bg-amber-300/20 disabled:opacity-40"
                 >
                   Correct Published Stats
@@ -1128,7 +1150,7 @@ export function MatchReportClient({
                       return (
                         <TeamStatEditor
                           key={side}
-                          readOnly={!correcting}
+                          readOnly={!correcting || busy}
                           side={side}
                           teamName={sideOrg?.name ?? side}
                           rows={rows}
