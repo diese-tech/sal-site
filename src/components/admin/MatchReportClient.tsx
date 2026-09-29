@@ -548,10 +548,15 @@ export function MatchReportClient({
       return;
     }
 
+    // Every path below runs after an await, so each one checks the admin is
+    // still on this report before touching shared screen state.
+    const reportId = activeReportId;
+    const stillOnReport = () => currentReportIdRef.current === reportId;
+
     setBusy(true);
     setMessage("");
     try {
-      const res = await fetch(`/api/admin/match-reports/${activeReportId}/correct`, {
+      const res = await fetch(`/api/admin/match-reports/${reportId}/correct`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -582,10 +587,13 @@ export function MatchReportClient({
       const json = await res.json() as {
         ok?: boolean; error?: string; applied?: boolean; code?: string;
       };
-      if (!res.ok) { setMessage(json.error ?? "Correction failed."); setBusy(false); return; }
-      const reportId = activeReportId;
+      if (!res.ok) {
+        if (stillOnReport()) setMessage(json.error ?? "Correction failed.");
+        setBusy(false);
+        return;
+      }
       const fresh = await refreshReports();
-      if (currentReportIdRef.current !== reportId) {
+      if (!stillOnReport()) {
         // The admin moved to another screen while this was in flight; the
         // correction is recorded, so just refresh server data and stay put.
         router.refresh();
@@ -613,7 +621,7 @@ export function MatchReportClient({
       );
       router.refresh();
     } catch {
-      setMessage("Network error.");
+      if (stillOnReport()) setMessage("Network error.");
     }
     setBusy(false);
   }
