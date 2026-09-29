@@ -114,6 +114,79 @@ For each historical matchup, the importer should:
 11. Route imported results through the existing review/approval/publication path.
 12. Verify that public player stats and standings reflect the approved result.
 
+## Historical Player Identity and Unrecorded Roster Moves
+
+### Requirement
+
+Historical matches include players who filled in, subbed, or were traded, and
+many of those moves were never recorded before the import. Stats must still be
+credited to the correct player. A missing or wrong roster record must not stop a
+stat from reaching the player who earned it, and the importer must not invent
+roster history just to satisfy a validator.
+
+### What blocks this today
+
+- `private.validate_match_report_games` (sal-database migration
+  `20260901120000`, used only by `correct_match_report_result`) requires every
+  supplied player to hold an **active season roster row** on the expected
+  organization **and in the match division**. A fill-in with no roster row, a
+  traded player whose row is on another team, or a player rostered in another
+  division is rejected (`23503` / `23514`).
+- The approval path, `resolve_match_report_review`, is the one this importer is
+  meant to replay. Its own validation is documented in that migration as
+  checking season and organization only. **Phase 0 must confirm exactly which
+  roster rules it enforces**, because an unrecorded fill-in would be rejected
+  there as well.
+- The sal-site correction screen (sal-site#269) only offers the current active
+  roster of each team when linking a player, so a historical player cannot even
+  be selected there.
+
+### Proposed rule
+
+Player attribution is **identity-based, not roster-based**:
+
+- a supplied player ID must exist and must match the supplied IGN;
+- current roster membership, active status, organization, and division are not
+  required;
+- the organization on each stat row is derived from the side (home or away) the
+  player played on, never from where the player is rostered now;
+- unknown, duplicate, ambiguous, or unlinked players remain hard errors, so an
+  identity is never guessed.
+
+The alternative, backfilling `season_rosters` for every historical fill-in and
+trade so the existing validators pass, is rejected as the default. It writes
+roster history that is not actually known, and it changes eligibility and
+roster surfaces as a side effect of importing stats.
+
+### Consequences to account for
+
+- **Weaker guard.** The roster check also protected against crediting a player
+  who was not in a match. Identity checks (ID and IGN match) plus the audit
+  trail replace it. Importer dry-run output should therefore flag any credited
+  player with no roster record for that season, division, or team as an
+  informational warning, so a human confirms it instead of it passing silently.
+- **Same-IGN players.** A newer player can hold an IGN an older player used.
+  Resolution must use season and team context and surface collisions as
+  conflicts. Never resolve an IGN against the current global list alone.
+- **Renamed players.** The identity check compares against the player's current
+  IGN, so a historical IGN that has since changed will not match. Decide in
+  Phase 0 whether alias or previous-IGN support is needed.
+- **Aggregates.** Re-attributing a stat row moves it between players, so both
+  the old and new player aggregates must refresh. Verify that stat publication
+  refreshes every affected player, not only the players in the new payload.
+
+### Where this work lands
+
+| Piece | Repo | Status |
+|---|---|---|
+| Correction flow, with identity-preserving published rows | `sal-site` #269 | in review |
+| Correction validator made identity-based | `sal-database` | drafted locally, not pushed, needs explicit approval first |
+| Correction screen can search and link any player, showing their current team | `sal-site` | follow-up after the database change |
+| Approval-path and importer roster handling | `sal-database` / `sal-site` | decided in Phase 0 of this plan |
+
+Any `sal-database` change must land and release before the site bumps its
+generated types and contract lock, as described under Database Strategy.
+
 ## Dry-Run Output
 
 The importer should summarize the file before any mutation. Example categories:
@@ -161,6 +234,7 @@ If the existing contracts already provide those operations safely, keep all new 
 
 Touch `diese-tech/sal-database` only if one of these is true:
 
+- roster-based validation rejects historical players whose fill-in, sub, or trade was never recorded, and identity-based attribution is needed (see Historical Player Identity and Unrecorded Roster Moves),
 - there is no supported atomic path for creating the required historical domain objects,
 - current RPCs hard-require screenshot/OCR state that is irrelevant to structured imports,
 - idempotent provenance cannot be represented safely,
@@ -194,6 +268,8 @@ Before coding the importer:
 - inspect the current released `sal-database` contract,
 - confirm which existing APIs/RPCs should be reused,
 - identify any screenshot/OCR assumptions that prevent structured import,
+- confirm which roster rules the approval path enforces and whether an unrecorded fill-in, sub, or trade would be rejected (see Historical Player Identity and Unrecorded Roster Moves),
+- decide whether previous-IGN or alias support is needed for renamed players,
 - document whether database changes are actually required.
 
 Deliverable: a short implementation note added to this document or a linked issue/PR.
@@ -258,6 +334,7 @@ The importer is complete when:
 - structured game/player stats can be imported without requiring screenshots,
 - existing matches/reports are detected rather than duplicated,
 - unresolved identities and conflicts block publication,
+- historical fill-ins, subs, and traded players are credited with their own stats even when their roster moves were never recorded, and the dry run flags any credited player who has no roster record for that season, division, or team,
 - dry-run output clearly explains intended actions,
 - approved imports populate the same canonical public stat surfaces as normal match reporting,
 - standings are recalculated through the normal mechanism,
@@ -288,6 +365,8 @@ An implementation agent starting from this plan should:
 4. Do not modify `sal-database` until the need for a contract change is proven.
 5. Do not modify `lab-salbot` for the initial importer unless a concrete blocker requires it.
 6. Preserve the normal SAL lifecycle and canonical public stat stores.
+   Attribute stats by player identity (ID and IGN), not current roster
+   membership, and do not fabricate roster history to satisfy a validator.
 7. Build the dry-run and identity/conflict checks before enabling writes.
 8. Test against a few real historical series before attempting the full backlog.
 9. Update this document when implementation decisions materially change the plan.
