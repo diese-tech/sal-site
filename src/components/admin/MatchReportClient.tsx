@@ -174,7 +174,10 @@ export function MatchReportClient({
     setMessage("");
   }
 
-  function toReviewGames(extracted: ExtractedGame[]): ReviewGame[] {
+  // `inferIdentity` is off for published rows: they carry the identity that was
+  // recorded, and guessing one from today's IGN list could bind official stats
+  // to a different player who now holds that name.
+  function toReviewGames(extracted: ExtractedGame[], inferIdentity = true): ReviewGame[] {
     return extracted.map((g) => ({
       gameNumber: g.gameNumber,
       winningSide: g.winningSide === "away" ? "away" : "home",
@@ -184,7 +187,7 @@ export function MatchReportClient({
         // drop the id (name changed since submission) or bind the row to a
         // different player who now holds that IGN. IGN lookup is only the
         // fallback for extractions that were never host-validated.
-        if (p.playerId) return { ...p };
+        if (p.playerId || !inferIdentity) return { ...p };
         const matched = data.players.find((pl) => pl.ign.toLowerCase() === p.ign.toLowerCase());
         return { ...p, playerId: matched?.id };
       }),
@@ -205,7 +208,7 @@ export function MatchReportClient({
     setMessage("");
 
     if (report.status === "done") {
-      setGames(report.publishedGames?.length ? toReviewGames(report.publishedGames) : []);
+      setGames(report.publishedGames?.length ? toReviewGames(report.publishedGames, false) : []);
       setActiveGameIdx(0);
       exitCorrection();
       setStep("done");
@@ -554,8 +557,17 @@ export function MatchReportClient({
       const updated = fresh?.find((r) => r.id === activeReportId);
       // Show what is now on record, not the locally edited copy, so the
       // read-only view can never present unpublished values as official.
-      if (updated) openExistingReport(updated);
-      else exitCorrection();
+      if (!updated) {
+        // The correction is recorded but its result could not be loaded. Drop
+        // the local copy rather than leave edited values on screen as if they
+        // were official.
+        resetToNew();
+        setMessage("Correction published, but the updated report could not be loaded. Reload the page to see the recorded stats.");
+        router.refresh();
+        setBusy(false);
+        return;
+      }
+      openExistingReport(updated);
       setMessage(
         json.applied === false
           ? "This correction was already recorded, so nothing changed a second time."
