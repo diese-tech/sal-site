@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { DraftState } from "@/types/draft";
 import type { LeaguePlayer, Org } from "@/types/league";
 import { formatDraftTeamLabel } from "@/lib/draft-team";
+import { formatAccessCode } from "@/lib/draft-access-code";
 import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -48,8 +49,38 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
   const { room, picks, pickSequence, currentOrgId, totalPicks } = liveState;
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [accessLinks, setAccessLinks] = useState<Record<string, string[]>>({});
+  const [teamCodes, setTeamCodes] = useState<Record<string, string>>({});
+  const [legacyLinkOrgs, setLegacyLinkOrgs] = useState<string[]>([]);
+  const [copied, setCopied] = useState<string | null>(null);
   const [baseOrderDraft, setBaseOrderDraft] = useState<string[]>(room.baseOrder);
+
+  // Codes stay readable for the life of the draft, so load whatever is already
+  // issued instead of making the admin reissue to see a code again.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/admin/draft/${room.id}/tokens`);
+        if (!res.ok) return;
+        const data = await res.json() as {
+          codes: { orgId: string; entry: { code: string; isLegacyLink: boolean } | null }[];
+        };
+        if (cancelled) return;
+        const next: Record<string, string> = {};
+        const legacy: string[] = [];
+        for (const { orgId, entry } of data.codes) {
+          if (!entry) continue;
+          if (entry.isLegacyLink) legacy.push(orgId);
+          else next[orgId] = entry.code;
+        }
+        setTeamCodes(next);
+        setLegacyLinkOrgs(legacy);
+      } catch {
+        // Non-fatal: the admin can still issue codes on demand.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [room.id]);
 
   const divOrgs = orgs.filter((o) => o.divisionId === room.divisionId);
   const pickedPlayerIds = new Set(picks.map((p) => p.playerId));
@@ -113,7 +144,7 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
     router.refresh();
   }
 
-  async function generateAccessLink(orgId: string) {
+  async function rotateTeamCode(orgId: string) {
     setBusy(true);
     setMessage("");
     const res = await fetch(`/api/admin/draft/${room.id}/tokens`, {
@@ -124,19 +155,46 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
     setBusy(false);
     if (!res.ok) {
       const data = await res.json().catch(() => null) as { error?: string } | null;
-      setMessage(data?.error ?? "Failed to generate access link.");
+      setMessage(data?.error ?? "Failed to issue team code.");
       return;
     }
-    const data = await res.json() as { tokens: Record<string, string> };
-    const token = data.tokens[orgId];
-    if (!token) {
-      setMessage("The server did not return an access link for this organization.");
+    const data = await res.json() as { codes: Record<string, string> };
+    const code = data.codes[orgId];
+    if (!code) {
+      setMessage("The server did not return a code for this organization.");
       return;
     }
-    setAccessLinks((current) => ({
-      ...current,
-      [orgId]: [...(current[orgId] ?? []), token],
-    }));
+    setTeamCodes((current) => ({ ...current, [orgId]: code }));
+    setCopied(null);
+  }
+
+  async function copyText(text: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied((c) => (c === key ? null : c)), 2000);
+    } catch {
+      setMessage("Clipboard unavailable — select the code and copy it manually.");
+    }
+  }
+
+  function copyAllCodes() {
+    const lines = room.baseOrder
+      .map((orgId) => {
+        const code = teamCodes[orgId];
+        return code ? `${getTeamLabel(orgId)}: ${formatAccessCode(code)}` : null;
+      })
+      .filter((line): line is string => line !== null);
+
+    if (lines.length === 0) {
+      setMessage("No team codes issued yet.");
+      return;
+    }
+    const roomUrl = typeof window !== "undefined" ? `${window.location.origin}/draft/${room.id}` : `/draft/${room.id}`;
+    void copyText(
+      `SAL Draft — ${room.divisionId} division\nRoom: ${roomUrl}\nOpen the room and enter your team code:\n\n${lines.join("\n")}`,
+      "all",
+    );
   }
 
   const isPending = room.status === "pending";
@@ -250,38 +308,66 @@ export function AdminDraftRoomClient({ state, orgs, players }: {
             )}
           </section>
 
-          {/* Captain / organization-owner delegated access */}
+          {/* Captain / organization-owner access codes */}
           <section className="rounded-2xl border border-white/8 bg-slate-950/70 p-4">
-            <h2 className="mb-3 text-xs font-black uppercase text-slate-400">Captain / Org Owner Access</h2>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-xs font-black uppercase text-slate-400">Captain / Org Owner Access</h2>
+              <button
+                type="button"
+                onClick={copyAllCodes}
+                className="rounded-lg border border-white/15 px-2.5 py-1 text-[0.6rem] font-black uppercase text-slate-300 transition hover:border-white/30 hover:text-white"
+              >
+                {copied === "all" ? "Copied!" : "Copy all"}
+              </button>
+            </div>
             <p className="mb-3 text-xs text-slate-500">
-              Generate a separate one-time link for each captain or backup org owner. A redeemed link controls only this organization&apos;s seat in this draft room.
+              Each team gets one code. Captains open{" "}
+              <span className="font-mono text-slate-400">/draft/{room.id}</span> and type it in — it works on any
+              device, as many times as they need. Read a code out in voice chat if a captain gets stuck. Rotating a
+              code immediately invalidates the old one.
             </p>
             <div className="space-y-2">
-              {room.baseOrder.map((orgId) => (
-                <div key={orgId} className="rounded-lg border border-white/8 bg-black/30 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-xs font-black text-white">{getTeamLabel(orgId)}</p>
-                    <button
-                      type="button"
-                      aria-label={`Generate ${getTeamLabel(orgId)} access link`}
-                      onClick={() => generateAccessLink(orgId)}
-                      disabled={busy}
-                      className="rounded-lg border border-cyan-300/35 bg-cyan-300/15 px-3 py-1.5 text-[0.65rem] font-black uppercase text-cyan-100 disabled:opacity-60"
-                    >
-                      {accessLinks[orgId]?.length ? "Generate another link" : "Generate access link"}
-                    </button>
-                  </div>
-                  {accessLinks[orgId]?.map((token, index) => {
-                    const url = typeof window !== "undefined" ? `${window.location.origin}/draft/${room.id}?token=${token}` : token;
-                    return (
-                      <div key={token} className="mt-2 rounded border border-cyan-300/10 bg-cyan-950/15 p-2">
-                        <p className="text-[0.6rem] font-black uppercase text-slate-500">One-time link {index + 1}</p>
-                        <p className="mt-1 break-all font-mono text-[0.6rem] text-cyan-300/70">{url}</p>
+              {room.baseOrder.map((orgId) => {
+                const code = teamCodes[orgId];
+                const hasLegacyLink = legacyLinkOrgs.includes(orgId);
+                return (
+                  <div key={orgId} className="rounded-lg border border-white/8 bg-black/30 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-black text-white">{getTeamLabel(orgId)}</p>
+                      <button
+                        type="button"
+                        aria-label={code ? `Rotate ${getTeamLabel(orgId)} team code` : `Issue ${getTeamLabel(orgId)} team code`}
+                        onClick={() => rotateTeamCode(orgId)}
+                        disabled={busy}
+                        className="rounded-lg border border-cyan-300/35 bg-cyan-300/15 px-3 py-1.5 text-[0.65rem] font-black uppercase text-cyan-100 disabled:opacity-60"
+                      >
+                        {code ? "Rotate code" : "Issue code"}
+                      </button>
+                    </div>
+                    {code ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="rounded-lg border border-cyan-300/20 bg-cyan-950/25 px-3 py-1.5 font-mono text-base font-black tracking-[0.15em] text-cyan-200">
+                          {formatAccessCode(code)}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Copy ${getTeamLabel(orgId)} team code`}
+                          onClick={() => copyText(formatAccessCode(code), orgId)}
+                          className="rounded-lg border border-white/15 px-2.5 py-1 text-[0.6rem] font-black uppercase text-slate-300 transition hover:border-white/30 hover:text-white"
+                        >
+                          {copied === orgId ? "Copied!" : "Copy"}
+                        </button>
                       </div>
-                    );
-                  })}
-                </div>
-              ))}
+                    ) : (
+                      <p className="mt-2 text-[0.65rem] font-semibold text-slate-500">
+                        {hasLegacyLink
+                          ? "Holds an old one-time link. Issue a code to replace it."
+                          : "No code issued yet."}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </section>
         </div>

@@ -43,19 +43,36 @@ function org(id: string, name: string): Org {
 }
 
 describe("AdminDraftRoomClient delegated draft access", () => {
-  it("offers a separate room-and-org-scoped link for each captain or org owner", () => {
-    const html = renderToStaticMarkup(createElement(AdminDraftRoomClient, {
+  function render() {
+    return renderToStaticMarkup(createElement(AdminDraftRoomClient, {
       state,
       orgs: [org("org-a", "Alpha"), org("org-b", "Beta")],
       players: [],
     }));
+  }
+
+  it("offers a separate room-and-org-scoped code for each captain or org owner", () => {
+    const html = render();
 
     expect(html).toContain("Captain / Org Owner Access");
-    expect(html).toContain("Generate Alpha - TD access link");
-    expect(html).toContain("Generate Beta - TD access link");
-    expect(html).toContain("one-time");
-    expect(html).toContain("only this organization&#x27;s seat");
+    expect(html).toContain("Issue Alpha - TD team code");
+    expect(html).toContain("Issue Beta - TD team code");
     expect(html).toContain('href="/draft/room-1"');
     expect(html).toContain("Open Public Draftboard");
+  });
+
+  it("tells the admin how captains get in, without handing out a link", () => {
+    const html = render();
+
+    // Captains type a code into the room rather than following a URL that
+    // dies on first use.
+    expect(html).toContain("Each team gets one code");
+    expect(html).toContain("works on any device");
+    expect(html).not.toContain("one-time link");
+    expect(html).not.toContain("?token=");
+  });
+
+  it("marks seats that have no code yet", () => {
+    expect(render()).toContain("No code issued yet.");
   });
 });

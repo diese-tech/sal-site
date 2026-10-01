@@ -13,8 +13,9 @@ features are implemented yet. The dependency-ordered implementation plan is
 - Captains normally see only their own division's pool.
 - A separate search allows drafting an available player up exactly one
   division.
-- Captains enter through Discord OAuth and current role mappings, not permanent
-  captain-specific links.
+- Captains enter with a short team code typed into the draft room, and will
+  eventually enter through Discord OAuth and current role mappings, rather than
+  permanent captain-specific links.
 - Selecting a player stages the pick; confirmation or timer expiration can lock
   that staged player in.
 - A turn with no valid staged player becomes a skipped slot.
@@ -69,17 +70,55 @@ guesses.
 ### Current draft-day delegated access
 
 Until Discord role-to-organization ownership is available as a trusted server-side
-mapping, commissioners delegate access with one-time, room-and-organization-scoped
-links from **Admin → Draft → Captain / Org Owner Access**:
+mapping, commissioners delegate access with short, room-and-organization-scoped
+**team codes** from **Admin → Draft → Captain / Org Owner Access**:
 
 1. Find the organization in the draft room.
-2. Select **Generate access link** once for the captain and again for each backup
-   org owner. Do not send the same link to two people; the first redemption
-   consumes it.
-3. Send each generated link only to the intended captain or owner.
-4. Opening the link creates a signed session for exactly that draft room and
-   organization. The recipient cannot select another organization in the client,
-   and the pick and shortlist APIs enforce the same scope on the server.
+2. Select **Issue code**. The code (for example `H7K2-QM4X`) stays visible in the
+   admin panel for the life of the draft, so it can be re-read at any time.
+3. Share the room link and the code with the captain and any backup org owner.
+   The code can also simply be read aloud in voice chat.
+4. The captain opens `/draft/<room>` and types the code into **Captain? Enter
+   your team code**. That creates a signed session for exactly that draft room
+   and organization. The recipient cannot select another organization in the
+   client, and the pick and shortlist APIs enforce the same scope on the server.
+
+A code works on any device, as many times as needed. A captain who switches
+phones, clears cookies, or loses their session just re-enters the same code —
+no admin action required.
+
+**Why codes replaced one-time links.** The previous flow issued a 32-character
+link that was deleted on first redemption. In practice captains could not get
+in: opening the link on a second device failed, a browser that dropped the
+session cookie burned the credential with nothing to show for it, and chat
+clients mangled the long URL. Reissuing was also impossible, because the
+database allows only one live credential per seat, so a second **Generate**
+collided and returned a server error.
+
+**The trade-off.** This reverses the earlier one-time-use hardening (SEC-06). A
+leaked code stays usable until it expires or is rotated, so treat a code like a
+password. It is mitigated by:
+
+- redemption attempts being rate-limited per client, and every failure written
+  to the audit log;
+- **Rotate code**, which stops the previous code being redeemed again;
+- codes being scoped to a single organization in a single room; and
+- **Leave** in the draft room header, which releases a seat from a shared or
+  borrowed device.
+
+Rotate a seat's code if you suspect it has been shared beyond the intended
+captain and backup owner.
+
+**Rotation does not sign out a session that already redeemed the old code.**
+Sessions are validated by signature alone and are not re-checked against the
+current credential, so anyone who joined before the rotation keeps their seat
+for the life of the cookie. If you believe someone is actually sitting in a
+seat they should not have, rotating the code is not sufficient — pause the room
+and have an admin make that team's picks, or void and replace the room. Adding
+true session revocation is tracked as follow-up work.
+
+Links already handed out before this change remain redeemable until they
+expire, and are no longer consumed on first use.
 
 The requested Discord Org Owner role ID `1482930940886909079` is deliberately
 not an authorization input yet. The current player OAuth flow requests only

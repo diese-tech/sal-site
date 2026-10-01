@@ -23,13 +23,12 @@ export default async function DraftBoardPage({
   const [state, { orgs, players }, captainSession] = await Promise.all([
     buildDraftState(id),
     getLeagueData(),
-    getCaptainSession(),
+    getCaptainSession(id),
   ]);
 
   if (!state) notFound();
 
-  const captainOrgId =
-    captainSession?.draftRoomId === id ? captainSession.orgId : null;
+  const captainOrgId = captainSession?.orgId ?? null;
 
   return (
     <DraftBoardClient

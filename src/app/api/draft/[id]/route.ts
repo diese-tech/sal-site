@@ -18,9 +18,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const state = await buildDraftState(id);
   if (!state) return NextResponse.json({ error: "Draft not found." }, { status: 404 });
 
-  const session = getCaptainSessionFromRequest(request);
-  const isCaptain = session?.draftRoomId === id;
-  const captainOrgId = isCaptain ? session?.orgId : null;
+  const captainOrgId = getCaptainSessionFromRequest(request, id)?.orgId ?? null;
 
   if (state.room.status === "active" && state.room.pickStartedAt && state.room.pickTimerSeconds > 0) {
     const elapsed = (Date.now() - new Date(state.room.pickStartedAt).getTime()) / 1000;
